@@ -7,8 +7,7 @@ from tqdm import tqdm
 sys.path.append("..")
 sys.path.append(".")
 from config import config
-import IOUtils
-import NucleotideUtils
+from utils import IOUtils
 
 class NCBITree():
     # scpre: all, bacteria, virus, archaea

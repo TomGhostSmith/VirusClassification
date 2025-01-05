@@ -1,17 +1,12 @@
-from entity.dataset import Dataset
-# from moduleConfig.minimapConfig import minimapConfig
+import os
 
 class Config():
     def __init__(self) -> None:
-        minorDatasetRanks = ["nonVirus", "superkingdom", "realm", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
-        # self.dataset = Dataset("Challenge")
-        # self.dataset = Dataset("gen2")
-        # self.dataset = Dataset("gen2_fold2020")
-        # self.dataset = Dataset("gen2_fold2024")
-        self.dataset = Dataset("refseq_2024_test", "genus")
-        # self.dataset = Dataset("refseq_2024_test", minorDatasetRanks)
-        # self.dataset = Dataset("genbank_2024_test", "genus")
-        # self.dataset = Dataset("genbank_2024_test", minorDatasetRanks)
+        # self.majorDataset = 'refseq_2024_test'
+        self.majorDataset = 'Challenge'
+        
+        # self.minorDataset = 'genus'
+        self.minorDataset = None
 
         self.tempFolder = "/Data/VirusClassification/temp"
 
@@ -46,10 +41,9 @@ class Config():
         self.rankLevels = {rank: idx for (idx, rank) in enumerate(ranks)}
 
         self.evaluationRanks = ['superkingdom', 'realm', 'kingdom', 'subkingdom', 'phylum', 'subphylum', 'class', 'subclass', 'order', 'suborder', 'family', 'subfamily', 'genus', 'subgenus', 'species']
+        self.minorDatasetRanks = ["nonVirus", "superkingdom", "realm", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
 
-        if (self.dataset.isSingleRun()):
-            self.majorDataset, self.minorDataset = self.dataset.iterDatasets()[0]
-            self.updatePath()
+        self.updatePath()
 
     
     def updatePath(self):
@@ -61,11 +55,18 @@ class Config():
             self.resultBase = f"/Data/VirusClassification/results/{self.majorDataset}/{self.minorDataset}"
             self.datasetBase = f"/Data/VirusClassification/dataset/{self.majorDataset}/{self.minorDataset}"
             self.datasetName = f"{self.majorDataset}-{self.minorDataset}"
+        
+        if (not os.path.exists(self.resultBase)):
+            os.makedirs(self.resultBase)
+        if (not os.path.exists(self.datasetBase)):
+            os.makedirs(self.datasetBase)
 
-    def iterDatasets(self, func):
-        for self.majorDataset, self.minorDataset in self.dataset.iterDatasets():
-            self.updatePath()
-            func()
-
+# note for path and signal use:
+# use ';' for separate params. e.g. a=1;b=2
+# use '_' for separate words. e.g. contig_most_frequent
+# use '-' for connect model and params. e.g. minimap-ref=xx;mode=xx
+# use '.' for connect different models. e.g. minimap.ml
+# use '|' for file name split. e.g. statistics|n=100;incl=50
+# never use ',' because it will disturbe csv file 
 
 config = Config()

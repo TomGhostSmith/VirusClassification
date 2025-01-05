@@ -1,25 +1,25 @@
-class MinimapConfig():
+from prototype.moduleConfig import ModuleConfig
+
+class MinimapConfig(ModuleConfig):
     def __init__(self):
         self.reference = 'VMRv4'
         # self.reference = 'VMRv4_fold2024'
         # self.reference = 'VMRv4_fold2020'
 
-        # self.minimapMode = 'simple'
-        self.minimapMode = 'ont'
+        # self.mode = 'simple'
+        self.mode = 'ont'
 
         self.threads = 12
 
         self.skipComments = True
 
-        self.updateName()
-
-    def updateName(self):
-        self.name = f'ref={self.reference};mode={self.mode}'
+    def update(self):
+        self.name = f'minimap-ref={self.reference};mode={self.mode}'
 
     def getMinimapCommand(self, queryFile):
         referenceFasta = f"/Data/ICTVData/reference/{self.reference}/{self.reference}.fasta"
         minimapBase = "minimap2"   # if you cannot call minimap2 directly, use its path here
-        if self.minimapMode == 'ont':
+        if self.mode == 'ont':
             mode = "-ax map-ont"
         else:
             mode = "-a"
@@ -30,5 +30,3 @@ class MinimapConfig():
             postProcess = ""
         command = f"{minimapBase} {mode} {referenceFasta} {queryFile} {thread} {postProcess}"
         return command
-
-minimapConfig = MinimapConfig()

@@ -4,6 +4,7 @@ from entity.taxoTree import taxoTree
 
 class MinimapResult(Result):
     def __init__(self):
+        super().__init__()
         self.alignments = list()
         self.bestAlignment = None
 
@@ -15,5 +16,6 @@ class MinimapResult(Result):
             self.bestAlignment = alignment
     
     # only return the taxoNode for the best alignment
-    def toTaxoNode(self):
-        return taxoTree.getTaxoNodeFromICTV(ICTVID=self.bestAlignment.ref)
+    def calcTaxoNode(self):
+        if (self.node is None):
+            self.node = taxoTree.getTaxoNodeFromICTV(ICTVID=self.bestAlignment.ref)
