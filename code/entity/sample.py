@@ -17,6 +17,7 @@ class Sample():
     def addResult(self, name:str, result:Result):
         if result is not None:
             result.calcTaxoNode()
+        
         self.results[name] = result
 
     def addInfo(self, key, value):

@@ -56,10 +56,14 @@ class Config():
             self.datasetBase = f"/Data/VirusClassification/dataset/{self.majorDataset}/{self.minorDataset}"
             self.datasetName = f"{self.majorDataset}-{self.minorDataset}"
         
+        self.virusPredResultFolder = f"/Data/VirusClassification/results/{self.majorDataset}/VirusPred"
+        
         if (not os.path.exists(self.resultBase)):
             os.makedirs(self.resultBase)
         if (not os.path.exists(self.datasetBase)):
             os.makedirs(self.datasetBase)
+        if (not os.path.exists(self.virusPredResultFolder)):
+            os.makedirs(self.virusPredResultFolder)
 
 # note for path and signal use:
 # use ';' for separate params. e.g. a=1;b=2

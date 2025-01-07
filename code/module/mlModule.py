@@ -1,3 +1,4 @@
+import os
 from config import config
 from prototype.module import Module
 from moduleConfig.mlConfig import MLConfig
@@ -11,11 +12,12 @@ class MLModule(Module):
     def run(self):
         resultFile = f"{config.resultBase}/{self.mlConfig.name}.csv"
         self.resultDict = dict()
-        with open(resultFile) as fp:
-            fp.readline()
-            for line in fp:
-                terms = line.strip().split(',')
-                self.resultDict[terms[0]] = terms[1]
+        if (os.path.exists(resultFile)):
+            with open(resultFile) as fp:
+                fp.readline()
+                for line in fp:
+                    terms = line.strip().split(',')
+                    self.resultDict[terms[0]] = terms[1]
     
     def getResult(self, sample):        
         if (sample.query in self.resultDict):

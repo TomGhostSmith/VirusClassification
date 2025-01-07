@@ -8,6 +8,7 @@ from entity.sample import Sample
 from prototype.mergeModule import MergeModule
 from entity.taxoTree import taxoTree
 from entity.taxoNode import TaxoNode
+from entity.dataset import Dataset
 from prototype.result import Result
 
 class Evaluator():
@@ -22,8 +23,82 @@ class Evaluator():
 
         self.allSamples = self.loadSamples()
 
+    def evaluateAllMinorSets(self, dataset:Dataset):
+        self.allSamples = list()
+        for major, minor in dataset.iterDatasets():
+            config.majorDataset = major
+            config.minorDataset = minor
+            config.updatePath()
+            thisSample = self.loadSamples()
+            for model in self.models:
+                model.getResults(thisSample)
+            self.allSamples += thisSample
+
+        if (len(dataset.minorDatasets) == 1):
+            config.minorDataset = dataset.minorDatasets[0]
+        else:
+            config.minorDataset = None
+        config.updatePath()
+        self.evaluate(sampleRange='all')
+
+
+    def checkVirusFilter(self, dataset:Dataset):
+        self.allSamples = list()
+        for major, minor in dataset.iterDatasets():
+            config.majorDataset = major
+            config.minorDataset = minor
+            config.updatePath()
+            thisSample = self.loadSamples()
+            for model in self.models:
+                model.getResults(thisSample)
+            self.allSamples += thisSample
+
+        config.minorDataset = None
+        config.updatePath()
+
+        nameList = [model.moduleName for model in self.models]
+        tps = list()
+        tns = list()
+        fps = list()
+        fns = list()
+
+        for model in self.models:
+            tp, tn, fp, fn = 0, 0, 0, 0
+            for sample in self.allSamples:
+                if sample.stdResult is None:
+                    if (sample.results[model.moduleName] is None):
+                        tn += 1
+                    else:
+                        fp += 1
+                else:
+                    if (sample.results[model.moduleName] is None):
+                        fn += 1
+                    else:
+                        tp += 1
+            tps.append(tp)
+            fps.append(fp)
+            tns.append(tn)
+            fns.append(fn)
+        
+
+        # generate report for focused samples
+        df = pandas.DataFrame({
+            'model': nameList,
+            'totalVirus': [tps[0] + fns[0]]*len(nameList),
+            'totalNonvirus': [tns[0] + fps[0]]*len(nameList),
+            "TrueVirus": tps,
+            "FalseVirus": fps,
+            "TrueNonvirus": tns,
+            "FalseNonVirus": fns
+        })
+
+        df.to_csv(f"{config.resultBase}/Summary_VirusPrediction.csv")            
+
+
+
+
     # sampleRange could be: 'all', 'withResult', 'interested'
-    def evaluate(self, sampleRange='all'):
+    def evaluate(self, sampleRange='all', showDetails=True):
         if sampleRange == 'interested':
             with open(f"{config.tempFolder}/interestedSamples.txt") as fp:
                 interestedSamples = {l.strip() for l in fp}
@@ -60,7 +135,7 @@ class Evaluator():
             df.to_csv(f"{config.resultBase}/Statistics|n={totalCount};incl={includeCount};valid={validCount}|{model.moduleName}.csv")            
 
             # perform separate calculation for MergeModel
-            if (isinstance(model, MergeModule)):
+            if (isinstance(model, MergeModule) and showDetails):
                 partitions = dict()
                 for sample in focusedSamples:
                     source = sample.info[model.moduleName]
@@ -139,7 +214,7 @@ class Evaluator():
             sampleList.append(Sample(name, isATCG[name], lengths[name], answers[name]))
         
         return sampleList
-    
+
         
     def analyseStatistics(self, samples, modelName):
         def macro_accuracy(y_true, y_pred):

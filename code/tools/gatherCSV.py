@@ -9,7 +9,7 @@ def zipFiles():
         sourcePath = "/Data/VirusClassification/results"
         for root, dirs, files in os.walk(sourcePath):
             for file in files:
-                if (file.endswith('.csv')):
+                if (file.endswith('.csv') or file.endswith('.xlsx')):
                     path = f"{root}/{file}"
                     zipf.write(path, os.path.relpath(path, sourcePath))
                     IOUtils.showInfo(f'Add {path} to zip file')
