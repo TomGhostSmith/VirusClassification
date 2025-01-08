@@ -70,7 +70,7 @@ class Config():
 # use '_' for separate words. e.g. contig_most_frequent
 # use '-' for connect model and params. e.g. minimap-ref=xx;mode=xx
 # use '.' for connect different models. e.g. minimap.ml
-# use '|' for file name split. e.g. statistics|n=100;incl=50
+# use '!' for file name split. e.g. statistics!n=100;incl=50
 # never use ',' because it will disturbe csv file 
 
 config = Config()

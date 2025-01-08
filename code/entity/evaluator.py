@@ -17,45 +17,10 @@ class Evaluator():
             self.models = models
         else:
             self.models = [models]
-        
-        for model in self.models:
-            model.run()
-
-        self.allSamples = self.loadSamples()
-
-    def evaluateAllMinorSets(self, dataset:Dataset):
-        self.allSamples = list()
-        for major, minor in dataset.iterDatasets():
-            config.majorDataset = major
-            config.minorDataset = minor
-            config.updatePath()
-            thisSample = self.loadSamples()
-            for model in self.models:
-                model.getResults(thisSample)
-            self.allSamples += thisSample
-
-        if (len(dataset.minorDatasets) == 1):
-            config.minorDataset = dataset.minorDatasets[0]
-        else:
-            config.minorDataset = None
-        config.updatePath()
-        self.evaluate(sampleRange='all')
 
 
-    def checkVirusFilter(self, dataset:Dataset):
-        self.allSamples = list()
-        for major, minor in dataset.iterDatasets():
-            config.majorDataset = major
-            config.minorDataset = minor
-            config.updatePath()
-            thisSample = self.loadSamples()
-            for model in self.models:
-                model.getResults(thisSample)
-            self.allSamples += thisSample
-
-        config.minorDataset = None
-        config.updatePath()
-
+    def checkVirusFilter(self, dataset:Dataset=None):
+        self.loadSamples(dataset)
         nameList = [model.moduleName for model in self.models]
         tps = list()
         tns = list()
@@ -96,9 +61,10 @@ class Evaluator():
 
 
 
-
     # sampleRange could be: 'all', 'withResult', 'interested'
-    def evaluate(self, sampleRange='all', showDetails=True):
+    # if dataset = None, then use the dataset in config
+    def evaluate(self, sampleRange='all', dataset:Dataset=None, showDetails=True):
+        self.loadSamples(dataset)
         if sampleRange == 'interested':
             with open(f"{config.tempFolder}/interestedSamples.txt") as fp:
                 interestedSamples = {l.strip() for l in fp}
@@ -111,8 +77,6 @@ class Evaluator():
             interestedSamples = self.allSamples
 
         for model in self.models:
-            model.getResults(interestedSamples)
-
             validSamples = list()
             for sample in interestedSamples:
                 if (sample.results[model.moduleName] is not None):
@@ -132,7 +96,7 @@ class Evaluator():
             # print(f" (all)")
 
 
-            df.to_csv(f"{config.resultBase}/Statistics|n={totalCount};incl={includeCount};valid={validCount}|{model.moduleName}.csv")            
+            df.to_csv(f"{config.resultBase}/Statistics!n={totalCount};incl={includeCount};valid={validCount}!{model.moduleName}.csv")            
 
             # perform separate calculation for MergeModel
             if (isinstance(model, MergeModule) and showDetails):
@@ -148,10 +112,11 @@ class Evaluator():
                     df = self.analyseStatistics(samples, model.moduleName)
                     # print(f" ({source})")
 
-                    df.to_csv(f"{config.resultBase}/Statistics|n={totalCount};incl={includeCount};valid={validCount}|Source={source};m={len(samples)}|{model.moduleName}.csv")
+                    df.to_csv(f"{config.resultBase}/Statistics!n={totalCount};incl={includeCount};valid={validCount}!Source={source};m={len(samples)}!{model.moduleName}.csv")
 
     # sampleRange could be: 'all', 'intersection', 'interested'
-    def compare(self, sampleRange='all'):
+    def compare(self, sampleRange='all', dataset:Dataset=None):
+        self.loadSamples(dataset)
         if (len(self.models) < 2):
             raise ValueError("You should compare at least 2 models")
         
@@ -165,11 +130,6 @@ class Evaluator():
                     interestedSamples.append(sample)
         else:
             interestedSamples = self.allSamples
-
-
-        for model in self.models:
-            model.getResults(interestedSamples)
-
         
         if (sampleRange == 'intersection'):
             validSamples = list()
@@ -180,7 +140,7 @@ class Evaluator():
 
         totalCount = len(self.allSamples)
         includeCount = len(interestedSamples)
-        with pandas.ExcelWriter(f"{config.resultBase}/Compare|n={totalCount};incl={includeCount}.xlsx", engine='xlsxwriter') as writer:
+        with pandas.ExcelWriter(f"{config.resultBase}/Compare!n={totalCount};incl={includeCount}.xlsx", engine='xlsxwriter') as writer:
             for model in self.models:
                 validCount = 0
                 for sample in interestedSamples:
@@ -200,20 +160,42 @@ class Evaluator():
 
                 df.to_excel(writer, sheet_name=name, index=False)
 
-    def loadSamples(self):
-        with open(f"{config.datasetBase}/length.json") as fp:
-            lengths = json.load(fp)
-        with open(f"{config.datasetBase}/isATCG.json") as fp:
-            isATCG = json.load(fp)
-        with open(f"{config.datasetBase}/answer.json") as fp:
-            answers = json.load(fp)
+    def loadSamples(self, dataset:Dataset=None):
+        def load():
+            with open(f"{config.datasetBase}/length.json") as fp:
+                lengths = json.load(fp)
+            with open(f"{config.datasetBase}/isATCG.json") as fp:
+                isATCG = json.load(fp)
+            with open(f"{config.datasetBase}/answer.json") as fp:
+                answers = json.load(fp)
+            sampleList = list()
+            for name in lengths.keys():
+                sampleList.append(Sample(name, isATCG[name], lengths[name], answers[name]))
+            return sampleList
         
-        sampleList = list()
+        self.allSamples = list()
+        if (dataset is not None):
+            for _, major, minor in dataset.iterDatasets():
+                config.majorDataset = major
+                config.minorDataset = minor
+                config.updatePath()
+                thisSample = load()
+                for model in self.models:
+                    model.run()
+                    model.getResults(thisSample)  # we have to getResults here, otherwise the path in config will be wrong
+                self.allSamples += thisSample
 
-        for name in lengths.keys():
-            sampleList.append(Sample(name, isATCG[name], lengths[name], answers[name]))
-        
-        return sampleList
+            if (dataset.minorDatasets is not None and len(dataset.minorDatasets) == 1):
+                config.minorDataset = dataset.minorDatasets[0]
+            else:
+                config.minorDataset = None
+
+            config.updatePath()
+        else:
+            self.allSamples = load()
+            for model in self.models:
+                model.getResults(self.allSamples)
+        return self.allSamples
 
         
     def analyseStatistics(self, samples, modelName):

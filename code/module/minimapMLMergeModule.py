@@ -1,30 +1,33 @@
-from moduleConfig.minimapMLMergeConfig import MinimapMLMergeConfig
 from prototype.mergeModule import MergeModule
 from moduleResult.minimapResult import MinimapResult
 from moduleResult.alignment import Alignment
+from module.minimap import Minimap
+from module.mlModule import MLModule
 
 class MinimapMLMergeModule(MergeModule):
-    def __init__(self, config:MinimapMLMergeConfig):
-        super().__init__(config)
-        self.minimapMLMergeConfig = config
+    def __init__(self, minimap:Minimap, mlModule:MLModule, factors=['most']):
+        self.minimap = minimap
+        self.mlModule = mlModule
+        self.factors = factors if isinstance(factors, list) else [factors]
+        super().__init__([minimap, mlModule], f"{self.minimap.moduleName}.{self.mlModule.moduleName}.minimapML-{"_".join(self.factors)}")
 
     def run(self):
         return super().run()
     
     def selectResult(self, sample, availableResults):
-        minimapName = self.minimapMLMergeConfig.minimapConfig.name
-        mlName = self.minimapMLMergeConfig.mlConfig.name
+        minimapName = self.minimap.moduleName
+        mlName = self.mlModule.moduleName
         resultSource = minimapName
         minimapResult:MinimapResult = availableResults[minimapName]
         minimapAlignment:Alignment = minimapResult.bestAlignment
 
-        if ("positive" in self.minimapMLMergeConfig.factors and minimapAlignment.quality == 0):
+        if ("positive" in self.factors and minimapAlignment.quality == 0):
             resultSource = mlName
-        if ("60" in self.minimapMLMergeConfig.factors and minimapAlignment.quality < 60):
+        if ("60" in self.factors and minimapAlignment.quality < 60):
             resultSource = mlName
-        if ("completeMatch" in self.minimapMLMergeConfig.factors and minimapAlignment.queryCoverLength < sample.length):
+        if ("completeMatch" in self.factors and minimapAlignment.queryCoverLength < sample.length):
             resultSource = mlName
-        if ("singleAlignment" in self.minimapMLMergeConfig.factors and len(minimapResult.alignments) > 1):
+        if ("singleAlignment" in self.factors and len(minimapResult.alignments) > 1):
             resultSource = mlName
         
         return resultSource

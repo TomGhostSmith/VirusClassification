@@ -3,9 +3,9 @@ from prototype.mergeConfig import MergeConfig
 from entity.sample import Sample
 
 class MergeModule(Module):
-    def __init__(self, config:MergeConfig):
-        super().__init__(config)
-        self.models = config.models
+    def __init__(self, models, name):
+        super().__init__(name)
+        self.models = models
 
     def run(self):
         for model in self.models:

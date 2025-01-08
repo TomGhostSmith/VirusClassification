@@ -12,9 +12,6 @@ class Dataset():
     
     def iterDatasets(self):
         if (self.minorDatasets is None):
-            return [(self.majorDataset, None)]
+            return [(self, self.majorDataset, None)]
         else:
-            return [(self.majorDataset, minorDataset) for minorDataset in self.minorDatasets]
-        
-    def isSingleRun(self):
-        return (self.minorDatasets is None or len(self.minorDatasets) == 1)
+            return [(Dataset(self.majorDataset, minorDataset), self.majorDataset, minorDataset) for minorDataset in self.minorDatasets]

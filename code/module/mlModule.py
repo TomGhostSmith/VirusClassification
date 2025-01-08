@@ -1,16 +1,16 @@
 import os
 from config import config
 from prototype.module import Module
-from moduleConfig.mlConfig import MLConfig
 from moduleResult.mlResult import MLResult
 
 class MLModule(Module):
-    def __init__(self, config:MLConfig):
-        super().__init__(config)
-        self.mlConfig = config
-
+    def __init__(self, shortname):
+        self.shortname = shortname
+        super().__init__(f'ML-param=contig_most_frequent_{self.shortname}')
+        self.baseName = self.moduleName
+        
     def run(self):
-        resultFile = f"{config.resultBase}/{self.mlConfig.name}.csv"
+        resultFile = f"{config.resultBase}/{self.baseName}.csv"
         self.resultDict = dict()
         if (os.path.exists(resultFile)):
             with open(resultFile) as fp:

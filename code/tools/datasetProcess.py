@@ -145,17 +145,22 @@ def getRank(title):
 def analyseNCBIDatasets():
     analyseDataset(getRank)
 
+def analyseNoResultDatasets(dataset:Dataset):
+    analyseDataset(lambda x:None)
+
 def main():
     # combineChallenge("/Data/ICTVData/dataset/Challenge/fasta", "Challenge")
     # analyseDataset(lambda x:None)
+    IterUtils.iterDatasets(Dataset("Challenge", ["virus", 'nonVirus']), analyseNoResultDatasets)
 
     # combineChallenge("/Data/ICTVData/dataset/refseq_2024_test/fasta", "refseq_2024_test")
     # splitByRank('refseq_2024_test', getRank)
     # IterUtils.iterDatasets(Dataset('refseq_2024_test', config.minorDatasetRanks), analyseNCBIDatasets)
     
-    combineChallenge("/Data/ICTVData/dataset/genbank_2024_test/fasta", "genbank_2024_test")
-    splitByRank('genbank_2024_test', getRank)
-    IterUtils.iterDatasets(Dataset('genbank_2024_test', config.minorDatasetRanks), analyseNCBIDatasets)
+    # combineChallenge("/Data/ICTVData/dataset/genbank_2024_test/fasta", "genbank_2024_test")
+    # splitByRank('genbank_2024_test', getRank)
+    # IterUtils.iterDatasets(Dataset('genbank_2024_test', config.minorDatasetRanks), analyseNCBIDatasets)
+
 
 
 if (__name__ == '__main__'):

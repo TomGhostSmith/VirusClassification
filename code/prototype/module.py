@@ -1,11 +1,9 @@
 from entity.sample import Sample
 from prototype.result import Result
-from prototype.moduleConfig import ModuleConfig
 
 class Module():
-    def __init__(self, config:ModuleConfig):
-        config.update()
-        self.moduleName = config.name
+    def __init__(self, name):
+        self.moduleName = name
 
     # should check if answer is exists
     # make sure that the answer can be randomly accessed
