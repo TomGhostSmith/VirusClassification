@@ -207,6 +207,31 @@ class TaxoTree():
         result.NCBIName = self.viralNCBITree.ID2name[result.NCBIID]
 
         return result
+    
+    def getTaxoNodeFromNode(self, ICTVNode=None, NCBINode=None):
+        if (ICTVNode is None and NCBINode is None):
+            return None
+        
+        if (ICTVNode is not None and NCBINode is not None):
+            raise ValueError("Please do not use both node simultaneously")
+        
+        result = TaxoNode()
+        if (ICTVNode is not None):
+            result.ICTVNode = ICTVNode
+            result.ICTVName = ICTVNode.name
+            result.ICTVID = self.ICTVTree.name2ID.get(ICTVNode.name)# note: the ICTV name miight not be the species name, so there might be no ID for this
+            result.NCBINode = self.ICTV2NCBI[result.ICTVName]
+            result.NCBIID = result.NCBINode.name   # yes, NCBI Node has ID as its name
+            result.NCBIName = self.viralNCBITree.ID2name[result.NCBIID]
+        elif (NCBINode is not None):
+            result.NCBINode = NCBINode
+            result.NCBIID = NCBINode.name
+            result.NCBIName = self.viralNCBITree.ID2name[NCBINode.name]
+            result.ICTVNode = self.NCBI2ICTV[result.NCBIID]
+            result.ICTVName = result.ICTVNode.name
+            result.ICTVID = self.ICTVTree.name2ID.get(result.ICTVName)  # note: the ICTV name miight not be the species name, so there might be no ID for this
+        
+        return result
 
     def findLCA(self, node1:TaxoNode|None, node2:TaxoNode|None):
         if (node1 is None or node2 is None):

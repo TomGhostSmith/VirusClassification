@@ -65,6 +65,7 @@ class Evaluator():
     # if dataset = None, then use the dataset in config
     def evaluate(self, sampleRange='all', dataset:Dataset=None, showDetails=True):
         self.loadSamples(dataset)
+        title = 'Statistics'
         if sampleRange == 'interested':
             with open(f"{config.tempFolder}/interestedSamples.txt") as fp:
                 interestedSamples = {l.strip() for l in fp}
@@ -96,7 +97,7 @@ class Evaluator():
             # print(f" (all)")
 
 
-            df.to_csv(f"{config.resultBase}/Statistics!n={totalCount};incl={includeCount};valid={validCount}!{model.moduleName}.csv")            
+            df.to_csv(f"{config.resultBase}/{title}!n={totalCount};incl={includeCount};valid={validCount}!{model.moduleName}.csv")            
 
             # perform separate calculation for MergeModel
             if (isinstance(model, MergeModule) and showDetails):
@@ -106,13 +107,13 @@ class Evaluator():
                     if source not in partitions:
                         partitions[source] = list()
                     partitions[source].append(sample)
-                
+
 
                 for source, samples in partitions.items():
                     df = self.analyseStatistics(samples, model.moduleName)
                     # print(f" ({source})")
 
-                    df.to_csv(f"{config.resultBase}/Statistics!n={totalCount};incl={includeCount};valid={validCount}!Source={source};m={len(samples)}!{model.moduleName}.csv")
+                    df.to_csv(f"{config.resultBase}/{title}!n={totalCount};incl={includeCount};valid={validCount}!Source={source};m={len(samples)}!{model.moduleName}.csv")
 
     # sampleRange could be: 'all', 'intersection', 'interested'
     def compare(self, sampleRange='all', dataset:Dataset=None):
@@ -214,6 +215,7 @@ class Evaluator():
         # Initialize metrics storage
         acc_sum, precision_sum, recall_sum, f1_sum = defaultdict(float), defaultdict(float), defaultdict(float), defaultdict(float)
         overall_acc, overall_precision, overall_recall, overall_f1 = defaultdict(float), defaultdict(float), defaultdict(float), defaultdict(float)
+        binary_acc, binary_precision, binary_recall, binary_f1 = defaultdict(float), defaultdict(float), defaultdict(float), defaultdict(float)
         prediction_counts = defaultdict(int)
         true_label_counts = defaultdict(int)
         prediction_with_label_counts = defaultdict(int)
@@ -244,6 +246,9 @@ class Evaluator():
             y_true = []
             y_pred = []
 
+            bin_true = list()
+            bin_pred = list()
+
             for contig in true_labels.keys():
                 true_label = true_labels[contig].get(level, 'Unknown')
                 pred_label = predictions[contig].get(level, 'Unknown') if contig in predictions else 'Unknown'
@@ -258,6 +263,9 @@ class Evaluator():
                 if true_label != 'Unknown':
                     y_true.append(true_label)
                     y_pred.append(pred_label)
+                
+                bin_true.append(true_label != 'Unknown')
+                bin_pred.append(pred_label != 'Unknown')
 
             if true_label_counts[level] != 0:
                 # Calculate macro-average metrics
@@ -271,9 +279,16 @@ class Evaluator():
                 overall_precision[level] = precision_score(y_true, y_pred, average='weighted', zero_division=0)
                 overall_recall[level] = recall_score(y_true, y_pred, average='weighted', zero_division=0)
                 overall_f1[level] = f1_score(y_true, y_pred, average='weighted')
+
+                # known/unknown metrics
+                binary_acc[level] = accuracy_score(bin_true, bin_pred)
+                binary_precision[level] = precision_score(bin_true, bin_pred, pos_label=True)
+                binary_recall[level] = recall_score(bin_true, bin_pred, pos_label=True)
+                binary_f1[level] = f1_score(bin_true, bin_pred, pos_label=True)
             else:
                 acc_sum[level] = precision_sum[level] = recall_sum[level] = f1_sum[level] = '-'
                 overall_acc[level] = overall_precision[level] = overall_recall[level] = overall_f1[level] = '-'
+                binary_acc[level] = binary_precision[level] = binary_recall[level] = binary_f1[level] = '-'
 
         # Save results to CSV
         results_data = {
@@ -286,6 +301,10 @@ class Evaluator():
             "Precision_overall": [overall_precision[level] for level in taxonomic_levels],
             "Recall_overall": [overall_recall[level] for level in taxonomic_levels],
             "F1_overall": [overall_f1[level] for level in taxonomic_levels],
+            "ACC_Binary": [binary_acc[level] for level in taxonomic_levels],
+            "Precision_Binary": [binary_precision[level] for level in taxonomic_levels],
+            "Recall_Binary": [binary_recall[level] for level in taxonomic_levels],
+            "F1_Binary": [binary_f1[level] for level in taxonomic_levels],
             "#Predictions": [prediction_counts[level] for level in taxonomic_levels],
             "#Predictions_with_labels": [prediction_with_label_counts[level] for level in taxonomic_levels],
             "#True_labels_available": [true_label_counts[level] for level in taxonomic_levels]
