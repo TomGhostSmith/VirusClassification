@@ -8,7 +8,8 @@ class ESM(Module):
         names = {
             "150M_256": "esm2_t30_150M_UR50D_dnainput_scl_MAX_LENGTH_256_predicted_virus_names.tsv",
             "150M_512": "esm2_t30_150M_UR50D_MAX_LENGTH_512_predicted_virus_names.tsv",
-            "650M_256": "esm2_t33_650M_UR50D_MAX_LENGTH_256_predicted_virus.tsv"
+            "650M_256": "esm2_t33_650M_UR50D_MAX_LENGTH_256_predicted_virus.tsv",
+            "650M_256_merge": "esm2_t33_650M_UR50D_MAX_LENGTH_256_12_result.csv.merge_gene_to_contig.csv.phage.tsv"
         }
         self.fullName = names[shortName]
         super().__init__(f'esm-{shortName}')

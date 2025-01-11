@@ -25,6 +25,15 @@ class MinimapResult(Result):
         if (self.node is None):
             targetRankLevel = config.rankLevels[self.rank]
             node = taxoTree.getTaxoNodeFromICTV(ICTVID=self.bestAlignment.ref)
+            align60Counts = 0
+            for alignment in self.alignments:
+                if alignment.quality == 60:
+                    align60Counts += 1
+            if (align60Counts > 0):
+                self.score = 1/align60Counts
+            else:
+                self.score = 1
+                
             for n in reversed(node.ICTVNode.path):
                 if config.rankLevels[n.rank] <= targetRankLevel:
                     self.node = taxoTree.getTaxoNodeFromNode(ICTVNode=n)

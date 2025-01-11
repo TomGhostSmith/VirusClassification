@@ -2,10 +2,11 @@ from prototype.mergeModule import MergeModule
 from moduleResult.minimapResult import MinimapResult
 from moduleResult.alignment import Alignment
 from module.minimap import Minimap
+from module.minimapThreshRankModule import MinimapThreshRankModule
 from module.mlModule import MLModule
 
 class MinimapMLMergeModule(MergeModule):
-    def __init__(self, minimap:Minimap, mlModule:MLModule, factors=['most']):
+    def __init__(self, minimap:MinimapThreshRankModule, mlModule:MLModule, factors=['most']):
         self.minimap = minimap
         self.mlModule = mlModule
         self.factors = factors if isinstance(factors, list) else [factors]

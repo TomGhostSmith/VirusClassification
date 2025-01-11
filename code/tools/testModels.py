@@ -5,6 +5,7 @@ from module.minimapThresholdModule import MinimapThresholdModule
 from module.virusPredModule import VirusPred
 from module.esm import ESM
 from module.minimapThreshRankModule import MinimapThreshRankModule
+from module.pipeline import Pipeline
 
 from entity.dataset import Dataset
 from entity.evaluator import Evaluator
@@ -42,7 +43,8 @@ def testModels(dataset:Dataset):
     esmConfigs = [
         "150M_256",
         "150M_512",
-        "650M_256"
+        "650M_256",
+        "650M_256_merge"
     ]
 
     # for minimapP in minimapParams:
@@ -73,8 +75,9 @@ def getBasicResults(dataset:Dataset):
         ]
 
     mlParamls = [
-        't33_512',
+        # 't33_512',
         # 'family_finetune_t33_256'
+        ("topdown", 0.45)
         ]
     
     thRank = {
@@ -93,11 +96,11 @@ def getBasicResults(dataset:Dataset):
     # for minimapP in minimapParams:
     #     models.append(Minimap(*minimapP))
     
-    for minimapP in minimapParams:
-        models.append(MinimapThreshRankModule(*minimapP, limitOutputDict=thRank))
+    # for minimapP in minimapParams:
+    #     models.append(MinimapThreshRankModule(*minimapP, limitOutputDict=thRank))
 
-    # for mlP in mlParamls:
-    #     models.append(MLModule(mlP))
+    for mlP in mlParamls:
+        models.append(MLModule(*mlP))
 
 
 
@@ -106,19 +109,72 @@ def getBasicResults(dataset:Dataset):
     # evaluator.evaluate('withResult', dataset)
     # evaluator.compare('intersection', dataset)
 
+
+def testPipeline(dataset:Dataset):
+
+    thRank = {
+        "": "f",
+        "pos": "g",
+        "60": "g",
+        "cm": "g",
+        "sa": "g",
+        "sa_cm": "g",
+        "pos_sa": "g",
+        "60_sa": "g",
+        "pos_cm": "g",
+        "pos_cm_sa": "g"
+    }
+
+    strategies = [
+        ("topdown", 0.5),
+        ("topdownExt", 0.5),
+        ("topdownPreserve", 0.5),
+        ("bottomup", 0.5),
+        ("highest", 0.5),
+
+        ("topdown", 0.4),
+        ("topdownExt", 0.4),
+        ("topdownPreserve", 0.4),
+        ("bottomup", 0.4),
+        ("highest", 0.4)
+    ]
+
+    esmList = [
+        "650M_256_merge",
+        "150M_512"
+    ]
+
+    models = list()
+
+    minimapThrank = MinimapThreshRankModule("VMRv4", limitOutputDict=thRank)
+    minimapThreshold = MinimapThresholdModule("VMRv4", factors=["60", "completeMatch"])
+    for s in strategies:
+        for esm in esmList:
+            virusPred = VirusPred([minimapThreshold, ESM(esm)])
+            ml = MLModule(*s)
+            models.append(Pipeline(virusPred, MinimapMLMergeModule(minimapThrank, ml)))
+    
+    evaluator = Evaluator(models)
+    evaluator.evaluate('all', dataset)
+
+
+
+
+
 def main():
     # dataset = Dataset("Challenge")
     # dataset = Dataset("gen2")
     # dataset = Dataset("gen2_fold2020")
     # dataset = Dataset("gen2_fold2024")
-    dataset = Dataset("refseq_2024_test", config.minorDatasetRanks[1:])
+    dataset = Dataset("refseq_2024_test", config.minorDatasetRanks[0:])
     # dataset = Dataset("refseq_2024_test", "genus")
     # dataset = Dataset("genbank_2024_test", config.minorDatasetRanks[1:])
     # dataset = Dataset("genbank_2024_test", "genus")
     # IterUtils.iterDatasets(dataset, testModels, splitReports=True)
     # IterUtils.iterDatasets(dataset, testModels, splitReports=False)
     # IterUtils.iterDatasets(dataset, getBasicResults, splitReports=True)
-    IterUtils.iterDatasets(dataset, getBasicResults, splitReports=False)
+    # IterUtils.iterDatasets(dataset, getBasicResults, splitReports=False)
+    IterUtils.iterDatasets(dataset, testPipeline, splitReports=False)
 
 
 

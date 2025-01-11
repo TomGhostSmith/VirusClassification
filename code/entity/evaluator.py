@@ -57,7 +57,7 @@ class Evaluator():
             "FalseNonVirus": fns
         })
 
-        df.to_csv(f"{config.resultBase}/Summary_VirusPrediction.csv")            
+        df.to_csv(f"{config.resultBase}/Summary_VirusPrediction.csv")
 
 
 
@@ -77,6 +77,8 @@ class Evaluator():
         else:
             interestedSamples = self.allSamples
 
+        summaryRes = list()
+
         for model in self.models:
             validSamples = list()
             for sample in interestedSamples:
@@ -93,8 +95,8 @@ class Evaluator():
             validCount = len(validSamples)
 
             # generate report for focused samples
-            df = self.analyseStatistics(focusedSamples, model.moduleName)
-            # print(f" (all)")
+            df, weightedStat = self.analyseStatistics(focusedSamples, model.moduleName)
+            summaryRes.append(weightedStat)
 
 
             df.to_csv(f"{config.resultBase}/{title}!n={totalCount};incl={includeCount};valid={validCount}!{model.moduleName}.csv")            
@@ -110,10 +112,26 @@ class Evaluator():
 
 
                 for source, samples in partitions.items():
-                    df = self.analyseStatistics(samples, model.moduleName)
+                    df, _ = self.analyseStatistics(samples, model.moduleName)
                     # print(f" ({source})")
 
                     df.to_csv(f"{config.resultBase}/{title}!n={totalCount};incl={includeCount};valid={validCount}!Source={source};m={len(samples)}!{model.moduleName}.csv")
+                    
+        summaryRes = list(zip(*summaryRes))
+
+        summaryDF =  pandas.DataFrame({
+            "model": [model.moduleName for model in self.models],
+            "Summary_Acc": summaryRes[0],
+            "Summary_Precision": summaryRes[1],
+            "Summary_Recall": summaryRes[2],
+            "Summary_F1": summaryRes[3],
+            "Summary_BinaryAcc": summaryRes[4],
+            "Summary_BinaryPrecision": summaryRes[5],
+            "Summary_BinaryRecall": summaryRes[6],
+            "Summary_BinaryF1": summaryRes[7]
+        })
+
+        summaryDF.to_csv(f"{config.resultBase}/Summary_Evaluation.csv")
 
     # sampleRange could be: 'all', 'intersection', 'interested'
     def compare(self, sampleRange='all', dataset:Dataset=None):
@@ -150,7 +168,7 @@ class Evaluator():
 
 
                 # generate report for focused samples
-                df = self.analyseStatistics(interestedSamples, model.moduleName)
+                df, _ = self.analyseStatistics(interestedSamples, model.moduleName)
 
                 nameDict = {
                     "ML-param=contig_most_frequent_t33_512": "t33_512",
@@ -211,6 +229,16 @@ class Evaluator():
                 else:
                     class_accuracies.append(0)
             return sum(class_accuracies) / len(classes)
+        
+        def getWeightedStatistics(statistics, ranks, sampleCounts):
+            total = 0
+            totalCount = 0
+            for rank in ranks:
+                if sampleCounts[rank] > 0:
+                    total += statistics[rank] * sampleCounts[rank]
+                    totalCount += sampleCounts[rank]
+            return total / totalCount
+            
 
         # Initialize metrics storage
         acc_sum, precision_sum, recall_sum, f1_sum = defaultdict(float), defaultdict(float), defaultdict(float), defaultdict(float)
@@ -260,7 +288,7 @@ class Evaluator():
                 if true_label != 'Unknown':
                     true_label_counts[level] += 1
 
-                if true_label != 'Unknown':
+                if true_label != 'Unknown' and pred_label != 'Unknown':
                     y_true.append(true_label)
                     y_pred.append(pred_label)
                 
@@ -312,7 +340,18 @@ class Evaluator():
 
         # print(f"{modelName}: {overall_acc['Genus']:.3f} (n={len(samples)})", end='')
 
-        return pandas.DataFrame(results_data)
+        weightedAccuracy = getWeightedStatistics(overall_acc, taxonomic_levels, prediction_with_label_counts)
+        weightedPrecision = getWeightedStatistics(overall_precision, taxonomic_levels, prediction_with_label_counts)
+        weightedRecall = getWeightedStatistics(overall_recall, taxonomic_levels, prediction_with_label_counts)
+        weightedF1 = getWeightedStatistics(overall_f1, taxonomic_levels, prediction_with_label_counts)
+        weightedBinaryAccuracy = getWeightedStatistics(binary_acc, taxonomic_levels, prediction_with_label_counts)
+        weightedBinaryPrecision = getWeightedStatistics(binary_precision, taxonomic_levels, prediction_with_label_counts)
+        weightedBinaryRecall = getWeightedStatistics(binary_recall, taxonomic_levels, prediction_with_label_counts)
+        weightedBinaryF1 = getWeightedStatistics(binary_f1, taxonomic_levels, prediction_with_label_counts)
+
+        weightedRes = (weightedAccuracy, weightedPrecision, weightedRecall, weightedF1, weightedBinaryAccuracy, weightedBinaryPrecision, weightedBinaryRecall, weightedBinaryF1)
+
+        return pandas.DataFrame(results_data), weightedRes
         
     
     # Define function to calculate macro-average accuracy

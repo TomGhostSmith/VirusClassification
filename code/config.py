@@ -57,6 +57,7 @@ class Config():
             self.datasetName = f"{self.majorDataset}-{self.minorDataset}"
         
         self.virusPredResultFolder = f"/Data/VirusClassification/results/{self.majorDataset}/VirusPred"
+        self.MLResultFolder = f"/Data/VirusClassification/results/{self.majorDataset}/MLResult"
         
         if (not os.path.exists(self.resultBase)):
             os.makedirs(self.resultBase)
