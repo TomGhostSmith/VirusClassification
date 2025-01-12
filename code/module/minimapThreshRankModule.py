@@ -16,7 +16,8 @@ class MinimapThreshRankModule(Minimap):
                 code = self.getCode(k)
                 rank = rankMap[v]
                 self.limitOutputRanks[code] = rank
-        self.moduleName = f"minimapThRank-ref={self.reference};mode={self.mode};thRank-{"".join([t[0] for t in self.limitOutputRanks])}"
+        self.code = "".join([t[0] for t in self.limitOutputRanks])
+        self.moduleName = f"minimapThRank-ref={self.reference};mode={self.mode};thRank-{self.code}"
 
     def run(self):
         return super().run()

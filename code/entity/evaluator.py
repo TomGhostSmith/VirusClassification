@@ -1,11 +1,14 @@
+import os
 import json
 import pandas
 from sklearn.metrics import precision_score, recall_score, accuracy_score,f1_score
 from collections import defaultdict
+from tqdm import tqdm
 
 from config import config
 from entity.sample import Sample
 from prototype.mergeModule import MergeModule
+from module.pipeline import Pipeline
 from entity.taxoTree import taxoTree
 from entity.taxoNode import TaxoNode
 from entity.dataset import Dataset
@@ -75,11 +78,33 @@ class Evaluator():
                 if sample.name in interestedSamples:
                     interestedSamples.append(sample)
         else:
-            interestedSamples = self.allSamples
+            interestedSamples = list()
+            for s in self.allSamples:
+                if s.stdResult is not None:
+                    interestedSamples.append(s)
 
         summaryRes = list()
 
-        for model in self.models:
+        with open(f"{config.tempFolder}/resCount") as fp:
+            pipelineIndex = int(fp.readline().strip())
+        
+        pipelineResTitle = ["pred minimap ref", "pred minimap mode", "pred minimap factor",
+                            "esm",
+                            "taxo minimap ref", "taxo minimap mode", "taxo minimap code",
+                            "ML strategy", "ML cutoff", "ML gen",
+                            "merge",
+                            "pipelineIndex"]
+        pipelineNames = list()
+
+        requireTitle = not os.path.exists(f"{config.resultBase}/pipelines.csv")
+        pipelineNameFP = open(f"{config.resultBase}/pipelines.csv", 'at')
+
+        if (requireTitle):
+            pipelineNameFP.write(",".join(pipelineResTitle) + "\n")
+        
+        modelNames = list()
+
+        for model in tqdm(self.models, desc="evaluating"):
             validSamples = list()
             for sample in interestedSamples:
                 if (sample.results[model.moduleName] is not None):
@@ -98,8 +123,10 @@ class Evaluator():
             df, weightedStat = self.analyseStatistics(focusedSamples, model.moduleName)
             summaryRes.append(weightedStat)
 
-
-            df.to_csv(f"{config.resultBase}/{title}!n={totalCount};incl={includeCount};valid={validCount}!{model.moduleName}.csv")            
+            if (isinstance(model, Pipeline)):
+                df.to_csv(f"{config.resultBase}/{title}!n={totalCount};incl={includeCount};valid={validCount}!pipeline-{pipelineIndex}.csv", index=False)
+            else:
+                df.to_csv(f"{config.resultBase}/{title}!n={totalCount};incl={includeCount};valid={validCount}!{model.moduleName}.csv", index=False)            
 
             # perform separate calculation for MergeModel
             if (isinstance(model, MergeModule) and showDetails):
@@ -115,12 +142,27 @@ class Evaluator():
                     df, _ = self.analyseStatistics(samples, model.moduleName)
                     # print(f" ({source})")
 
-                    df.to_csv(f"{config.resultBase}/{title}!n={totalCount};incl={includeCount};valid={validCount}!Source={source};m={len(samples)}!{model.moduleName}.csv")
+                    df.to_csv(f"{config.resultBase}/{title}!n={totalCount};incl={includeCount};valid={validCount}!Source={source};m={len(samples)}!{model.moduleName}.csv", index=False)
+            
+            if (isinstance(model, Pipeline)):
+                pipelineNames.append(model.getParamList())
+                params = model.getParamList()
+                params.append(str(pipelineIndex))
+                pipelineNameFP.write(",".join(params) + "\n")
+                modelNames.append(f"pipeline-{pipelineIndex}")
+                pipelineIndex += 1
+            else:
+                modelNames.append(model.moduleName)
+
+        with open(f"{config.tempFolder}/resCount", 'w') as fp:
+            fp.write(str(pipelineIndex))
+
+        pipelineNameFP.close()
                     
         summaryRes = list(zip(*summaryRes))
 
         summaryDF =  pandas.DataFrame({
-            "model": [model.moduleName for model in self.models],
+            "model": modelNames,
             "Summary_Acc": summaryRes[0],
             "Summary_Precision": summaryRes[1],
             "Summary_Recall": summaryRes[2],
@@ -131,7 +173,7 @@ class Evaluator():
             "Summary_BinaryF1": summaryRes[7]
         })
 
-        summaryDF.to_csv(f"{config.resultBase}/Summary_Evaluation.csv")
+        summaryDF.to_csv(f"{config.resultBase}/Summary_Evaluation.csv", index=False)
 
     # sampleRange could be: 'all', 'intersection', 'interested'
     def compare(self, sampleRange='all', dataset:Dataset=None):
@@ -199,7 +241,8 @@ class Evaluator():
                 config.minorDataset = minor
                 config.updatePath()
                 thisSample = load()
-                for model in self.models:
+                n = major if minor is None else f"{major}-{minor}"
+                for model in tqdm(self.models, desc=n):
                     model.run()
                     model.getResults(thisSample)  # we have to getResults here, otherwise the path in config will be wrong
                 self.allSamples += thisSample
@@ -260,7 +303,8 @@ class Evaluator():
             pred:Result = sample.results[modelName]
             predictNode = pred.node if pred is not None else None
 
-            # stdNode can still be None because there are nonVirus samples
+            # currently we do not care about virus prediction
+            # stdNode can still be None because there are nonVirus samples 
             if (stdNode is not None):
                 for node in stdNode.ICTVNode.path:
                     true_labels[sample][node.rank.capitalize()] = node.name
@@ -295,7 +339,7 @@ class Evaluator():
                 bin_true.append(true_label != 'Unknown')
                 bin_pred.append(pred_label != 'Unknown')
 
-            if true_label_counts[level] != 0:
+            if len(y_true) != 0:
                 # Calculate macro-average metrics
                 acc_sum[level] = macro_accuracy(y_true, y_pred)
                 precision_sum[level] = precision_score(y_true, y_pred, average='macro', zero_division=0)

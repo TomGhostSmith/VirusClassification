@@ -23,7 +23,7 @@ class Minimap(Module):
         resultFolder = f"{config.resultBase}/minimapResult-{self.baseName}"
 
         if (os.path.exists(resultFolder)):
-            IOUtils.showInfo(f'Skipped minimap on {config.datasetName}')
+            # IOUtils.showInfo(f'Skipped minimap on {config.datasetName}')
             return
         
         os.makedirs(resultFolder)

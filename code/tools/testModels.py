@@ -125,34 +125,72 @@ def testPipeline(dataset:Dataset):
         "pos_cm_sa": "g"
     }
 
-    strategies = [
-        ("topdown", 0.5),
-        ("topdownExt", 0.5),
-        ("topdownPreserve", 0.5),
-        ("bottomup", 0.5),
-        ("highest", 0.5),
+    strategies = ['topdown', 'topdownExt', 'topdownPreserve', 'bottomup','highest']
+    cutoffs = [0.4, 0.45, 0.5]
+    mlgens = ['gen1', 'gen2']
 
-        ("topdown", 0.4),
-        ("topdownExt", 0.4),
-        ("topdownPreserve", 0.4),
-        ("bottomup", 0.4),
-        ("highest", 0.4)
-    ]
+    mlParams = list()
+    for strategy in strategies:
+        for cutoff in cutoffs:
+            for gen in mlgens:
+                mlParams.append((strategy, cutoff, gen))
 
     esmList = [
         "650M_256_merge",
         "150M_512"
     ]
 
+    mergefactors = [
+        ['most'],
+        # ['positive'],
+        ['60'],
+        # ['completeMatch'],
+        # ['positive', 'completeMatch'],
+        ['60', 'completeMatch'],
+        # ['singleAlignment'],
+        # ['positive', 'singleAlignment'],
+        # ['60', 'singleAlignment'],
+        # ['completeMatch', 'singleAlignment'],
+        # ['positive', 'completeMatch', 'singleAlignment'],
+        ['60', 'completeMatch', 'singleAlignment'],
+    ]
+
+    minimapPredFactor = [
+        # ['most'],
+        # ['positive'],
+        # ['60'],
+        # ['completeMatch'],
+        # ['positive', 'completeMatch'],
+        ['60', 'completeMatch'],
+        # ['singleAlignment'],
+        # ['positive', 'singleAlignment'],
+        # ['60', 'singleAlignment'],
+        # ['completeMatch', 'singleAlignment'],
+        # ['positive', 'completeMatch', 'singleAlignment'],
+        # ['60', 'completeMatch', 'singleAlignment'],
+    ]
+
     models = list()
 
-    minimapThrank = MinimapThreshRankModule("VMRv4", limitOutputDict=thRank)
-    minimapThreshold = MinimapThresholdModule("VMRv4", factors=["60", "completeMatch"])
-    for s in strategies:
+    for predFactor in minimapPredFactor:
+        minimapThrank = MinimapThreshRankModule("VMRv4", limitOutputDict=thRank)
+        minimapThreshold = MinimapThresholdModule("VMRv4", factors=predFactor)
         for esm in esmList:
             virusPred = VirusPred([minimapThreshold, ESM(esm)])
-            ml = MLModule(*s)
-            models.append(Pipeline(virusPred, MinimapMLMergeModule(minimapThrank, ml)))
+            for s in mlParams:
+                ml = MLModule(*s)
+                for fac in mergefactors:
+                    models.append(Pipeline(virusPred, MinimapMLMergeModule(minimapThrank, ml, factors=fac)))
+
+        for esm in esmList:
+            virusPred = VirusPred([minimapThreshold, ESM(esm)])
+            models.append(Pipeline(virusPred, minimapThrank))
+
+        for esm in esmList:
+            virusPred = VirusPred([minimapThreshold, ESM(esm)])
+            for s in mlParams:
+                ml = MLModule(*s)
+                models.append(Pipeline(virusPred, ml))
     
     evaluator = Evaluator(models)
     evaluator.evaluate('all', dataset)
