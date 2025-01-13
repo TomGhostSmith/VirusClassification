@@ -14,7 +14,7 @@ def generateVirusDataset(dataset:Dataset):
     virusPred = VirusPred([minimapTh])
     evaluator = Evaluator([virusPred])
     samples = evaluator.loadSamples(dataset)
-    virusNames = {sample.query for sample in samples if sample.results[virusPred.moduleName] is not None}
+    virusNames = {sample.id for sample in samples if sample.results[virusPred.moduleName] is not None}
 
     IOUtils.showInfo('Loading sequences')
     allRecords = list()

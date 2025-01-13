@@ -5,16 +5,20 @@ class Module():
     def __init__(self, name):
         self.moduleName = name
 
-    # should check if answer is exists
+    # only run the samples (which is not in the answer)
     # make sure that the answer can be randomly accessed
-    def run(self):
+    def run(self, samples):
         pass
 
     def getResults(self, sampleList):
+        samples = list()
         for sample in sampleList:
             if (self.moduleName not in sample.results):
-                sample.addResult(self.moduleName, self.getResult(sample))
+                samples.append(sample)
+        results = self.run(samples)
+        for sample, result in zip(samples, results):
+            sample.addResult(self.moduleName, result)
 
-    # each model should return the result of the sample. If no, return None
-    def getResult(self, sample:Sample)->Result:
-        pass
+    # # each model should return the result of the sample. If no, return None
+    # def getResult(self, sample:Sample)->Result:
+    #     pass

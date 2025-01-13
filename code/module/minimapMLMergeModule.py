@@ -12,8 +12,8 @@ class MinimapMLMergeModule(MergeModule):
         self.factors = factors if isinstance(factors, list) else [factors]
         super().__init__([minimap, mlModule], f"{self.minimap.moduleName}.{self.mlModule.moduleName}.minimapML-{"_".join(self.factors)}")
 
-    def run(self):
-        return super().run()
+    # def run(self):
+    #     return super().run()
     
     def selectResult(self, sample, availableResults):
         minimapName = self.minimap.moduleName

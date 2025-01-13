@@ -7,9 +7,9 @@ class VirusPred(Module):
         names = [model.moduleName for model in models]
         super().__init__('.'.join(names))
 
-    def run(self):
-        for model in self.models:
-            model.run()
+    # def run(self):
+    #     for model in self.models:
+    #         model.run()
     
     def getResults(self, sampleList):
         for model in self.models:

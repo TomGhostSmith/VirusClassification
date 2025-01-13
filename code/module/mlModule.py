@@ -12,10 +12,8 @@ class MLModule(Module):
         super().__init__(f'ML-stratgy={strategy};th={thresh}, gen={gen}')
         # self.baseName = self.moduleName
         self.resultDict = dict()
-        
-    def run(self):
         if self.gen == 'gen1':
-            resultFileNames = {
+            self.esultFileNames = {
                 "realm": f"{config.MLResultFolder}/gen1_realm_t33_512_5_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
                 "kingdom": f"{config.MLResultFolder}/gen1_kingdom_realm_finetune_t33_256_12_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
                 "phylum": f"{config.MLResultFolder}/gen1_phylum_realm_kingdom_finetune_t33_256_12_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
@@ -25,7 +23,7 @@ class MLModule(Module):
                 "genus": f"{config.MLResultFolder}/gen1_genus_order_family_finetune_t33_256_12_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
             }
         elif self.gen == 'gen2':
-            resultFileNames = {
+            self.resultFileNames = {
                 "realm": f"{config.MLResultFolder}/gen2_realm_t33_512_5_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
                 "kingdom": f"{config.MLResultFolder}/gen2_kingdom_t33_256_12_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
                 "phylum": f"{config.MLResultFolder}/gen2_phylum_t33_512_4_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
@@ -35,7 +33,10 @@ class MLModule(Module):
                 "genus": f"{config.MLResultFolder}/gen2_genus_enlarge_family_finetune_t33_256_10_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
             }
 
-        files = list(resultFileNames.values())
+        
+    def run(self):
+
+        files = list(self.resultFileNames.values())
         if (self.strategy.startswith('bottomup')):
             files = reversed(files)
 
@@ -60,7 +61,7 @@ class MLModule(Module):
         #             self.resultDict[terms[0]] = terms[1]
     
     def getResult(self, sample):        
-        if (sample.query in self.resultDict):
-            return self.resultDict[sample.query]
+        if (sample.id in self.resultDict):
+            return self.resultDict[sample.id]
         else:
             return None

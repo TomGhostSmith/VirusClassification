@@ -1,5 +1,4 @@
 from prototype.module import Module
-from prototype.mergeConfig import MergeConfig
 from entity.sample import Sample
 
 class MergeModule(Module):
@@ -7,16 +6,18 @@ class MergeModule(Module):
         super().__init__(name)
         self.models = models
 
-    def run(self):
-        for model in self.models:
-            model.run()
+    def run(self, samples):
+        results = list()
+        for sample in samples:
+            results.append(self.getResult(sample))
+        return results
     
     def getResults(self, sampleList):
         for model in self.models:
             model.getResults(sampleList)
         super().getResults(sampleList)
 
-    def getResult(self, sample):
+    def getResult(self, sample:Sample):
         availableResults = dict()
         result = None
         source = None

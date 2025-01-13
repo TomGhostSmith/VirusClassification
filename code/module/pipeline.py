@@ -21,6 +21,9 @@ class Pipeline(Module):
 
     def getResults(self, sampleList):
         # TODO: record what sample are already calculated with confirmed results, so that the remained model does not require to run that
+        for model in self.virusPred.models:
+            pass
+
         self.virusPred.getResults(sampleList)
         self.minimapMLMerge.getResults(sampleList)
         super().getResults(sampleList)
@@ -40,10 +43,10 @@ class Pipeline(Module):
         }
 
         for model in self.virusPred.models:
-            if (isinstance(model, Minimap)):
-                param["pred minimap"] = [model.reference, model.mode, "-"]
-            elif (isinstance(model, MinimapThresholdModule)):
+            if (isinstance(model, MinimapThresholdModule)):
                 param["pred minimap"] = [model.reference, model.baseName, model.factors]
+            elif (isinstance(model, Minimap)):
+                param["pred minimap"] = [model.reference, model.mode, "-"]
             elif (isinstance(model, ESM)):
                 param["ESM"] = model.moduleName
         

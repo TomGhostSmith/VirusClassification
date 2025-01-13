@@ -125,9 +125,15 @@ def testPipeline(dataset:Dataset):
         "pos_cm_sa": "g"
     }
 
-    strategies = ['topdown', 'topdownExt', 'topdownPreserve', 'bottomup','highest']
-    cutoffs = [0.4, 0.45, 0.5]
-    mlgens = ['gen1', 'gen2']
+    # strategies = ['topdown', 'topdownExt', 'topdownPreserve', 'bottomup','highest']
+    strategies = ['topdownExt']
+    
+    # cutoffs = [0.4, 0.45, 0.5]
+    cutoffs = [0.5]
+
+    # mlgens = ['gen1', 'gen2']
+    mlgens = ['gen2']
+    
 
     mlParams = list()
     for strategy in strategies:
@@ -137,22 +143,22 @@ def testPipeline(dataset:Dataset):
 
     esmList = [
         "650M_256_merge",
-        "150M_512"
+        # "150M_512"
     ]
 
     mergefactors = [
         ['most'],
         # ['positive'],
-        ['60'],
+        # ['60'],
         # ['completeMatch'],
         # ['positive', 'completeMatch'],
-        ['60', 'completeMatch'],
+        # ['60', 'completeMatch'],
         # ['singleAlignment'],
         # ['positive', 'singleAlignment'],
         # ['60', 'singleAlignment'],
         # ['completeMatch', 'singleAlignment'],
         # ['positive', 'completeMatch', 'singleAlignment'],
-        ['60', 'completeMatch', 'singleAlignment'],
+        # ['60', 'completeMatch', 'singleAlignment'],
     ]
 
     minimapPredFactor = [

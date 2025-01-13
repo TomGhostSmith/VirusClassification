@@ -6,13 +6,14 @@ class Config():
         self.majorDataset = 'Challenge'
         
         # self.minorDataset = 'genus'
-        self.minorDataset = None
+        # self.minorDataset = None
 
         self.tempFolder = "/Data/VirusClassification/temp"
 
         self.ncbiFolder = "/Data/ICTVData/NCBI"
         self.ncbiAssemblyFolder = "/Data/ICTVData/NCBI/Assembly"
         self.ncbiNucleotideFolder = "/Data/ICTVData/NCBI/Nucleotide"
+        self.modelRoot = "/Data/VirusClassification/model"
 
         ranks = [
             "root",
@@ -43,18 +44,21 @@ class Config():
         self.evaluationRanks = ['superkingdom', 'realm', 'kingdom', 'subkingdom', 'phylum', 'subphylum', 'class', 'subclass', 'order', 'suborder', 'family', 'subfamily', 'genus', 'subgenus', 'species']
         self.minorDatasetRanks = ["nonVirus", "superkingdom", "realm", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
 
+        self.esmBatchSize = 64
+        self.mlBatchSize = 64
+
         self.updatePath()
 
     
     def updatePath(self):
-        if (self.minorDataset is None):
-            self.resultBase = f"/Data/VirusClassification/results/{self.majorDataset}"
-            self.datasetBase = f"/Data/VirusClassification/dataset/{self.majorDataset}"
-            self.datasetName = self.majorDataset
-        else:
-            self.resultBase = f"/Data/VirusClassification/results/{self.majorDataset}/{self.minorDataset}"
-            self.datasetBase = f"/Data/VirusClassification/dataset/{self.majorDataset}/{self.minorDataset}"
-            self.datasetName = f"{self.majorDataset}-{self.minorDataset}"
+        # if (self.minorDataset is None):
+        self.resultBase = f"/Data/VirusClassification/results/{self.majorDataset}"
+        self.datasetBase = f"/Data/VirusClassification/dataset/{self.majorDataset}"
+        self.datasetName = self.majorDataset
+        # else:
+            # self.resultBase = f"/Data/VirusClassification/results/{self.majorDataset}/{self.minorDataset}"
+            # self.datasetBase = f"/Data/VirusClassification/dataset/{self.majorDataset}/{self.minorDataset}"
+            # self.datasetName = f"{self.majorDataset}-{self.minorDataset}"
         
         self.virusPredResultFolder = f"/Data/VirusClassification/results/{self.majorDataset}/VirusPred"
         self.MLResultFolder = f"/Data/VirusClassification/results/{self.majorDataset}/MLResult"

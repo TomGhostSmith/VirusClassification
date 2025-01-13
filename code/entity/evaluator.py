@@ -236,16 +236,14 @@ class Evaluator():
         
         self.allSamples = list()
         if (dataset is not None):
-            for _, major, minor in dataset.iterDatasets():
-                config.majorDataset = major
-                config.minorDataset = minor
-                config.updatePath()
-                thisSample = load()
-                n = major if minor is None else f"{major}-{minor}"
-                for model in tqdm(self.models, desc=n):
-                    model.run()
-                    model.getResults(thisSample)  # we have to getResults here, otherwise the path in config will be wrong
-                self.allSamples += thisSample
+            config.majorDataset = dataset.majorDataset
+            config.updatePath()
+            thisSample = load()
+            n = dataset.majorDataset
+            for model in tqdm(self.models, desc=n):
+                model.run()
+                model.getResults(thisSample)  # we have to getResults here, otherwise the path in config will be wrong
+            self.allSamples += thisSample
 
             if (dataset.minorDatasets is not None and len(dataset.minorDatasets) == 1):
                 config.minorDataset = dataset.minorDatasets[0]

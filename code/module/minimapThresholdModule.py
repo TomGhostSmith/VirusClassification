@@ -15,8 +15,9 @@ class MinimapThresholdModule(Minimap):
         self.factors = factors if isinstance(factors, list) else [factors]
         self.moduleName = f'minimapThresh-ref={self.reference};mode={self.mode};thresh-{"_".join(self.factors)}'
 
-    def run(self):
-        return super().run()
+    def run(self, samples):
+        super().run(samples)
+        return [self.getResult(sample) for sample in samples]
     
     
     def getResult(self, sample):
