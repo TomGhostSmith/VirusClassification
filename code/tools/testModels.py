@@ -126,8 +126,15 @@ def testPipeline(dataset:Dataset):
     }
 
     strategies = ['topdown', 'topdownExt', 'topdownPreserve', 'bottomup','highest']
-    cutoffs = [0.4, 0.45, 0.5]
-    mlgens = ['gen1', 'gen2']
+    cutoffs = [
+        0.4, 
+        0.45, 
+        0.5
+    ]
+    mlgens = [
+        # 'gen1',
+        'gen2'
+        ]
 
     mlParams = list()
     for strategy in strategies:
@@ -136,7 +143,7 @@ def testPipeline(dataset:Dataset):
                 mlParams.append((strategy, cutoff, gen))
 
     esmList = [
-        "650M_256_merge",
+        # "650M_256_merge",
         "150M_512"
     ]
 
@@ -204,9 +211,9 @@ def main():
     # dataset = Dataset("gen2")
     # dataset = Dataset("gen2_fold2020")
     # dataset = Dataset("gen2_fold2024")
-    dataset = Dataset("refseq_2024_test", config.minorDatasetRanks[0:])
+    # dataset = Dataset("refseq_2024_test", config.minorDatasetRanks[0:])
     # dataset = Dataset("refseq_2024_test", "genus")
-    # dataset = Dataset("genbank_2024_test", config.minorDatasetRanks[1:])
+    dataset = Dataset("genbank_2024_test", config.minorDatasetRanks[0:])
     # dataset = Dataset("genbank_2024_test", "genus")
     # IterUtils.iterDatasets(dataset, testModels, splitReports=True)
     # IterUtils.iterDatasets(dataset, testModels, splitReports=False)

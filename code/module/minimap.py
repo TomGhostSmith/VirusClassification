@@ -40,6 +40,9 @@ class Minimap(Module):
     
     def getResult(self, sample):
         resultFolder = f"{config.resultBase}/minimapResult-{self.baseName}"
+
+        if (self.baseName in sample.results):
+            return (sample.results[self.baseName])
         
         result = MinimapResult()
         if (os.path.exists(f"{resultFolder}/{sample.query}.sam")):
@@ -54,6 +57,7 @@ class Minimap(Module):
                     result.addAlignment(Alignment(referenceName, mappingQuality, CIGAR))
         if (result.bestAlignment is None):
             result = None
+        sample.results[self.baseName] = result
         return result
     
     def getMinimapCommand(self, queryFile):

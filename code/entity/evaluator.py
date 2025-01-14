@@ -87,6 +87,9 @@ class Evaluator():
 
         with open(f"{config.tempFolder}/resCount") as fp:
             pipelineIndex = int(fp.readline().strip())
+
+        with open(f"{config.tempFolder}/resCount", 'w') as fp:
+            fp.write(str(pipelineIndex + len(self.models)))
         
         pipelineResTitle = ["pred minimap ref", "pred minimap mode", "pred minimap factor",
                             "esm",
@@ -154,8 +157,6 @@ class Evaluator():
             else:
                 modelNames.append(model.moduleName)
 
-        with open(f"{config.tempFolder}/resCount", 'w') as fp:
-            fp.write(str(pipelineIndex))
 
         pipelineNameFP.close()
                     
