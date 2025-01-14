@@ -9,6 +9,7 @@ class MinimapResult(Result):
         self.alignments = list()
         self.bestAlignment = None
         self.rank = 'species'
+        self.scores = dict()
 
     def addAlignment(self, alignment:Alignment):
         self.alignments.append(alignment)
@@ -29,12 +30,14 @@ class MinimapResult(Result):
             for alignment in self.alignments:
                 if alignment.quality == 60:
                     align60Counts += 1
-            if (align60Counts > 0):
-                self.score = 1/align60Counts
-            else:
-                self.score = 1
+            # if (align60Counts > 0):
+            #     self.score = 1/align60Counts
+            # else:
                 
             for n in reversed(node.ICTVNode.path):
                 if config.rankLevels[n.rank] <= targetRankLevel:
                     self.node = taxoTree.getTaxoNodeFromNode(ICTVNode=n)
                     break
+            
+            for n in self.node.ICTVNode.path:
+                self.scores[n.rank] = 1

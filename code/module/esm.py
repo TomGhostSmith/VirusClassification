@@ -7,7 +7,7 @@ from module.esmRunner import ESMRunner
 from entity.sample import Sample
 
 class ESM(Module):
-    def __init__(self, shortName):
+    def __init__(self):
         self.viruses = set()
         # names = {
         #     "150M_256": "esm2_t30_150M_UR50D_dnainput_scl_MAX_LENGTH_256_predicted_virus_names.tsv",
@@ -20,11 +20,11 @@ class ESM(Module):
         # }
         # self.fullName = names[shortName]
         # self.modelPath = self.models[shortName]
-        self.model = ESMRunner(512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)
         
-        super().__init__(f'esm-{shortName}')
+        super().__init__(f'esm-150M_512')
 
     def run(self, samples:list[Sample]):
+        self.model = ESMRunner(512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)
         results = list()
         viruses = set()
         self.model.run(samples)
@@ -45,14 +45,16 @@ class ESM(Module):
 
         df_result = df[['seq_name', 'prediction', 'class_0_mean','class_1_mean']].drop_duplicates()
 
-        for row in df_result.itertuples:
+        for row in df_result.itertuples():
             if row.prediction == 'virus':
                 viruses.add(row.seq_name)
 
-        for sample in self.viruses():
+        for sample in samples:
             if sample.id in viruses:
                 results.append(VirusPredictionResult())
             else:
                 results.append(None)
+        
+        del self.model
         
         return results

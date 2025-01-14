@@ -5,6 +5,7 @@ from Bio import SeqIO
 from config import config
 from entity.dataset import Dataset
 from entity.sample import Sample
+from module.pipeline import Pipeline
 
 class ModelRunnder():
     def __init__(self, models, dataset:Dataset):
@@ -22,7 +23,7 @@ class ModelRunnder():
             return sampleList
         
         self.models = models
-        self.samples = list()
+        self.samples:list[Sample] = list()
 
         config.majorDataset = dataset.majorDataset
         config.updatePath()
@@ -37,3 +38,70 @@ class ModelRunnder():
     def run(self):
         for model in self.models:
             model.getResults(self.samples)
+
+        with open(f"{config.tempFolder}/resCount") as fp:
+            pipelineIndex = int(fp.readline().strip())
+        
+        with open(f"{config.tempFolder}/resCount", 'wt') as fp:
+            fp.write(str(pipelineIndex + len(self.models)))
+
+        
+        pipelineResTitle = ["pred minimap ref", "pred minimap mode", "pred minimap factor",
+                            "esm",
+                            "taxo minimap ref", "taxo minimap mode", "taxo minimap code",
+                            "ML strategy", "ML cutoff", "ML gen",
+                            "merge",
+                            "pipelineIndex"]
+
+        requireTitle = not os.path.exists(f"{config.resultBase}/pipelines.csv")
+        pipelineNameFP = open(f"{config.resultBase}/pipelines.csv", 'at')
+
+        if (requireTitle):
+            pipelineNameFP.write(",".join(pipelineResTitle) + "\n")
+        
+        
+        for model in self.models:
+            resultDict = dict()
+            resultList = list()
+            for sample in self.samples:
+                res = sample.results[model.moduleName]
+                if (res is not None):
+                    resultDict[sample.id] = res.node.ICTVNode.name
+                    resDict = dict()
+                    for n in res.node.ICTVNode.path:
+                        resDict[n.rank] = (n.name, res.scores[n.rank])
+                    resultList.append((sample.id, resDict))
+                else:
+                    resultDict[sample.id] = 'no result'
+                    resultList.append((sample.id, dict()))
+
+            # generate evaluation-used json result
+            with open(f"{config.resultBase}/result-{pipelineIndex}.json", 'wt') as fp:
+                json.dump(resultDict, fp, indent=2)
+
+            # generate submit-used
+            lines = list()
+            
+            lines.append(",".join(config.resultCSVRanks) + '\n')
+            resultList = sorted(resultList, key=lambda t:t[0])
+            for id, resDict in resultList:
+                text = [id]
+                for rank in config.resultRanks:
+                    if rank in resDict:
+                        name, score = resDict[rank]
+                    else:
+                        name, score = 'N/A', 'N/A'
+                    text.append(name)
+                    text.append(str(score))
+                lines.append(','.join(text) + '\n')
+                        
+            with open(f"{config.resultBase}/result-{pipelineIndex}.csv", 'wt') as fp:
+                fp.writelines(lines)
+
+            if (isinstance(model, Pipeline)):
+                params = model.getParamList()
+                params.append(str(pipelineIndex))
+                pipelineNameFP.write(",".join(params) + "\n")
+                pipelineIndex += 1
+            
+            pipelineIndex += 1

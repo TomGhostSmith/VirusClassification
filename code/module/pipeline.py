@@ -6,32 +6,34 @@ from module.minimapThresholdModule import MinimapThresholdModule
 from module.minimapThreshRankModule import MinimapThreshRankModule
 from module.esm import ESM
 from module.mlModule import MLModule
+from entity.sample import Sample
 
 
 class Pipeline(Module):
-    def __init__(self, virusPred:VirusPred, minimapMLMerge:MinimapMLMergeModule):
+    def __init__(self, virusPred:VirusPred, virusTaxo:Module):
         self.virusPred = virusPred
-        self.minimapMLMerge = minimapMLMerge
-        super().__init__(f"pipeline_vp={virusPred.moduleName}.merge={minimapMLMerge.moduleName}")
+        self.virusTaxo = virusTaxo
+        super().__init__(f"pipeline_vp={virusPred.moduleName}.merge={virusTaxo.moduleName}")
 
-    def run(self):
-        # TODO: record what sample are already calculated with confirmed results, so that the remained model does not require to run that
-        self.virusPred.run()
-        self.minimapMLMerge.run()
+    def run(self, samples:list[Sample]):
+        self.virusPred.getResults(samples)
+        virus:list[Sample] = list()
+        resultDict = dict()
+        for sample in samples:
+            if (sample.results[self.virusPred.moduleName] is not None):
+                virus.append(sample)
+            else:
+                resultDict[sample.id] = None
 
-    def getResults(self, sampleList):
-        # TODO: record what sample are already calculated with confirmed results, so that the remained model does not require to run that
-        for model in self.virusPred.models:
-            pass
-
-        self.virusPred.getResults(sampleList)
-        self.minimapMLMerge.getResults(sampleList)
-        super().getResults(sampleList)
-    
-    def getResult(self, sample):
-        if (sample.results[self.virusPred.moduleName] is not None):
-            return sample.results[self.minimapMLMerge.moduleName]
-        return None
+        self.virusTaxo.getResults(virus)
+        for sample in virus:
+            resultDict[sample.id] = sample.results[self.virusTaxo.moduleName]
+        
+        results = list()
+        for sample in samples:
+            results.append(resultDict[sample.id])
+        
+        return results
     
     def getParams(self):
         param = {
@@ -50,16 +52,16 @@ class Pipeline(Module):
             elif (isinstance(model, ESM)):
                 param["ESM"] = model.moduleName
         
-        if isinstance(self.minimapMLMerge, MinimapMLMergeModule):
-            minimap = self.minimapMLMerge.minimap
-            ml = self.minimapMLMerge.mlModule
-            param['merge'] = self.minimapMLMerge.factors
-        elif isinstance(self.minimapMLMerge, MinimapThreshRankModule):
-            minimap = self.minimapMLMerge
+        if isinstance(self.virusTaxo, MinimapMLMergeModule):
+            minimap = self.virusTaxo.minimap
+            ml = self.virusTaxo.mlModule
+            param['merge'] = self.virusTaxo.factors
+        elif isinstance(self.virusTaxo, MinimapThreshRankModule):
+            minimap = self.virusTaxo
             ml = None
-        elif isinstance(self.minimapMLMerge, MLModule):
+        elif isinstance(self.virusTaxo, MLModule):
             minimap = None
-            ml = self.minimapMLMerge
+            ml = self.virusTaxo
 
         if minimap is not None:
             param['taxo minimap'] = [minimap.reference, minimap.mode, minimap.code]

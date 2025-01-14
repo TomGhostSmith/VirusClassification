@@ -22,9 +22,9 @@ class Minimap(Module):
 
     def minimap(self, samples, resultFolder):
         queryFile = f"{config.tempFolder}/minimap.fasta"
-        with open(queryFile, 't') as fp:
+        with open(queryFile, 'wt') as fp:
             for seq in samples:
-                SeqIO.write(seq, fp, 'fasta')
+                SeqIO.write(seq.seq, fp, 'fasta')
 
         IOUtils.showInfo(f"Begin minimap on {config.datasetName}")
         command = self.getMinimapCommand(queryFile)
@@ -40,7 +40,7 @@ class Minimap(Module):
 
 
     def run(self, samples):
-        resultFolder = f"{config.resultBase}/minimapResult-{self.baseName}"
+        resultFolder = f"{config.tempFolder}/minimapResult-{self.baseName}"
 
         samplesToRun = list()
 

@@ -7,71 +7,54 @@ class MLResult(Result):
         super().__init__()
         self.strategy = strategy
         self.thresh = thresh
-        self.nodes = [(taxoTree.ICTVTree.nodes["Viruses"], 0)]
+        # self.nodes = [(taxoTree.ICTVTree.nodes["Viruses"], 0)]
+        self.res = None
+        self.scores = dict()
         # self.ictvNode = 
-        # self.score = 0
-        # self.suspendScore = 0
-        # self.suspendNode = None
+        self.suspendScore = 0
+        self.suspendNode = None
+        self.terminate = False
 
 
     def addResult(self, name, score):
         assert (name in taxoTree.ICTVTree.nodes)
         thisNode = taxoTree.ICTVTree.nodes[name]
-        # assert (thisNode.rank == rank)
-        # lastRank = self.ictvNode.rank
 
-        self.nodes.append((thisNode, score))
+        self.scores[thisNode.rank] = score
+        if (self.strategy == 'topdown'):
+            if (score >= self.thresh):
+                self.res = thisNode
+            elif self.res is not None:
+                self.terminate=True
+        elif (self.strategy == 'topdownExt'):
+            if (score >= self.thresh):
+                self.res = thisNode
+            elif (self.res is not None and self.res in thisNode.path): # use the result if previous node is on the path of current node. Exception: realm
+                self.res = thisNode
+            elif (self.res is not None):
+                self.terminate = True
+        elif (self.strategy == 'topdownPreserve'):
+            if (score >= self.thresh):
+                self.res = thisNode
+                self.suspendNode = None
+            elif (self.suspendNode is None):
+                self.suspendNode = thisNode
+            elif (self.suspendNode in thisNode.path): # use the result if previous node is on the path of current node. Exception: realm
+                self.res = self.suspendNode
+                self.terminate = True  # we stop here because there are at least two rank that are below cutoff
+            else:  # self.suspendNode is not None, but current node is not on the same path
+                self.terminate=True
+        elif (self.strategy == 'bottomup'):
+            if score >= self.thresh:
+                self.res = thisNode
+                self.terminate = True
+        elif (self.strategy == 'highest'):
+            if score > self.score:
+                self.res = thisNode
 
     def calcTaxoNode(self):
         if (self.node is None):
-            res = taxoTree.ICTVTree.nodes["Viruses"]
-            if self.strategy == 'topdown':
-                for node, score in self.nodes:
-                    if (score >= self.thresh):
-                        res = node
-                        self.score = score
-
-            elif self.strategy == 'topdownExt':
-                lastNode = None
-                for node, score in self.nodes:
-                    if (score >= self.thresh):
-                        res = node
-                        self.score = score
-                        lastNode = node
-                    elif (lastNode is not None and lastNode in node.path): # use the result if previous node is on the path of current node. Exception: realm
-                        res = node
-                        self.score = score
-                        lastNode = node
-
-
-            elif self.strategy == 'topdownPreserve':
-                suspendNode = None
-                suspendScore = 0
-                for node, score in self.nodes:
-                    if (score >= self.thresh):
-                        res = node
-                        self.score = score
-                        suspendNode = None
-                    elif (suspendNode is not None and suspendNode in node.path): # use the result if previous node is on the path of current node. Exception: realm
-                        res = suspendNode
-                        self.score = suspendScore
-                        suspendNode = None
-                        suspendScore = 0
-                    else:
-                        suspendNode = node
-                        suspendScore = score
-
-            elif self.strategy == 'bottomup':
-                for node, score in self.nodes:
-                    if score >= self.thresh:
-                        res = node
-                        self.score = score
-                        break
-            elif self.strategy == 'highest':
-                nodes = sorted(self.nodes, key=lambda t : t[1], reverse=True)
-                res, self.score = nodes[0]
+            if self.res is None:
+                self.res = taxoTree.ICTVTree.nodes["Viruses"]
             
-            self.node = taxoTree.getTaxoNodeFromNode(ICTVNode=res)
-
-
-            # self.node = taxoTree.getTaxoNodeFromICTV(ICTVName=self.name)
+            self.node = taxoTree.getTaxoNodeFromNode(ICTVNode=self.res)

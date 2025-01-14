@@ -54,7 +54,7 @@ class ESMRunner():
                                                                                 num_labels=self.n_class,
                                                                                 trust_remote_code=True)
 
-        self.model.load_state_dict(torch.load(f"{self.modleFolder}/pytorch_model.bin", map_location=torch.device('cpu')))
+        self.model.load_state_dict(torch.load(f"{self.modleFolder}/pytorch_model.bin", map_location=torch.device('cpu')), strict=False)
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.modleFolder,
@@ -88,10 +88,10 @@ class ESMRunner():
                 SeqIO.write(sample.seq, fp, 'fasta')
         
         # 2. convert DNA.fasta to protein.fasta (redundant though, do not store result for each one)
-        os.system(f"prodigal-gv -i {self.tempDNAFasta} -a {self.tempProFasta} -p meta &> /dev/null")
+        os.system(f"prodigal-gv -i {self.tempDNAFasta} -a {self.tempProFasta} -p meta")
 
         # 3. preprocee protein.fasta to a csv file
-        with open(f"{config.tempFolder}/proteins.csv", "w") as f:
+        with open(self.tempProCSV, "w") as f:
             f.write(f'sequence,accession\n')
             for record in SeqIO.parse(self.tempProFasta, "fasta"):
                 sequence = str(record.seq).upper()
@@ -146,3 +146,23 @@ class ESMRunner():
                     row[f'class_{idx}'] = prob
 
                 writer.writerow(row)
+
+
+# a = ESMRunner(512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)
+# del a
+# b = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
+# del b
+# c = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
+# del c
+# d = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
+# del d
+# e = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
+# del e
+# f = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
+# del f
+# g = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
+# del g
+# h = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
+# del h
+# print('?')
+# print('?')

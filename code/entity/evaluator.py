@@ -94,7 +94,6 @@ class Evaluator():
                             "ML strategy", "ML cutoff", "ML gen",
                             "merge",
                             "pipelineIndex"]
-        pipelineNames = list()
 
         requireTitle = not os.path.exists(f"{config.resultBase}/pipelines.csv")
         pipelineNameFP = open(f"{config.resultBase}/pipelines.csv", 'at')
@@ -145,7 +144,6 @@ class Evaluator():
                     df.to_csv(f"{config.resultBase}/{title}!n={totalCount};incl={includeCount};valid={validCount}!Source={source};m={len(samples)}!{model.moduleName}.csv", index=False)
             
             if (isinstance(model, Pipeline)):
-                pipelineNames.append(model.getParamList())
                 params = model.getParamList()
                 params.append(str(pipelineIndex))
                 pipelineNameFP.write(",".join(params) + "\n")

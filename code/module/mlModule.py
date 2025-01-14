@@ -3,65 +3,140 @@ import pandas
 from config import config
 from prototype.module import Module
 from moduleResult.mlResult import MLResult
+from entity.sample import Sample
+from module.esmRunner import ESMRunner
 
 class MLModule(Module):
-    def __init__(self, strategy="topdown", thresh=0.45, gen='gen1'):
+    def __init__(self, strategy="topdown", thresh=0.45, gen='0000000'):
         self.strategy = strategy
         self.thresh = thresh
         self.gen = gen
         super().__init__(f'ML-stratgy={strategy};th={thresh}, gen={gen}')
         # self.baseName = self.moduleName
-        self.resultDict = dict()
-        if self.gen == 'gen1':
-            self.esultFileNames = {
-                "realm": f"{config.MLResultFolder}/gen1_realm_t33_512_5_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "kingdom": f"{config.MLResultFolder}/gen1_kingdom_realm_finetune_t33_256_12_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "phylum": f"{config.MLResultFolder}/gen1_phylum_realm_kingdom_finetune_t33_256_12_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "class": f"{config.MLResultFolder}/gen1_class_t33_256_12_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "order": f"{config.MLResultFolder}/gen1_order_t33_512_5_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "family": f"{config.MLResultFolder}/gen1_family_order_finetune_t33_512_5_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "genus": f"{config.MLResultFolder}/gen1_genus_order_family_finetune_t33_256_12_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-            }
-        elif self.gen == 'gen2':
-            self.resultFileNames = {
-                "realm": f"{config.MLResultFolder}/gen2_realm_t33_512_5_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "kingdom": f"{config.MLResultFolder}/gen2_kingdom_t33_256_12_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "phylum": f"{config.MLResultFolder}/gen2_phylum_t33_512_4_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "class": f"{config.MLResultFolder}/gen2_new_class_t33_512_4_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "order": f"{config.MLResultFolder}/gen2_order_t33_512_5_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "family": f"{config.MLResultFolder}/gen2_family_order_finetune_t33_512_5_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-                "genus": f"{config.MLResultFolder}/gen2_genus_enlarge_family_finetune_t33_256_10_result.csv.predictions_with_contig_level_scores_res_noUnknown.csv",
-            }
+        self.resultDict:dict[str, MLResult] = dict()
+
+        realmParams = [
+            (256, f"{config.modelRoot}/realm/esm2_t33_256"),
+            (512, f"{config.modelRoot}/realm/esm2_t33_512")
+        ]
+        kingdomParams = [
+            (256, f"{config.modelRoot}/kingdom/esm2_t33_256"),
+            (512, f"{config.modelRoot}/kingdom/esm2_t33_512")
+        ]
+        phylumParams = [
+            (256, f"{config.modelRoot}/phylum/esm2_t33_256"),
+            (512, f"{config.modelRoot}/phylum/esm2_t33_512")
+        ]
+        classParams = [
+            (256, f"{config.modelRoot}/class/esm2_t33_256"),
+            (512, f"{config.modelRoot}/class/esm2_t33_512")
+        ]
+        orderParams = [
+            (512, f"{config.modelRoot}/order/esm2_t33_512")
+        ]
+        familyParams = [
+            (512, f"{config.modelRoot}/family/esm2_t33_512")
+        ]
+        genusParams = [
+            (256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus"),
+            (256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+        ]
+
+        realmParam = realmParams[int(gen[0])]
+        kingdomParam = kingdomParams[int(gen[1])]
+        phylumParam = phylumParams[int(gen[2])]
+        classParam = classParams[int(gen[3])]
+        orderParam = orderParams[int(gen[4])]
+        familyParam = familyParams[int(gen[5])]
+        genusParam = genusParams[int(gen[6])]
+
+        self.modelParams = {
+            "realm": (*realmParam, "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
+            "kingdom": (*kingdomParam, "facebook/esm2_t33_650M_UR50D", 40, config.mlBatchSize),
+            "phylum": (*phylumParam, "facebook/esm2_t33_650M_UR50D", 51, config.mlBatchSize),
+            "class": (*classParam, "facebook/esm2_t33_650M_UR50D", 76, config.mlBatchSize),
+            "order": (*orderParam, "facebook/esm2_t33_650M_UR50D", 981, config.mlBatchSize),
+            "family": (*familyParam, "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize),
+            "genus": (*genusParam, "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize),
+        }
 
         
-    def run(self):
+    def run(self, samples:list[Sample]):
+        unterminatedSamples = samples
+        if (self.strategy.startswith('topdown')):
+            for rank in list(self.modelParams.keys()):
+                unterminatedSamples = self.runModel(unterminatedSamples, rank)
+                if (len(unterminatedSamples) == 0):
+                    break
+        elif (self.strategy.startswith('bottomup')):
+            for rank in reversed(list(self.modelParams.keys())):
+                unterminatedSamples = self.runModel(unterminatedSamples, rank)
+                if (len(unterminatedSamples) == 0):
+                    break
+        else:  # highest, we need to run all the rank
+            for rank in list(self.modelParams.keys()):
+                self.runModel(samples, rank)
 
-        files = list(self.resultFileNames.values())
-        if (self.strategy.startswith('bottomup')):
-            files = reversed(files)
+        results = list()
+        for sample in samples:
+            if (sample.id in results):
+                results.append(self.resultDict[sample.id])
+            else:
+                results.append(None)
+        
+        return results
 
-        for file in files:
-            df = pandas.read_csv(file)
-            for row in df.itertuples():
-                query = row.seq_name
-                score = row.prediction_score
-                res = row.taxa_prediction
 
-                if (query not in self.resultDict):
-                    self.resultDict[query] = MLResult(self.strategy, self.thresh)
-                self.resultDict[query].addResult(res, score)
+    def runModel(self, samples:list[Sample], rank:str)->list[Sample]:
+        model = ESMRunner(*self.modelParams[rank])
+        model.run(samples)
 
-        # resultFile = f"{config.resultBase}/{self.baseName}.csv"
-        # self.resultDict = dict()
-        # if (os.path.exists(resultFile)):
-        #     with open(resultFile) as fp:
-        #         fp.readline()
-        #         for line in fp:
-        #             terms = line.strip().split(',')
-        #             self.resultDict[terms[0]] = terms[1]
-    
-    def getResult(self, sample):        
-        if (sample.id in self.resultDict):
-            return self.resultDict[sample.id]
-        else:
-            return None
+        
+        level = rank.capitalize()
+        predictions_df = pandas.read_csv(model.tempResCSV)
+
+        taxamap_file = f'{config.modelRoot}/mapping/VMR_MSL39_v4.json.processed_data.json.nosub_addunknown.json{level}_mapping.csv'
+
+        taxamap_df = pandas.read_csv(taxamap_file)
+
+        taxamap_dict = {row[f'{level} ID']: row[f'{level}'] for _, row in taxamap_df.iterrows()}
+
+
+        predictions_df['seq_name'] = predictions_df['seq_name'].apply(lambda x: x.rsplit('_', 1)[0])
+
+        mean_values_df = predictions_df.groupby('seq_name').mean()
+
+        class_columns = [col for col in mean_values_df.columns if col.startswith("class_")]
+        mean_values_df["prediction_score"] = mean_values_df[class_columns].max(axis=1)
+        mean_values_df["prediction"] = mean_values_df[class_columns].idxmax(axis=1).str.extract(r'class_(\d+)')[0]
+        mean_values_df = mean_values_df.reset_index()
+
+        mean_values_df['prediction'] = mean_values_df['prediction'].astype(str)
+
+        taxamap_dict = {str(key): value for key, value in taxamap_dict.items()}
+
+        mean_values_df['taxa_prediction'] = mean_values_df['prediction'].map(taxamap_dict)
+
+        new_order = ['seq_name','prediction','prediction_score','taxa_prediction']
+
+        df = mean_values_df[new_order]
+
+        df_filtered = df[~df['taxa_prediction'].str.contains('Unknown')]
+
+        del model
+
+        for row in df_filtered.itertuples():
+            id = row.seq_name
+            score = row.prediction_score
+            res = row.taxa_prediction
+
+            if (id not in self.resultDict):
+                self.resultDict[id] = MLResult(self.strategy, self.thresh)
+            self.resultDict[id].addResult(res, score)
+
+        unTerminatedSamples:list[Sample] = list()
+        for sample in samples:
+            if not (self.resultDict[sample.id].terminate):
+                unTerminatedSamples.append(sample)
+        
+        return unTerminatedSamples
