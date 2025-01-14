@@ -10,7 +10,7 @@ from config import config
 class ICTVTree():
     # scpre: all, bacteria, virus, archaea
     def __init__(self) -> None:
-        self.taxoFile = "/Data/ICTVData/reference/VMRv4/VMRv4_names.json"
+        self.taxoFile = f"{config.refFolder}/VMRv4/VMRv4_names.json"
 
         self.ranks = dict()    # key: label  value: rank (e.g. species, genus, etc.)
         self.nodes = dict()    # key: label  value: node on the tree

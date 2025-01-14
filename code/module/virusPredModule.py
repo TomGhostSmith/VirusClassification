@@ -1,6 +1,7 @@
 from prototype.module import Module
 from moduleResult.virusPredictionResult import VirusPredictionResult
 from entity.sample import Sample
+from utils import IOUtils
 
 class VirusPred(Module):
     def __init__(self, models:list[Module]):
@@ -16,6 +17,7 @@ class VirusPred(Module):
         unTerminatedSamples = samples
         virus = set()
         for model in self.models:
+            IOUtils.showInfo(f'apply {model.moduleName} on {len(unTerminatedSamples)} samples')
             model.getResults(unTerminatedSamples)
             s = list()
             for sample in unTerminatedSamples:
@@ -23,6 +25,7 @@ class VirusPred(Module):
                     virus.add(sample.id)
                 else:
                     s.append(sample)
+            IOUtils.showInfo(f'{len(unTerminatedSamples) - len(s)} samples are confirmed as virus by {model.moduleName}')
             unTerminatedSamples = s
         
         results = list()

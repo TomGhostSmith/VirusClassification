@@ -7,7 +7,7 @@ from entity.sample import Sample
 from module.esmRunner import ESMRunner
 
 class MLModule(Module):
-    def __init__(self, strategy="topdown", thresh=0.45, gen='0000000'):
+    def __init__(self, strategy="topdown", thresh=0.45, gen='1111000'):
         self.strategy = strategy
         self.thresh = thresh
         self.gen = gen
@@ -38,8 +38,7 @@ class MLModule(Module):
             (512, f"{config.modelRoot}/family/esm2_t33_512")
         ]
         genusParams = [
-            (256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus"),
-            (256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            (256, f"{config.modelRoot}/genus/esm2_t33_256"),
         ]
 
         realmParam = realmParams[int(gen[0])]
@@ -79,7 +78,7 @@ class MLModule(Module):
 
         results = list()
         for sample in samples:
-            if (sample.id in results):
+            if (sample.id in self.resultDict):
                 results.append(self.resultDict[sample.id])
             else:
                 results.append(None)
@@ -88,42 +87,49 @@ class MLModule(Module):
 
 
     def runModel(self, samples:list[Sample], rank:str)->list[Sample]:
-        model = ESMRunner(*self.modelParams[rank])
-        model.run(samples)
 
-        
-        level = rank.capitalize()
-        predictions_df = pandas.read_csv(model.tempResCSV)
+        abbr = self.modelParams[rank][1].split('/')[-1]
+        cachedRes = f"{config.dataRoot}/cachedResults/{config.datasetName}/MLResult/{rank}_{abbr}.csv"
+        if (os.path.exists(cachedRes)):
+            df_filtered = pandas.read_csv(cachedRes)
+        else:
 
-        taxamap_file = f'{config.modelRoot}/mapping/VMR_MSL39_v4.json.processed_data.json.nosub_addunknown.json{level}_mapping.csv'
+            model = ESMRunner(*self.modelParams[rank])
+            model.run(samples)
 
-        taxamap_df = pandas.read_csv(taxamap_file)
+            
+            level = rank.capitalize()
+            predictions_df = pandas.read_csv(model.tempResCSV)
 
-        taxamap_dict = {row[f'{level} ID']: row[f'{level}'] for _, row in taxamap_df.iterrows()}
+            taxamap_file = f'{config.modelRoot}/mapping/VMR_MSL39_v4.json.processed_data.json.nosub_addunknown.json{level}_mapping.csv'
+
+            taxamap_df = pandas.read_csv(taxamap_file)
+
+            taxamap_dict = {row[f'{level} ID']: row[f'{level}'] for _, row in taxamap_df.iterrows()}
 
 
-        predictions_df['seq_name'] = predictions_df['seq_name'].apply(lambda x: x.rsplit('_', 1)[0])
+            predictions_df['seq_name'] = predictions_df['seq_name'].apply(lambda x: x.rsplit('_', 1)[0])
 
-        mean_values_df = predictions_df.groupby('seq_name').mean()
+            mean_values_df = predictions_df.groupby('seq_name').mean()
 
-        class_columns = [col for col in mean_values_df.columns if col.startswith("class_")]
-        mean_values_df["prediction_score"] = mean_values_df[class_columns].max(axis=1)
-        mean_values_df["prediction"] = mean_values_df[class_columns].idxmax(axis=1).str.extract(r'class_(\d+)')[0]
-        mean_values_df = mean_values_df.reset_index()
+            class_columns = [col for col in mean_values_df.columns if col.startswith("class_")]
+            mean_values_df["prediction_score"] = mean_values_df[class_columns].max(axis=1)
+            mean_values_df["prediction"] = mean_values_df[class_columns].idxmax(axis=1).str.extract(r'class_(\d+)')[0]
+            mean_values_df = mean_values_df.reset_index()
 
-        mean_values_df['prediction'] = mean_values_df['prediction'].astype(str)
+            mean_values_df['prediction'] = mean_values_df['prediction'].astype(str)
 
-        taxamap_dict = {str(key): value for key, value in taxamap_dict.items()}
+            taxamap_dict = {str(key): value for key, value in taxamap_dict.items()}
 
-        mean_values_df['taxa_prediction'] = mean_values_df['prediction'].map(taxamap_dict)
+            mean_values_df['taxa_prediction'] = mean_values_df['prediction'].map(taxamap_dict)
 
-        new_order = ['seq_name','prediction','prediction_score','taxa_prediction']
+            new_order = ['seq_name','prediction','prediction_score','taxa_prediction']
 
-        df = mean_values_df[new_order]
+            df = mean_values_df[new_order]
 
-        df_filtered = df[~df['taxa_prediction'].str.contains('Unknown')]
+            df_filtered = df[~df['taxa_prediction'].str.contains('Unknown')]
 
-        del model
+            del model
 
         for row in df_filtered.itertuples():
             id = row.seq_name
@@ -136,6 +142,8 @@ class MLModule(Module):
 
         unTerminatedSamples:list[Sample] = list()
         for sample in samples:
+            if sample.id not in self.resultDict:
+                self.resultDict[sample.id] = MLResult(self.strategy, self.thresh)
             if not (self.resultDict[sample.id].terminate):
                 unTerminatedSamples.append(sample)
         

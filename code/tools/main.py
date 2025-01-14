@@ -26,12 +26,17 @@ def main():
         VirusPred([
             MinimapThresholdModule('VMRv4', factors=['60', 'completeMatch']), 
             ESM()]),
+            # MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
         MinimapMLMergeModule(
             MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
-            MLModule('topdown', 0.45, '0000000')
-            ))
+            # MLModule('topdown', 0.45, '1111000')
+            MLModule('highest', 0.45, '1011000')
+            )
+        )
     
-    evaluator = ModelRunnder([pipeline], Dataset("refseq_2024_test", 'test'))
+    # evaluator = ModelRunnder([pipeline], Dataset("refseq_2024_test"))
+    # evaluator = ModelRunnder([pipeline], Dataset("genbank_2024_test"))
+    evaluator = ModelRunnder([pipeline], Dataset("Challenge"))
     evaluator.run()
     
             

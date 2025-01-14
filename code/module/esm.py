@@ -1,3 +1,4 @@
+import os
 import pandas
 
 from config import config
@@ -24,37 +25,43 @@ class ESM(Module):
         super().__init__(f'esm-150M_512')
 
     def run(self, samples:list[Sample]):
-        self.model = ESMRunner(512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)
         results = list()
         viruses = set()
-        self.model.run(samples)
+        cacheFile = f"{config.dataRoot}/cachedResults/{config.datasetName}/VirusPred/esm2_t30_512.tsv"
+        if (os.path.exists(cacheFile)):
+            with open(cacheFile) as fp:
+                viruses = {l.strip() for l in fp}
+        else:
+            self.model = ESMRunner(512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)
+            self.model.run(samples)
 
-        df = pandas.read_csv(self.model.tempResCSV)
+            df = pandas.read_csv(self.model.tempResCSV)
 
-        df['seq_name'] = df['seq_name'].apply(lambda x: x.rsplit('_', 1)[0])
-
-
-        df['class_0'] = pandas.to_numeric(df['class_0'])
-        df['class_0_mean'] = df.groupby('seq_name')['class_0'].transform('mean')
-
-        df['class_1'] = pandas.to_numeric(df['class_1'])
-        df['class_1_mean'] = df.groupby('seq_name')['class_1'].transform('mean')
-
-        df['prediction'] = df.apply(lambda x: 'virus' if x['class_1_mean'] > x['class_0_mean'] else 'non-virus', axis=1)
+            df['seq_name'] = df['seq_name'].apply(lambda x: x.rsplit('_', 1)[0])
 
 
-        df_result = df[['seq_name', 'prediction', 'class_0_mean','class_1_mean']].drop_duplicates()
+            df['class_0'] = pandas.to_numeric(df['class_0'])
+            df['class_0_mean'] = df.groupby('seq_name')['class_0'].transform('mean')
 
-        for row in df_result.itertuples():
-            if row.prediction == 'virus':
-                viruses.add(row.seq_name)
+            df['class_1'] = pandas.to_numeric(df['class_1'])
+            df['class_1_mean'] = df.groupby('seq_name')['class_1'].transform('mean')
 
+            df['prediction'] = df.apply(lambda x: 'virus' if x['class_1_mean'] > x['class_0_mean'] else 'non-virus', axis=1)
+
+
+            df_result = df[['seq_name', 'prediction', 'class_0_mean','class_1_mean']].drop_duplicates()
+
+            for row in df_result.itertuples():
+                if row.prediction == 'virus':
+                    viruses.add(row.seq_name)
+
+            del self.model
+            
         for sample in samples:
             if sample.id in viruses:
                 results.append(VirusPredictionResult())
             else:
                 results.append(None)
         
-        del self.model
         
         return results

@@ -3,14 +3,14 @@ from sklearn.metrics import precision_score, recall_score, accuracy_score,f1_sco
 from collections import defaultdict
 
 # 预测结果
-prediction_file = "/Data/VirusClassification/dataset/refseq_2024_test/phylum/res/result.csv"
+prediction_file = "/mnt/backup/wzy/data/shitao_data/refseq/res/family/order_finetune_esm2_t33_650M_UR50D_MAX_LENGTH_256_per_device_batch_size_12_num_train_epochs_10_save_steps_5000_lr_3e-5_save_steps_5000_checkpoint-430000/result.csv"
 
 #层级信息
-level = "Phylum"
+level = "Kingdom"
 predictions_df = pd.read_csv(prediction_file)
 
 # 读取包含层级类别名和对应的 ID的文件
-taxamap_file = f'/Data/VirusClassification/model/mapping/VMR_MSL39_v4.json.processed_data.json.nosub_addunknown.json{level}_mapping.csv'
+taxamap_file = f'/mnt/backup/wzy/data/viral_identify/VMR_MSL39_v4.json.processed_data.json.nosub_addunknown.json{level}_mapping.csv'
 
 
 

@@ -36,7 +36,7 @@ class DataCollatorForSupervisedDataset(object):
 
 
 class ESMRunner():
-    def __init__(self, maxLen, modelFolder, baseModelFolder, n_class, batchSize=64):
+    def __init__(self, maxLen, modelFolder, baseModelFolder, n_class, batchSize=64, cachedResult=None):
         self.tempDNAFasta = f"{config.tempFolder}/DNAs.fasta"
         self.tempProFasta = f"{config.tempFolder}/proteins.fasta"
         self.tempProCSV = f"{config.tempFolder}/proteins.csv"
@@ -47,7 +47,13 @@ class ESMRunner():
         self.baseModelFolder = baseModelFolder
         self.n_class = n_class
         self.batchSize = batchSize
-        self.loadModel()
+
+        self.useCache = cachedResult is not None
+
+        if (self.useCache):
+            self.tempResCSV = cachedResult
+        else:
+            self.loadModel()
 
     def loadModel(self):
         self.model = transformers.AutoModelForSequenceClassification.from_pretrained(self.baseModelFolder,
@@ -82,6 +88,9 @@ class ESMRunner():
 
 
     def run(self, samples:list[Sample]):
+        if (self.useCache):
+            return
+        
         # 1. store samples to a fasta file
         with open(self.tempDNAFasta, 'wt') as fp:
             for sample in samples:

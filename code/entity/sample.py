@@ -3,15 +3,15 @@ from entity.taxoTree import taxoTree
 
 class Sample():
     # the stdResult is ICTV name
-    def __init__(self, seq, stdResult):
+    def __init__(self, seq):
         self.id = seq.id
         self.isATCG = None
         self.length = len(seq.seq)
         self.seq = seq
-        if (stdResult is not None):
-            self.stdResult = taxoTree.getTaxoNodeFromICTV(ICTVName=stdResult)
-        else:
-            self.stdResult = None
+        # if (stdResult is not None):
+        #     self.stdResult = taxoTree.getTaxoNodeFromICTV(ICTVName=stdResult)
+        # else:
+        #     self.stdResult = None
         self.results = dict()
         self.info = dict()
 

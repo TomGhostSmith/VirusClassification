@@ -19,7 +19,7 @@ class ModelRunnder():
             sampleList = list()
             for record in SeqIO.parse(queryFile, "fasta"):
                 if ids is None or record.id in ids:
-                    sampleList.append(Sample(seq=record, stdResult=answer.get(record.id)))
+                    sampleList.append(Sample(seq=record))
             return sampleList
         
         self.models = models
@@ -39,8 +39,11 @@ class ModelRunnder():
         for model in self.models:
             model.getResults(self.samples)
 
-        with open(f"{config.tempFolder}/resCount") as fp:
-            pipelineIndex = int(fp.readline().strip())
+        if (not os.path.exists(f"{config.tempFolder}/resCount")):
+            pipelineIndex = 0
+        else:
+            with open(f"{config.tempFolder}/resCount") as fp:
+                pipelineIndex = int(fp.readline().strip())
         
         with open(f"{config.tempFolder}/resCount", 'wt') as fp:
             fp.write(str(pipelineIndex + len(self.models)))
@@ -68,8 +71,13 @@ class ModelRunnder():
                 if (res is not None):
                     resultDict[sample.id] = res.node.ICTVNode.name
                     resDict = dict()
-                    for n in res.node.ICTVNode.path:
-                        resDict[n.rank] = (n.name, res.scores[n.rank])
+                    lastScore = 0
+                    for n in reversed(res.node.ICTVNode.path[1:]):  # skip superkingdom
+                        if n.rank in res.scores:
+                            lastScore = res.scores[n.rank]
+                            resDict[n.rank] = (n.name, lastScore)
+                        else:
+                            resDict[n.rank] = (n.name, lastScore)
                     resultList.append((sample.id, resDict))
                 else:
                     resultDict[sample.id] = 'no result'

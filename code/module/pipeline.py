@@ -7,6 +7,7 @@ from module.minimapThreshRankModule import MinimapThreshRankModule
 from module.esm import ESM
 from module.mlModule import MLModule
 from entity.sample import Sample
+from utils import IOUtils
 
 
 class Pipeline(Module):
@@ -16,6 +17,7 @@ class Pipeline(Module):
         super().__init__(f"pipeline_vp={virusPred.moduleName}.merge={virusTaxo.moduleName}")
 
     def run(self, samples:list[Sample]):
+        IOUtils.showInfo(f'run pipeline on {len(samples)} samples')
         self.virusPred.getResults(samples)
         virus:list[Sample] = list()
         resultDict = dict()
@@ -25,6 +27,7 @@ class Pipeline(Module):
             else:
                 resultDict[sample.id] = None
 
+        IOUtils.showInfo(f"{len(virus)} samples are predicted as virus")
         self.virusTaxo.getResults(virus)
         for sample in virus:
             resultDict[sample.id] = sample.results[self.virusTaxo.moduleName]

@@ -40,7 +40,7 @@ class Minimap(Module):
 
 
     def run(self, samples):
-        resultFolder = f"{config.tempFolder}/minimapResult-{self.baseName}"
+        resultFolder = f"{config.resultBase}/minimapResult-{self.baseName}"
 
         samplesToRun = list()
 
@@ -80,7 +80,7 @@ class Minimap(Module):
         return result
     
     def getMinimapCommand(self, queryFile):
-        referenceFasta = f"/Data/ICTVData/reference/{self.reference}/{self.reference}.fasta"
+        referenceFasta = f"{config.refFolder}/{self.reference}/{self.reference}.fasta"
         minimapBase = "minimap2"   # if you cannot call minimap2 directly, use its path here
         if self.mode == 'ont':
             mode = "-ax map-ont"

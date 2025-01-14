@@ -15,31 +15,31 @@ class TaxoTree():
     def __init__(self) -> None:
 
         self.ICTVTree = ICTVTree()
-        self.viralNCBITree = NCBITree('Viruses')
-        self.bacteriaNCBITree = NCBITree('Bacteria')
-        self.archaeaNCBITree = NCBITree('Archaea')
+        # self.viralNCBITree = NCBITree('Viruses')
+        # self.bacteriaNCBITree = NCBITree('Bacteria')
+        # self.archaeaNCBITree = NCBITree('Archaea')
 
         IOUtils.showInfo('Loading ICTV Tree')
         self.ICTVTree.loadNodes()
 
-        IOUtils.showInfo('Loading Viral NCBI Tree')
-        self.viralNCBITree.loadNodes()
-        self.viralNCBITree.loadAnnotations()
-        self.viralNCBITree.loadSpecies()
-        IOUtils.showInfo('Loading Bacteria NCBI Tree')
-        self.bacteriaNCBITree.loadNodes()
-        self.bacteriaNCBITree.loadAnnotations()
-        self.bacteriaNCBITree.loadSpecies()
-        IOUtils.showInfo('Loading Archaea NCBI Tree')
-        self.archaeaNCBITree.loadNodes()
-        self.archaeaNCBITree.loadAnnotations()
-        self.archaeaNCBITree.loadSpecies()
+        # IOUtils.showInfo('Loading Viral NCBI Tree')
+        # self.viralNCBITree.loadNodes()
+        # self.viralNCBITree.loadAnnotations()
+        # self.viralNCBITree.loadSpecies()
+        # IOUtils.showInfo('Loading Bacteria NCBI Tree')
+        # self.bacteriaNCBITree.loadNodes()
+        # self.bacteriaNCBITree.loadAnnotations()
+        # self.bacteriaNCBITree.loadSpecies()
+        # IOUtils.showInfo('Loading Archaea NCBI Tree')
+        # self.archaeaNCBITree.loadNodes()
+        # self.archaeaNCBITree.loadAnnotations()
+        # self.archaeaNCBITree.loadSpecies()
 
         self.ICTV2NCBI = dict()  # key: ICTV name   value: NCBI Node
         self.NCBI2ICTV = dict()  # key: NCBI ID   value: ICTV Node
 
-        self.loadHosts()
-        self.matchTaxoTree()
+        # self.loadHosts()
+        # self.matchTaxoTree()
 
         IOUtils.showInfo("Taxo tree loaded")
 
@@ -202,9 +202,9 @@ class TaxoTree():
         # no need to check if ICTVName is in ICTV2NCBI, because only species have IDs
         # finish other information about the node
         result.ICTVNode = self.ICTVTree.nodes[result.ICTVName]
-        result.NCBINode = self.ICTV2NCBI[result.ICTVName]
-        result.NCBIID = result.NCBINode.name   # yes, NCBI Node has ID as its name
-        result.NCBIName = self.viralNCBITree.ID2name[result.NCBIID]
+        # result.NCBINode = self.ICTV2NCBI[result.ICTVName]
+        # result.NCBIID = result.NCBINode.name   # yes, NCBI Node has ID as its name
+        # result.NCBIName = self.viralNCBITree.ID2name[result.NCBIID]
 
         return result
     
@@ -220,13 +220,13 @@ class TaxoTree():
             result.ICTVNode = ICTVNode
             result.ICTVName = ICTVNode.name
             result.ICTVID = self.ICTVTree.name2ID.get(ICTVNode.name)# note: the ICTV name miight not be the species name, so there might be no ID for this
-            result.NCBINode = self.ICTV2NCBI[result.ICTVName]
-            result.NCBIID = result.NCBINode.name   # yes, NCBI Node has ID as its name
-            result.NCBIName = self.viralNCBITree.ID2name[result.NCBIID]
+            # result.NCBINode = self.ICTV2NCBI[result.ICTVName]
+            # result.NCBIID = result.NCBINode.name   # yes, NCBI Node has ID as its name
+            # result.NCBIName = self.viralNCBITree.ID2name[result.NCBIID]
         elif (NCBINode is not None):
-            result.NCBINode = NCBINode
-            result.NCBIID = NCBINode.name
-            result.NCBIName = self.viralNCBITree.ID2name[NCBINode.name]
+            # result.NCBINode = NCBINode
+            # result.NCBIID = NCBINode.name
+            # result.NCBIName = self.viralNCBITree.ID2name[NCBINode.name]
             result.ICTVNode = self.NCBI2ICTV[result.NCBIID]
             result.ICTVName = result.ICTVNode.name
             result.ICTVID = self.ICTVTree.name2ID.get(result.ICTVName)  # note: the ICTV name miight not be the species name, so there might be no ID for this

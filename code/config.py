@@ -8,12 +8,10 @@ class Config():
         # self.minorDataset = 'genus'
         # self.minorDataset = None
 
-        self.tempFolder = "/Data/VirusClassification/temp"
+        self.dataRoot = "/Data/ICTVPublish"
+        # self.dataRoot = "/Data/VirusClassification"
 
-        self.ncbiFolder = "/Data/ICTVData/NCBI"
-        self.ncbiAssemblyFolder = "/Data/ICTVData/NCBI/Assembly"
-        self.ncbiNucleotideFolder = "/Data/ICTVData/NCBI/Nucleotide"
-        self.modelRoot = "/Data/VirusClassification/model"
+
 
         ranks = [
             "root",
@@ -88,22 +86,36 @@ class Config():
 
     
     def updatePath(self):
+        self.tempFolder = f"{self.dataRoot}/temp"
+        self.refFolder = f"{self.dataRoot}/model"
+
+        self.ncbiFolder = f"{self.dataRoot}/NCBI"
+        self.ncbiAssemblyFolder = f"{self.dataRoot}/NCBI/Assembly"
+        self.ncbiNucleotideFolder = f"{self.dataRoot}/NCBI/Nucleotide"
+        self.modelRoot = f"{self.dataRoot}/model"
+    
         # if (self.minorDataset is None):
-        self.resultBase = f"/Data/VirusClassification/results/{self.majorDataset}"
-        self.datasetBase = f"/Data/VirusClassification/dataset/{self.majorDataset}"
+        self.resultBase = f"{self.dataRoot}/results/{self.majorDataset}"
+        self.datasetBase = f"{self.dataRoot}/dataset/{self.majorDataset}"
         self.datasetName = self.majorDataset
         # else:
             # self.resultBase = f"/Data/VirusClassification/results/{self.majorDataset}/{self.minorDataset}"
             # self.datasetBase = f"/Data/VirusClassification/dataset/{self.majorDataset}/{self.minorDataset}"
             # self.datasetName = f"{self.majorDataset}-{self.minorDataset}"
         
-        self.virusPredResultFolder = f"/Data/VirusClassification/results/{self.majorDataset}/VirusPred"
-        self.MLResultFolder = f"/Data/VirusClassification/results/{self.majorDataset}/MLResult"
+        self.virusPredResultFolder = f"{self.dataRoot}/results/{self.majorDataset}/VirusPred"
+        self.MLResultFolder = f"{self.dataRoot}/results/{self.majorDataset}/MLResult"
         
+        if (not os.path.exists(self.datasetBase)):
+            raise ValueError("dataset folder not found")
+        if(not os.path.exists(self.refFolder)):
+            raise ValueError("reference folder not found")
+        if(not os.path.exists(self.modelRoot)):
+            raise ValueError("model folder not found")
+        if (not os.path.exists(self.tempFolder)):
+            os.makedirs(self.resultBase)
         if (not os.path.exists(self.resultBase)):
             os.makedirs(self.resultBase)
-        if (not os.path.exists(self.datasetBase)):
-            os.makedirs(self.datasetBase)
         if (not os.path.exists(self.virusPredResultFolder)):
             os.makedirs(self.virusPredResultFolder)
 

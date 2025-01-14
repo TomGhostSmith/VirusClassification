@@ -182,7 +182,7 @@ def testPipeline(dataset:Dataset):
         minimapThrank = MinimapThreshRankModule("VMRv4", limitOutputDict=thRank)
         minimapThreshold = MinimapThresholdModule("VMRv4", factors=predFactor)
         for esm in esmList:
-            virusPred = VirusPred([minimapThreshold, ESM(esm)])
+            virusPred = VirusPred([minimapThreshold, ESM()])
             for s in mlParams:
                 ml = MLModule(*s)
                 for fac in mergefactors:

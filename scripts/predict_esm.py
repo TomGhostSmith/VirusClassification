@@ -83,11 +83,11 @@ def tokenize_function(examples):
 preprocee_data(input_pth)
 
 model = transformers.AutoModelForSequenceClassification.from_pretrained(base_model_pth,
-                                                                        # cache_dir=cache_dir,
+                                                                        cache_dir=cache_dir,
                                                                         num_labels=n_class,
                                                                         trust_remote_code=True)
 
-model.load_state_dict(torch.load(model_pth+"/pytorch_model.bin", map_location=torch.device('cpu'), weights_only=True), strict=False)
+model.load_state_dict(torch.load(model_pth+"/pytorch_model.bin", map_location=torch.device('cpu')))
 
 tokenizer = AutoTokenizer.from_pretrained(
     model_pth,

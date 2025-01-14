@@ -6,7 +6,7 @@ from utils import IOUtils
 
 def zipFiles():
     with zipfile.ZipFile(f'{config.tempFolder}/csvFiles.zip', 'w', zipfile.ZIP_DEFLATED) as zipf:
-        sourcePath = "/Data/VirusClassification/results"
+        sourcePath = f"{config.dataRoot}/results"
         for root, dirs, files in os.walk(sourcePath):
             for file in files:
                 if (file.endswith('.csv') or file.endswith('.xlsx')):
