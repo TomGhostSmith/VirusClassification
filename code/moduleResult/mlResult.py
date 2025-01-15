@@ -49,8 +49,9 @@ class MLResult(Result):
                 self.res = thisNode
                 self.terminate = True
         elif (self.strategy == 'highest'):
-            if score > self.score:
+            if score > self.suspendScore:
                 self.res = thisNode
+                self.suspendScore = score
 
     def calcTaxoNode(self):
         if (self.node is None):

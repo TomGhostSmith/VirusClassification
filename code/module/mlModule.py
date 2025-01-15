@@ -131,19 +131,25 @@ class MLModule(Module):
 
             del model
 
+        thisRes = dict()
+
         for row in df_filtered.itertuples():
             id = row.seq_name
             score = row.prediction_score
             res = row.taxa_prediction
+            thisRes[id] = (res, score)
 
-            if (id not in self.resultDict):
-                self.resultDict[id] = MLResult(self.strategy, self.thresh)
-            self.resultDict[id].addResult(res, score)
+
+            # if (id not in self.resultDict):
+            #     self.resultDict[id] = MLResult(self.strategy, self.thresh)
+            # self.resultDict[id].addResult(res, score)
 
         unTerminatedSamples:list[Sample] = list()
         for sample in samples:
             if sample.id not in self.resultDict:
                 self.resultDict[sample.id] = MLResult(self.strategy, self.thresh)
+            if (sample.id in thisRes):
+                self.resultDict[sample.id].addResult(*thisRes[sample.id])
             if not (self.resultDict[sample.id].terminate):
                 unTerminatedSamples.append(sample)
         

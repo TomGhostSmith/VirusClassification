@@ -46,7 +46,7 @@ def main(MLstrategy, lowestRank, fastaPath):
     # evaluator = ModelRunnder([pipeline], Dataset("Challenge"))
     evaluator = ModelRunnder([pipeline], fastaPath)
     evaluator.run()
-    
+
             
 
 
@@ -57,11 +57,13 @@ if (__name__ == '__main__'):
     # parser.add_argument('--model', help='the model folder')
     parser.add_argument('--ML', help="machine learning model strategy", default='highest')
     parser.add_argument('--restrict', help="restrict lowest prediction rank", default='genus')
+    parser.add_argument('--batchsize', help="batchsize for machine learning models", type=int, default=64)
     args = parser.parse_args()
     input = args.input
     data = args.data
     ML = args.ML
     restrict = args.restrict
+    batchsize = args.batchsize
     
     if (not (input.endswith('fasta') or input.endswith('fa'))):
         raise ValueError('The file you input seems not a fasta file')
@@ -78,6 +80,8 @@ if (__name__ == '__main__'):
     fileName = os.path.splitext(os.path.basename(input))[0]
     config.outputName = fileName + '.tsv'
     config.dataRoot = data
+    config.esmBatchSize = batchsize
+    config.mlBatchSize = batchsize
     config.updatePath()
 
     main(ML, restrict, input)

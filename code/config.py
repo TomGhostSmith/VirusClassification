@@ -8,7 +8,7 @@ class Config():
         # self.minorDataset = 'genus'
         # self.minorDataset = None
 
-        self.dataRoot = "/Data/ICTVPublish"
+        self.dataRoot = "/Data/ICTVPublish2"
         # self.dataRoot = "/Data/VirusClassification"
 
 
@@ -118,8 +118,8 @@ class Config():
             os.makedirs(self.tempFolder)
         if (not os.path.exists(self.resultBase)):
             os.makedirs(self.resultBase)
-        if (not os.path.exists(self.virusPredResultFolder)):
-            os.makedirs(self.virusPredResultFolder)
+        # if (not os.path.exists(self.virusPredResultFolder)):
+        #     os.makedirs(self.virusPredResultFolder)
 
 # note for path and signal use:
 # use ';' for separate params. e.g. a=1;b=2

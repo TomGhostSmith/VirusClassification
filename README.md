@@ -66,6 +66,8 @@ data_root
 
 ```
 conda env create -f environment.yml
+conda install minimap prodigal-gv -c bioconda
+conda activate VirTaxonomer
 ```
 
 

@@ -4,6 +4,7 @@ from collections import defaultdict
 from sklearn.metrics import precision_score, recall_score, accuracy_score, f1_score
 
 from config import config
+config.updatePath()
 from entity.taxoTree import taxoTree
 from prototype.result import Result
 
@@ -163,8 +164,9 @@ def analyseStatistics(preds, truths):
         return pandas.DataFrame(results_data), weightedRes
 
 def main():
-    # evaluate('refseq_2024_test', 4)
-    evaluate('genbank_2024_test', 12)
+    # evaluate('refseq_2024_test', 10)
+    # evaluate('genbank_2024_test', 12)
+    evaluate('Challenge', 11)
 
 if (__name__ == "__main__"):
     main()
