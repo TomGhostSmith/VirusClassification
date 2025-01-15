@@ -3,7 +3,7 @@ import os
 class Config():
     def __init__(self) -> None:
         # self.majorDataset = 'refseq_2024_test'
-        self.majorDataset = 'Challenge'
+        self.majorDataset = ''
         
         # self.minorDataset = 'genus'
         # self.minorDataset = None
@@ -82,11 +82,13 @@ class Config():
         self.esmBatchSize = 64
         self.mlBatchSize = 64
 
-        self.updatePath()
+        self.outputName = None
+
+        # self.updatePath()
 
     
     def updatePath(self):
-        self.tempFolder = f"{self.dataRoot}/temp"
+        self.tempFolder = f"{self.dataRoot}/cache"
         self.refFolder = f"{self.dataRoot}/model"
 
         self.ncbiFolder = f"{self.dataRoot}/NCBI"
@@ -106,10 +108,10 @@ class Config():
         self.virusPredResultFolder = f"{self.dataRoot}/results/{self.majorDataset}/VirusPred"
         self.MLResultFolder = f"{self.dataRoot}/results/{self.majorDataset}/MLResult"
         
-        if (not os.path.exists(self.datasetBase)):
-            raise ValueError("dataset folder not found")
-        if(not os.path.exists(self.refFolder)):
-            raise ValueError("reference folder not found")
+        # if (not os.path.exists(self.datasetBase)):
+        #     raise ValueError("dataset folder not found")
+        # if(not os.path.exists(self.refFolder)):
+        #     raise ValueError("reference folder not found")
         if(not os.path.exists(self.modelRoot)):
             raise ValueError("model folder not found")
         if (not os.path.exists(self.tempFolder)):

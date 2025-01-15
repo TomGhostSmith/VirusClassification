@@ -26,7 +26,7 @@ class Minimap(Module):
             for seq in samples:
                 SeqIO.write(seq.seq, fp, 'fasta')
 
-        IOUtils.showInfo(f"Begin minimap on {config.datasetName}")
+        IOUtils.showInfo(f"Begin minimap on {len(samples)} samples")
         command = self.getMinimapCommand(queryFile)
         with open(f"{config.tempFolder}/alignment.sam", 'wt') as fp:
             subprocess.run(command, shell=True, stdout=fp, stderr=subprocess.DEVNULL)

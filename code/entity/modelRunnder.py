@@ -8,14 +8,9 @@ from entity.sample import Sample
 from module.pipeline import Pipeline
 
 class ModelRunnder():
-    def __init__(self, models, dataset:Dataset):
+    def __init__(self, models, dataPath):
         def load(ids=None):
             queryFile = f"{config.datasetBase}/{config.datasetName}.fasta"
-            answer = dict()
-            if (os.path.exists(f"{config.datasetBase}/answer.json")):
-                with open(f"{config.datasetBase}/answer.json") as fp:
-                    answer = json.load(fp)
-
             sampleList = list()
             for record in SeqIO.parse(queryFile, "fasta"):
                 if ids is None or record.id in ids:
@@ -25,42 +20,46 @@ class ModelRunnder():
         self.models = models
         self.samples:list[Sample] = list()
 
-        config.majorDataset = dataset.majorDataset
-        config.updatePath()
-        ids = list()
-        for minor in dataset.minorDatasets:
-            with open(f"{config.datasetBase}/minorDatasets/{minor}") as fp:
-                for line in fp:
-                    ids.append(line.strip())
-        ids = set(ids) if len(ids) > 0 else None
-        self.samples += load(ids)
+        if (isinstance(dataPath, Dataset)):
+            config.majorDataset = dataPath.majorDataset
+            config.updatePath()
+            ids = list()
+            for minor in dataPath.minorDatasets:
+                with open(f"{config.datasetBase}/minorDatasets/{minor}") as fp:
+                    for line in fp:
+                        ids.append(line.strip())
+            ids = set(ids) if len(ids) > 0 else None
+            self.samples += load(ids)
+        else:
+            for record in SeqIO.parse(dataPath, "fasta"):
+                self.samples.append(Sample(seq=record))
 
     def run(self):
         for model in self.models:
             model.getResults(self.samples)
 
-        if (not os.path.exists(f"{config.tempFolder}/resCount")):
-            pipelineIndex = 0
-        else:
-            with open(f"{config.tempFolder}/resCount") as fp:
-                pipelineIndex = int(fp.readline().strip())
-        
-        with open(f"{config.tempFolder}/resCount", 'wt') as fp:
-            fp.write(str(pipelineIndex + len(self.models)))
+        if (config.outputName is None):
+            if (not os.path.exists(f"{config.tempFolder}/resCount")):
+                pipelineIndex = 0
+            else:
+                with open(f"{config.tempFolder}/resCount") as fp:
+                    pipelineIndex = int(fp.readline().strip())
+            
+            with open(f"{config.tempFolder}/resCount", 'wt') as fp:
+                fp.write(str(pipelineIndex + len(self.models)))
 
-        
-        pipelineResTitle = ["pred minimap ref", "pred minimap mode", "pred minimap factor",
-                            "esm",
-                            "taxo minimap ref", "taxo minimap mode", "taxo minimap code",
-                            "ML strategy", "ML cutoff", "ML gen",
-                            "merge",
-                            "pipelineIndex"]
+            pipelineResTitle = ["pred minimap ref", "pred minimap mode", "pred minimap factor",
+                                "esm",
+                                "taxo minimap ref", "taxo minimap mode", "taxo minimap code",
+                                "ML strategy", "ML cutoff", "ML gen",
+                                "merge",
+                                "pipelineIndex"]
 
-        requireTitle = not os.path.exists(f"{config.resultBase}/pipelines.csv")
-        pipelineNameFP = open(f"{config.resultBase}/pipelines.csv", 'at')
+            requireTitle = not os.path.exists(f"{config.resultBase}/pipelines.csv")
+            pipelineNameFP = open(f"{config.resultBase}/pipelines.csv", 'at')
 
-        if (requireTitle):
-            pipelineNameFP.write(",".join(pipelineResTitle) + "\n")
+            if (requireTitle):
+                pipelineNameFP.write(",".join(pipelineResTitle) + "\n")
         
         
         for model in self.models:
@@ -84,8 +83,9 @@ class ModelRunnder():
                     resultList.append((sample.id, dict()))
 
             # generate evaluation-used json result
-            with open(f"{config.resultBase}/result-{pipelineIndex}.json", 'wt') as fp:
-                json.dump(resultDict, fp, indent=2)
+            if (config.outputName is None):
+                with open(f"{config.resultBase}/result-{pipelineIndex}.json", 'wt') as fp:
+                    json.dump(resultDict, fp, indent=2)
 
             # generate submit-used
             lines = list()
@@ -102,14 +102,18 @@ class ModelRunnder():
                     text.append(name)
                     text.append(str(score))
                 lines.append(','.join(text) + '\n')
-                        
-            with open(f"{config.resultBase}/result-{pipelineIndex}.csv", 'wt') as fp:
+            
+            fileName = f'result-{pipelineIndex}.csv' if config.outputName is None else config.outputName
+            with open(f"{config.resultBase}/{fileName}", 'wt') as fp:
                 fp.writelines(lines)
 
-            if (isinstance(model, Pipeline)):
+            if (isinstance(model, Pipeline) and config.outputName is None):
                 params = model.getParamList()
                 params.append(str(pipelineIndex))
                 pipelineNameFP.write(",".join(params) + "\n")
                 pipelineIndex += 1
             
             pipelineIndex += 1
+
+        if (config.outputName is None):
+            pipelineNameFP.close()
