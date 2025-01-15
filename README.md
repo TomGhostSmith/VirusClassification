@@ -2,21 +2,37 @@
 
 A deep-learning based model to taxonomize virus
 
-### Model Architecture
+### 1. Model Architecture
 
-VirTaxonomer has two major modules: Virus Identify Module and Virus Classification Module.
+VirTaxonomer consists of two major modules: the `Virus Identification Module` and the `Virus Classification Module`.
 
-The Virus Identify Module has two parts: Minimap part and ESM prediction part. For each sequence, Minimap is used to check if the sequence can be aligned to a reference sequence in VMRv4. If the alignment is of low quality, the ESM will determine if the sequence is a virus
+#### Virus Identification Module
 
-The Virus Classification Module has two parts as well: Minimap part and machine learning part. For the sequence with high quality alignment obtained by Minimap, they will be classified according to the corresponding species. For the other sequences, there are 7 machine learning models to classify them.
+The Virus Identification Module is composed of two components: the `Minimap component` and the `ESM prediction component`. For each sequence:
 
-The overall workflow of VirTaxonomer is shown below.
+1. Minimap checks whether the sequence can be aligned to a reference sequence in VMRv4.
+2. If the alignment quality is low, the ESM component determines whether the sequence belongs to a virus.
+
+#### Virus Classification Module
+
+The Virus Classification Module also has two components: the `Minimap component` and the `machine learning component`.
+
+1. Sequences with high-quality alignments from Minimap are classified directly according to the corresponding species.
+2. For sequences without high-quality alignments, machine learning models are used to classify them. Specifically, we train models for each taxonomic rank (realm, kingdom, phylum, etc.).
+
+### 2. Overall Workflow
+
+The overall workflow of VirTaxonomer is illustrated below.
 
 ![](image/workflow.png)
 
-### How to run VirTaxonomer
+### 3. How to run VirTaxonomer
 
-1. Download models from [https://zenodo.org/records/14649352](https://zenodo.org/records/14649352), extract them and put the files in the corresponding folder
+*Note*: running VirTaxonomer on GPU is highly recommended.
+
+#### Download models
+
+You can download our models from [https://zenodo.org/records/14649352](https://zenodo.org/records/14649352), extract them and put the files in the corresponding folder
 
 ```
 model_root
@@ -70,37 +86,53 @@ model_root
 │       ├── pytorch_model.bin
 │       └── vocab.txt
 └── VMRv4
-├── VMRv4.fasta
-└── VMRv4_names.json
+    ├── VMRv4.fasta
+    └── VMRv4_names.json
 ```
 
-2. Set the environment. Conda is recommended
+#### Setup the environment
+
+Conda is highly recommended, or you can install required dependencies according to the `environment.yml`
 
 ```
 conda env create -f environment.yml
 conda activate VirTaxonomer
-conda install minimap prodigal-gv -c bioconda
+conda install minimap2 prodigal-gv -c bioconda
 ```
 
+*Note*: The version of minimap2 may change the performance of our model. We use version 2.28.
 
-3. Modify `runVirTaxonomer.sh`. You may need to change:
+#### Select parameters
 
-   - `fasta_path`: where to find the fasta file to predict
-   - `model_path`: the path of model root folder
-   - `output_path`: the path of output folder
+You can directly modify the parameters in `runVirTaxonomer.sh`. 
 
-   The following parameters can be modified optionally:
+**These parameters are supposed to be modified:**
 
-   - `ML_strategy`: the value can be `highest` or `bottomup`, which changes how machine learning module works
-   - `restrict`: the value can be `genus` or `species`, which restrict the output rank
-   - `batch_size`: the batch size for machine learning module
+- `fasta_path`: where to find the fasta file to predict
+- `model_path`: the path of model root folder
+- `output_path`: the path of output folder
 
-   If you want to get the same result as our provided, use the following parameters:
+**The following parameters can be modified optionally:**
 
-   - Result 1: `ML_strategy=bottomup`, `restrict=genus`
-   - Result 2: `ML_strategy=bottomup`, `restrict=species`
-   - Result 3: `ML_strategy=highest`, `restrict=genus`
+- `ML_strategy`: the value can be `highest` or `bottomup`, which changes how the machine learning component works
+- `restrict`: the value can be `genus` or `species`, which restricts the output rank
+- `batch_size`: the batch size for the machine learning component
 
-4. Run `runVirTaxonomer.sh` 
+**If you want to get the same result as our provided, use the following parameters:**
 
-   
+- Result 1: `ML_strategy=bottomup`, `restrict=genus`
+- Result 2: `ML_strategy=bottomup`, `restrict=species`
+- Result 3: `ML_strategy=highest`, `restrict=genus`
+
+**If you want to use specific GPU(s), you can add an extra line before `python ./code/main.py`:**
+
+```
+export CUDA_VISIBLE_DEVICES=0,1,2,...,n 	# n is the number of GPUs, or you can assign a specific GPU.
+```
+
+#### Run VirTaxonomer
+
+Simply run `runVirTaxonomer.sh` and get your results!
+
+
+
