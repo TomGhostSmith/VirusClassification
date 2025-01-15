@@ -89,7 +89,7 @@ class MLModule(Module):
     def runModel(self, samples:list[Sample], rank:str)->list[Sample]:
 
         abbr = self.modelParams[rank][1].split('/')[-1]
-        cachedRes = f"{config.dataRoot}/cachedResults/{config.datasetName}/MLResult/{rank}_{abbr}.csv"
+        cachedRes = f"{config.resultRoot}/cachedResults/{config.datasetName}/MLResult/{rank}_{abbr}.csv"
         if (os.path.exists(cachedRes)):
             df_filtered = pandas.read_csv(cachedRes)
         else:

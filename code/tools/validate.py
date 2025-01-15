@@ -24,6 +24,9 @@ from config import config
 
 import argparse
 import os
+config.resultRoot = "/Data/ICTVPublish2/results"
+config.modelRoot = "/Data/ICTVPublish2/model"
+config.dataRoot = "/Data/ICTVPublish2/"
 config.updatePath()
 
 def main():
@@ -49,8 +52,8 @@ def main():
         "60_sa": "g",
         "pos_cm": "g",
         "pos_cm_sa": "g",
-        # "60_cm": 'g',
-        # "60_cm_sa": 'g'
+        "60_cm": 'g',
+        "60_cm_sa": 'g'
     }
     pipeline = Pipeline(
         VirusPred([
@@ -62,6 +65,7 @@ def main():
             MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
             # MLModule('topdown', 0.45, '1111000')
             MLModule('highest', 0.45, '1011000')
+            # MLModule('bottomup', 0.45, '1011000')
             )
         )
     
@@ -69,6 +73,8 @@ def main():
     # evaluator = ModelRunnder([pipeline], Dataset("genbank_2024_test"))
     evaluator = ModelRunnder([pipeline], Dataset("Challenge"))
     # evaluator = ModelRunnder([pipeline], fastaPath)
+
+    config.datasetBase = "/Data/ICTVPublish2/dataset/Challenge"
     evaluator.run()
 
 

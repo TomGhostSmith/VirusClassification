@@ -39,5 +39,13 @@ class MinimapResult(Result):
                     self.node = taxoTree.getTaxoNodeFromNode(ICTVNode=n)
                     break
             
+            score = 1 - 10 ** (-self.bestAlignment.quality/10)
             for n in self.node.ICTVNode.path:
-                self.scores[n.rank] = 1
+                self.scores[n.rank] = score
+
+        elif (config.rankLevels[self.node.ICTVNode.rank] > config.rankLevels[self.rank]):
+            targetRankLevel = config.rankLevels[self.rank]
+            for n in reversed(self.node.ICTVNode.path):
+                if config.rankLevels[n.rank] <= targetRankLevel:
+                    self.node = taxoTree.getTaxoNodeFromNode(ICTVNode=n)
+                    break

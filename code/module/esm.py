@@ -27,7 +27,7 @@ class ESM(Module):
     def run(self, samples:list[Sample]):
         results = list()
         viruses = set()
-        cacheFile = f"{config.dataRoot}/cachedResults/{config.datasetName}/VirusPred/esm2_t30_512.tsv"
+        cacheFile = f"{config.resultRoot}/cachedResults/{config.datasetName}/VirusPred/esm2_t30_512.tsv"
         if (os.path.exists(cacheFile)):
             with open(cacheFile) as fp:
                 viruses = {l.strip() for l in fp}

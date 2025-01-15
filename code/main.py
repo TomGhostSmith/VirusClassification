@@ -2,6 +2,7 @@ from config import config
 
 import argparse
 import os
+import shutil
 
 def main(MLstrategy, lowestRank, fastaPath):
     from module.pipeline import Pipeline
@@ -36,8 +37,8 @@ def main(MLstrategy, lowestRank, fastaPath):
             # MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
         MinimapMLMergeModule(
             MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
-            MLModule('topdown', 0.45, '1111000')
-            # MLModule('highest', 0.45, '1011000')
+            # MLModule('topdown', 0.45, '1111000')
+            MLModule(MLstrategy, 0.45, '1011000')
             )
         )
     
@@ -53,22 +54,25 @@ def main(MLstrategy, lowestRank, fastaPath):
 if (__name__ == '__main__'):
     parser = argparse.ArgumentParser(description="VirTaxonomer: A deep learning based model to taxomize virus")
     parser.add_argument('--input', help="the fasta file to process", required=True)
-    parser.add_argument('--data', help='the output folder', required=True)
+    parser.add_argument('--model', help='the model folder', required=True)
+    parser.add_argument('--output', help='the result folder', required=True)
     # parser.add_argument('--model', help='the model folder')
     parser.add_argument('--ML', help="machine learning model strategy", default='highest')
     parser.add_argument('--restrict', help="restrict lowest prediction rank", default='genus')
     parser.add_argument('--batchsize', help="batchsize for machine learning models", type=int, default=64)
     args = parser.parse_args()
     input = args.input
-    data = args.data
+    model = args.model
+    result = args.output
     ML = args.ML
     restrict = args.restrict
-    batchsize = args.batchsize
+    batchsize = int(args.batchsize)
+    # batchsize = args.batchsize
     
     if (not (input.endswith('fasta') or input.endswith('fa'))):
         raise ValueError('The file you input seems not a fasta file')
     
-    if (not os.path.isdir(data)):
+    if (not os.path.isdir(model)):
         raise ValueError('The model path should be a folder')
     
     if (ML not in ['highest', 'bottomup']):
@@ -79,9 +83,12 @@ if (__name__ == '__main__'):
 
     fileName = os.path.splitext(os.path.basename(input))[0]
     config.outputName = fileName + '.tsv'
-    config.dataRoot = data
+    config.modelRoot = model
+    config.resultRoot = result
     config.esmBatchSize = batchsize
     config.mlBatchSize = batchsize
     config.updatePath()
 
     main(ML, restrict, input)
+
+    shutil.rmtree(config.tempFolder)

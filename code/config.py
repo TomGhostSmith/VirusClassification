@@ -8,7 +8,10 @@ class Config():
         # self.minorDataset = 'genus'
         # self.minorDataset = None
 
-        self.dataRoot = "/Data/ICTVPublish2"
+        # self.dataRoot = "/Data/ICTVPublish2"
+        self.resultRoot = ""
+        self.modelRoot = ""
+        self.dataRoot = ""
         # self.dataRoot = "/Data/VirusClassification"
 
 
@@ -88,16 +91,16 @@ class Config():
 
     
     def updatePath(self):
-        self.tempFolder = f"{self.dataRoot}/cache"
-        self.refFolder = f"{self.dataRoot}/model"
+        self.tempFolder = f"{self.resultRoot}/cache"
+        self.refFolder = self.modelRoot
 
-        self.ncbiFolder = f"{self.dataRoot}/NCBI"
-        self.ncbiAssemblyFolder = f"{self.dataRoot}/NCBI/Assembly"
-        self.ncbiNucleotideFolder = f"{self.dataRoot}/NCBI/Nucleotide"
-        self.modelRoot = f"{self.dataRoot}/model"
+        # self.ncbiFolder = f"{self.dataRoot}/NCBI"
+        # self.ncbiAssemblyFolder = f"{self.dataRoot}/NCBI/Assembly"
+        # self.ncbiNucleotideFolder = f"{self.dataRoot}/NCBI/Nucleotide"
+        # self.modelRoot = f"{self.dataRoot}/model"
     
         # if (self.minorDataset is None):
-        self.resultBase = f"{self.dataRoot}/results/{self.majorDataset}"
+        self.resultBase = f"{self.resultRoot}/{self.majorDataset}"
         self.datasetBase = f"{self.dataRoot}/dataset/{self.majorDataset}"
         self.datasetName = self.majorDataset
         # else:
@@ -105,8 +108,8 @@ class Config():
             # self.datasetBase = f"/Data/VirusClassification/dataset/{self.majorDataset}/{self.minorDataset}"
             # self.datasetName = f"{self.majorDataset}-{self.minorDataset}"
         
-        self.virusPredResultFolder = f"{self.dataRoot}/results/{self.majorDataset}/VirusPred"
-        self.MLResultFolder = f"{self.dataRoot}/results/{self.majorDataset}/MLResult"
+        self.virusPredResultFolder = f"{self.resultRoot}/{self.majorDataset}/VirusPred"
+        self.MLResultFolder = f"{self.resultRoot}/{self.majorDataset}/MLResult"
         
         # if (not os.path.exists(self.datasetBase)):
         #     raise ValueError("dataset folder not found")
