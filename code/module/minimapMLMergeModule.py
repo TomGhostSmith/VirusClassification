@@ -13,7 +13,7 @@ class MinimapMLMergeModule(Module):
         self.minimap = minimap
         self.mlModule = mlModule
         self.factors = factors if isinstance(factors, list) else [factors]
-        super().__init__(f"{self.minimap.moduleName}.{self.mlModule.moduleName}.minimapML-{"_".join(self.factors)}")
+        super().__init__(f"{self.minimap.moduleName}.{self.mlModule.moduleName}.minimapML-{'_'.join(self.factors)}")
 
     def run(self, samples:list[Sample]):
         resultDict = dict()

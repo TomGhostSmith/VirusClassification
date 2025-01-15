@@ -76,7 +76,7 @@ if (__name__ == '__main__'):
         raise ValueError('The restrict rank should be either "genus" or "species"')
 
     fileName = os.path.splitext(os.path.basename(input))[0]
-    config.outputName = fileName + '.csv'
+    config.outputName = fileName + '.tsv'
     config.dataRoot = data
     config.updatePath()
 

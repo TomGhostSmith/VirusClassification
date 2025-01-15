@@ -90,7 +90,7 @@ class ModelRunnder():
             # generate submit-used
             lines = list()
             
-            lines.append(",".join(config.resultCSVRanks) + '\n')
+            lines.append("\t".join(config.resultCSVRanks) + '\n')
             resultList = sorted(resultList, key=lambda t:t[0])
             for id, resDict in resultList:
                 text = [id]
@@ -101,9 +101,9 @@ class ModelRunnder():
                         name, score = 'N/A', 'N/A'
                     text.append(name)
                     text.append(str(score))
-                lines.append(','.join(text) + '\n')
+                lines.append('\t'.join(text) + '\n')
             
-            fileName = f'result-{pipelineIndex}.csv' if config.outputName is None else config.outputName
+            fileName = f'result-{pipelineIndex}.tsv' if config.outputName is None else config.outputName
             with open(f"{config.resultBase}/{fileName}", 'wt') as fp:
                 fp.writelines(lines)
 
@@ -113,7 +113,5 @@ class ModelRunnder():
                 pipelineNameFP.write(",".join(params) + "\n")
                 pipelineIndex += 1
             
-            pipelineIndex += 1
-
         if (config.outputName is None):
             pipelineNameFP.close()

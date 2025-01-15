@@ -129,7 +129,7 @@ class NCBITree():
                     name = accession[:accession.index(".")]
                     chunks = [name[i:i+3] for i in range(0, len(name), 3)]
                     fileName = f"{chunks[-1]}.fasta"
-                    path = f"{config.ncbiNucleotideFolder}/fna/{"/".join(chunks[:-1])}/{fileName}"
+                    path = f"{config.ncbiNucleotideFolder}/fna/{'/'.join(chunks[:-1])}/{fileName}"
 
                     # add path to species
                     if (id in self.species):

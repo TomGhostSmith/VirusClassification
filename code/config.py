@@ -115,7 +115,7 @@ class Config():
         if(not os.path.exists(self.modelRoot)):
             raise ValueError("model folder not found")
         if (not os.path.exists(self.tempFolder)):
-            os.makedirs(self.resultBase)
+            os.makedirs(self.tempFolder)
         if (not os.path.exists(self.resultBase)):
             os.makedirs(self.resultBase)
         if (not os.path.exists(self.virusPredResultFolder)):
