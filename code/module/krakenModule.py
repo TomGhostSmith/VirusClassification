@@ -18,6 +18,7 @@ class KrakenModule(Module):
         IOUtils.showInfo('Kraken not finished', 'WARN')
         return None
     
+    def downloadViralSequence(self):
         def updateProgress(progress):
             progress.update(1)
         with open(f"{config.modelRoot}/kraken2/library_viral.tsv") as fp:
