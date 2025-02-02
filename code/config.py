@@ -1,20 +1,12 @@
+# reconstructed
 import os
 
 class Config():
-    def __init__(self) -> None:
-        # self.majorDataset = 'refseq_2024_test'
-        self.majorDataset = ''
-        
-        # self.minorDataset = 'genus'
-        # self.minorDataset = None
-
-        # self.dataRoot = "/Data/ICTVPublish2"
-        self.resultRoot = ""
+    def __init__(self) -> None:        
         self.modelRoot = ""
-        self.dataRoot = ""
-        # self.dataRoot = "/Data/VirusClassification"
-
-
+        self.outputRoot = ""
+        self.queryFilePath = ""
+        self.querySubsetFilePath = None
 
         ranks = [
             "root",
@@ -85,51 +77,22 @@ class Config():
         self.esmBatchSize = 64
         self.mlBatchSize = 64
 
-        self.outputName = None
-
         # self.updatePath()
 
     
     def updatePath(self):
-        self.tempFolder = f"{self.resultRoot}/cache"
-        self.refFolder = self.modelRoot
+        def getFileNameWithoutExt(filePath):
+            return os.path.splitext(os.path.basename(filePath))[0]
+        
+        self.cacheResultFolder = f"{self.outputRoot}/cache/CachedResults"
+        self.cacheAnalysisFolder = f"{self.outputRoot}/cache/CachedAnalysis"
+        self.datasetName = getFileNameWithoutExt(self.queryFilePath)
+        self.subsetName = getFileNameWithoutExt(self.querySubsetFilePath) if self.querySubsetFilePath is not None else "all"
 
-        # self.ncbiFolder = f"{self.dataRoot}/NCBI"
-        # self.ncbiAssemblyFolder = f"{self.dataRoot}/NCBI/Assembly"
-        # self.ncbiNucleotideFolder = f"{self.dataRoot}/NCBI/Nucleotide"
-        # self.modelRoot = f"{self.dataRoot}/model"
-    
-        # if (self.minorDataset is None):
-        self.resultBase = f"{self.resultRoot}/{self.majorDataset}"
-        self.datasetBase = f"{self.dataRoot}/dataset/{self.majorDataset}"
-        self.datasetName = self.majorDataset
-        # else:
-            # self.resultBase = f"/Data/VirusClassification/results/{self.majorDataset}/{self.minorDataset}"
-            # self.datasetBase = f"/Data/VirusClassification/dataset/{self.majorDataset}/{self.minorDataset}"
-            # self.datasetName = f"{self.majorDataset}-{self.minorDataset}"
-        
-        self.virusPredResultFolder = f"{self.resultRoot}/{self.majorDataset}/VirusPred"
-        self.MLResultFolder = f"{self.resultRoot}/{self.majorDataset}/MLResult"
-        
-        # if (not os.path.exists(self.datasetBase)):
-        #     raise ValueError("dataset folder not found")
-        # if(not os.path.exists(self.refFolder)):
-        #     raise ValueError("reference folder not found")
         if(not os.path.exists(self.modelRoot)):
             raise ValueError("model folder not found")
-        if (not os.path.exists(self.tempFolder)):
-            os.makedirs(self.tempFolder)
-        if (not os.path.exists(self.resultBase)):
-            os.makedirs(self.resultBase)
-        # if (not os.path.exists(self.virusPredResultFolder)):
-        #     os.makedirs(self.virusPredResultFolder)
+        os.makedirs(self.cacheResultFolder, exist_ok=True)
+        os.makedirs(self.cacheAnalysisFolder, exist_ok=True)
 
-# note for path and signal use:
-# use ';' for separate params. e.g. a=1;b=2
-# use '_' for separate words. e.g. contig_most_frequent
-# use '-' for connect model and params. e.g. minimap-ref=xx;mode=xx
-# use '.' for connect different models. e.g. minimap.ml
-# use '!' for file name split. e.g. statistics!n=100;incl=50
-# never use ',' because it will disturbe csv file 
 
 config = Config()
