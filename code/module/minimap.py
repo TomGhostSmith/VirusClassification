@@ -1,4 +1,6 @@
+# reconstructed
 import os
+import json
 import subprocess
 from Bio import SeqIO
 
@@ -19,61 +21,96 @@ class Minimap(Module):
         super().__init__(f'minimap-ref={self.reference};mode={self.mode}')
         self.baseName = self.moduleName  # do not use 'self.moduleName' in code directly, in case of subClass!
 
+        self.cacheFile = f"{config.cacheResultFolder}/{self.baseName}.tmp"
+        self.cacheIndex = f"{config.cacheResultFolder}/{self.baseName}.json"
 
-    def minimap(self, samples, resultFolder):
-        queryFile = f"{config.tempFolder}/minimap.fasta"
-        with open(queryFile, 'wt') as fp:
-            for seq in samples:
-                SeqIO.write(seq.seq, fp, 'fasta')
+        self.cachedSamples:dict[str, tuple[int, int]] = dict()
+        self.cachedResultFP = None
 
+
+    def minimap(self, samples):
+        queryFile = f"{config.cacheFolder}/minimap.fasta"
+        resultFile = f"{config.cacheFolder}/alignment.sam"
+        IOUtils.writeSampleFasta(samples, queryFile)
         IOUtils.showInfo(f"Begin minimap on {len(samples)} samples")
+
         command = self.getMinimapCommand(queryFile)
-        with open(f"{config.tempFolder}/alignment.sam", 'wt') as fp:
+        with open(resultFile, 'wt') as fp:
             subprocess.run(command, shell=True, stdout=fp, stderr=subprocess.DEVNULL)
-        with open(f"{config.tempFolder}/alignment.sam") as fp:
+        targetFP = open(self.cacheFile, 'at')
+
+        thisName = None
+        thisOffset = self.cachedSamples["nextOffset"] if "nextOffset" in self.cachedSamples else 0
+        nextOffset = thisOffset
+        alignmentCount = 0
+
+
+        with open(resultFile) as fp:
             for line in fp:
-                sampleName = line.split('\t')[0]
-                with open(f"{resultFolder}/{sampleName}.sam", 'at') as f:
-                    f.write(line)
-        os.remove(f"{config.tempFolder}/alignment.sam")
+                terms = line.strip().split('\t')
+                terms[9] = '*'  # omit the query sequence to reduce storage space usage
+                sampleName = terms[0]
+                if (sampleName != thisName and thisName is not None):
+                    # update last sample
+                    self.cachedSamples[thisName] = [thisOffset, alignmentCount]
+                    thisOffset = nextOffset
+                    alignmentCount = 0
+
+                content = "\t".join(terms) + "\n"
+                thisName = sampleName
+                nextOffset += len(content)
+                alignmentCount += 1
+                targetFP.write(content)
+
+            
+            if (thisName is not None):
+                # update last sample
+                self.cachedSamples[thisName] = [thisOffset, alignmentCount]
+                self.cachedSamples["nextOffset"] = nextOffset
+
+        targetFP.close()
+        os.remove(resultFile)
         os.remove(queryFile)
 
 
-    def run(self, samples):
-        resultFolder = f"{config.resultBase}/minimapResult-{self.baseName}"
+    def run(self, samples:list[Sample]):
+        samplesToRun:list[Sample] = list()
 
-        samplesToRun = list()
 
-        if (os.path.exists(resultFolder)):
+        if (os.path.exists(self.cacheIndex)):
+            with open(self.cacheIndex) as fp:
+                self.cachedSamples = json.load(fp)  # id: [offset, alignmentCount]
+
+        
             for sample in samples:
-                if (not os.path.exists(f"{resultFolder}/{sample.id}.sam")):
+                if (sample.id not in self.cachedSamples):
                     samplesToRun.append(sample)
-        else:
-            samplesToRun = samples
-            os.makedirs(resultFolder)
         
         if (len(samplesToRun) > 0):
-            self.minimap(samplesToRun, resultFolder)
-                    
+            self.minimap(samplesToRun)
+        
+            with open(self.cacheIndex, 'wt') as fp:
+                json.dump(self.cachedSamples, fp, indent=2)
+
+        self.cachedResultFP = open(self.cacheFile)
         results = [self.getResult(sample) for sample in samples]
+        self.cachedResultFP.close()
 
         return results
     
-    def getResult(self, sample:Sample):
-        if self.baseName in sample.results:
+    def getResult(self, sample:Sample)->MinimapResult:
+        if (self.baseName in sample.results):
             return sample.results[self.baseName]
-        resultFolder = f"{config.resultBase}/minimapResult-{self.baseName}"
+        
+        offset, alignmentCount = self.cachedSamples[sample.id]
+        self.cachedResultFP.seek(offset)
+        alignments:list[Alignment] = [Alignment(self.cachedResultFP.readline()) for _ in alignmentCount]
         
         result = MinimapResult()
-        with open(f"{resultFolder}/{sample.id}.sam") as fp:
-            reads = fp.readlines()
-        for read in reads:
-            terms = read.strip().split('\t')
-            referenceName = terms[2]
-            CIGAR = terms[5]
-            mappingQuality = int(terms[4])
-            if (referenceName != '*'):
-                result.addAlignment(Alignment(referenceName, mappingQuality, CIGAR))
+        for alignment in alignments:
+            if (alignment.ref is not None):
+                result.addAlignment(alignment)
+
         if (result.bestAlignment is None):
             result = None
         sample.results[self.baseName] = result

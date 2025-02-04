@@ -83,9 +83,9 @@ class Config():
     def updatePath(self):
         def getFileNameWithoutExt(filePath):
             return os.path.splitext(os.path.basename(filePath))[0]
-        
-        self.cacheResultFolder = f"{self.outputRoot}/cache/CachedResults"
-        self.cacheAnalysisFolder = f"{self.outputRoot}/cache/CachedAnalysis"
+        self.cacheFolder = f"{self.outputRoot}/cache"
+        self.cacheResultFolder = f"{self.cacheFolder}/CachedResults"
+        self.cacheAnalysisFolder = f"{self.cacheFolder}/CachedAnalysis"
         self.datasetName = getFileNameWithoutExt(self.queryFilePath)
         self.subsetName = getFileNameWithoutExt(self.querySubsetFilePath) if self.querySubsetFilePath is not None else "all"
 
