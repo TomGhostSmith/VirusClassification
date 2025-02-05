@@ -5,8 +5,8 @@ class Module():
     def __init__(self, name):
         self.moduleName = name
 
-    def getResults(self, sampleList):
-        samples = list()
+    def getResults(self, sampleList:list[Sample]):
+        samples:list[Sample] = list()
         for sample in sampleList:
             if (self.moduleName not in sample.results):
                 samples.append(sample)
@@ -15,11 +15,6 @@ class Module():
             for sample, result in zip(samples, results):
                 sample.addResult(self.moduleName, result)
 
-    # # each model should return the result of the sample. If no, return None
-    # def getResult(self, sample:Sample)->Result:
-    #     pass
-
-    # only run the samples (which is not in the answer)
-    # make sure that the answer can be randomly accessed
-    def run(self, samples):
+    # only run the samples (which are not in the answer)
+    def run(self, samples:list[Sample])->list[Result]:
         pass

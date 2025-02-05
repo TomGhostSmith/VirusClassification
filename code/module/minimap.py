@@ -25,8 +25,6 @@ class Minimap(Module):
         self.cacheIndex = f"{config.cacheResultFolder}/{self.baseName}.json"
 
         self.cachedSamples:dict[str, tuple[int, int]] = dict()
-        self.cachedResultFP = None
-
 
     def minimap(self, samples):
         queryFile = f"{config.cacheFolder}/minimap.fasta"
@@ -76,7 +74,6 @@ class Minimap(Module):
     def run(self, samples:list[Sample]):
         samplesToRun:list[Sample] = list()
 
-
         if (os.path.exists(self.cacheIndex)):
             with open(self.cacheIndex) as fp:
                 self.cachedSamples = json.load(fp)  # id: [offset, alignmentCount]
@@ -85,6 +82,8 @@ class Minimap(Module):
             for sample in samples:
                 if (sample.id not in self.cachedSamples):
                     samplesToRun.append(sample)
+        else:
+            samplesToRun = samples
         
         if (len(samplesToRun) > 0):
             self.minimap(samplesToRun)
@@ -92,19 +91,20 @@ class Minimap(Module):
             with open(self.cacheIndex, 'wt') as fp:
                 json.dump(self.cachedSamples, fp, indent=2)
 
-        self.cachedResultFP = open(self.cacheFile)
-        results = [self.getResult(sample) for sample in samples]
-        self.cachedResultFP.close()
+        cachedResultFP = open(self.cacheFile)
+        results = [self.getResult(sample, cachedResultFP) for sample in samples]
+        cachedResultFP.close()
 
         return results
     
-    def getResult(self, sample:Sample)->MinimapResult:
+    def getResult(self, sample:Sample, cachedResultFP)->MinimapResult:
+        # use baseName to cache the result in the results dict
         if (self.baseName in sample.results):
             return sample.results[self.baseName]
         
         offset, alignmentCount = self.cachedSamples[sample.id]
-        self.cachedResultFP.seek(offset)
-        alignments:list[Alignment] = [Alignment(self.cachedResultFP.readline()) for _ in alignmentCount]
+        cachedResultFP.seek(offset)
+        alignments:list[Alignment] = [Alignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
         
         result = MinimapResult()
         for alignment in alignments:
@@ -117,7 +117,7 @@ class Minimap(Module):
         return result
     
     def getMinimapCommand(self, queryFile):
-        referenceFasta = f"{config.refFolder}/{self.reference}/{self.reference}.fasta"
+        referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
         minimapBase = "minimap2"   # if you cannot call minimap2 directly, use its path here
         if self.mode == 'ont':
             mode = "-ax map-ont"

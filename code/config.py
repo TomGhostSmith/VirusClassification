@@ -94,5 +94,11 @@ class Config():
         os.makedirs(self.cacheResultFolder, exist_ok=True)
         os.makedirs(self.cacheAnalysisFolder, exist_ok=True)
 
+    def setPath(self, modelRoot, outputRoot, queryFile, querySubsetFile=None):
+        self.modelRoot = modelRoot
+        self.outputRoot = outputRoot
+        self.queryFilePath = queryFile
+        self.querySubsetFilePath = querySubsetFile
+        self.updatePath()
 
 config = Config()

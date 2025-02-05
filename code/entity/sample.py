@@ -1,5 +1,4 @@
 from prototype.result import Result
-from entity.taxoTree import taxoTree
 
 class Sample():
     # the stdResult is ICTV name
