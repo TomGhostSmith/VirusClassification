@@ -19,6 +19,31 @@ class Kraken(Module):
         self.cacheFile = f"{config.cacheResultFolder}/{self.moduleName}.tmp"
         self.cacheIndex = f"{config.cacheResultFolder}/{self.moduleName}.json"
         self.cachedSamples:dict[str, int] = dict()
+    
+    def runKraken(self, queryFile, resultFile, sampleCount):
+        # run locally
+        # command = self.getKrakenCommand(queryFile)
+        # with open(resultFile, 'wt') as fp:
+        #     subprocess.run(command, shell=True, stdout=fp, stderr=subprocess.DEVNULL)
+
+        # run on server
+        import requests
+        import time
+        from tqdm import tqdm
+        serverIP = "10.176.62.5"
+        os.system(f"scp {queryFile} gst@{serverIP}:/home/gst/kraken.fasta")
+        requests.post(f"http://{serverIP}:8085/start")
+        response = "running"
+        bar = tqdm(total=sampleCount)
+        while response != "ready":
+            time.sleep(5)
+            progress = int(requests.get(f"http://{serverIP}:8085/getProgress").text)
+            bar.n = progress
+            bar.refresh()
+            response = requests.get(f"http://{serverIP}:8085/getStatus").text
+        bar.close()
+
+        os.system(f"scp gst@{serverIP}:/home/gst/kraken.tsv {resultFile}")
 
     def kraken(self, samples:list[Sample])->None:
         queryFile = f"{config.cacheFolder}/kraken.fasta"
@@ -26,9 +51,8 @@ class Kraken(Module):
         IOUtils.writeSampleFasta(samples, queryFile)
         IOUtils.showInfo(f"Begin kraken on {len(samples)} samples")
 
-        command = self.getKrakenCommand(queryFile)
-        with open(resultFile, 'wt') as fp:
-            subprocess.run(command, shell=True, stdout=fp, stderr=subprocess.DEVNULL)
+        self.runKraken(queryFile, resultFile, len(samples))
+
         targetFP = open(self.cacheFile, 'at')
 
         nextOffset = self.cachedSamples["nextOffset"] if "nextOffset" in self.cachedSamples else 0

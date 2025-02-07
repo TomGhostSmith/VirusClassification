@@ -13,10 +13,10 @@ class NCBITree():
     # scpre: all, bacteria, virus, archaea
     def __init__(self, scope) -> None:
         self.scope = scope
-        self.nodesFile = f"{config.ncbiAssemblyFolder}/taxdump/{scope}_nodes.dmp"
-        self.nameFile = f"{config.ncbiAssemblyFolder}/taxdump/{scope}_names.dmp"
-        self.fnaNameFile = f"{config.ncbiAssemblyFolder}/{scope}/names.json"
-        self.fnaFolder = f"{config.ncbiAssemblyFolder}/{scope}/fna"
+        self.nodesFile = f"{config.modelRoot}/NCBI/Assembly/taxdump/{scope}_nodes.dmp"
+        self.nameFile = f"{config.modelRoot}/NCBI/Assembly/taxdump/{scope}_names.dmp"
+        self.fnaNameFile = f"{config.modelRoot}/NCBI/Assembly/{scope}/names.json"
+        self.fnaFolder = f"{config.modelRoot}/NCBI/Assembly/{scope}/fna"
 
         self.name2ID = dict()  # including synonym names
         self.ID2name = dict()  # only include scientific names

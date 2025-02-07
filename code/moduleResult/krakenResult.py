@@ -8,7 +8,7 @@ class KrakenResult(Result):
         self.finalSpecies = None
         terms = line.strip().split('\t')
         if (terms[0] == 'C'):
-            self.finalSpecies = terms[2]  # note: this is kraken ID
+            self.finalSpecies = terms[2]  # note: this is kraken ID (NCBI ID)
             self.kmerCounts = dict()
             kmers = terms[4].split(' ')
             for kmer in kmers:
@@ -19,5 +19,4 @@ class KrakenResult(Result):
                     self.kmerCounts[id] = count
 
     def calcTaxoNode(self):
-        print("Kraken result unfinished")
-        return None
+        self.node = taxoTree.getTaxoNodeFromNCBI(NCBIID=self.finalSpecies)
