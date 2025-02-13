@@ -26,6 +26,7 @@ class TaxoTree():
         self.viralNCBITree.loadNodes()
         self.viralNCBITree.loadAnnotations()
         self.viralNCBITree.loadSpecies()
+        self.viralNCBITree.loadAccession()
         # IOUtils.showInfo('Loading Bacteria NCBI Tree')
         # self.bacteriaNCBITree.loadNodes()
         # self.bacteriaNCBITree.loadAnnotations()

@@ -15,7 +15,7 @@ from moduleResult.krakenResult import KrakenResult
 
 class Kraken(Module):
     def __init__(self):
-        super().__init__("kraken-old")
+        super().__init__("kraken-NCBI")
         self.cacheFile = f"{config.cacheResultFolder}/{self.moduleName}.tmp"
         self.cacheIndex = f"{config.cacheResultFolder}/{self.moduleName}.json"
         self.cachedSamples:dict[str, int] = dict()

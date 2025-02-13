@@ -256,7 +256,7 @@ class Evaluator():
         return self.allSamples
 
         
-    def analyseStatistics(self, samples, modelName):
+    def analyseStatistics(self, samples:list[Sample], modelName, stdResults):
         def macro_accuracy(y_true, y_pred):
             classes = set(y_true)
             class_accuracies = []
@@ -295,7 +295,7 @@ class Evaluator():
 
         # extract labels
         for sample in samples:
-            stdNode = sample.stdResult
+            stdNode = taxoTree.getTaxoNodeFromICTV(ICTVName=stdResults[sample.id])
             pred:Result = sample.results[modelName]
             predictNode = pred.node if pred is not None else None
 

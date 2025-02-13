@@ -33,6 +33,9 @@ class NCBITree():
         self.nodeLines = dict()
         self.nameLines = dict()
 
+        self.accession2ID = dict()  # key: accession (also known as ICTV ID)  value: node
+        self.ID2accession = dict()  # key: ID  value: a list of accessions (also known as ICTV IDs)
+
 
     def loadNodes(self):
         with open(self.nodesFile) as fp:
@@ -110,32 +113,36 @@ class NCBITree():
                 self.species[speciesID] = [(filename, path)]
 
     # actually it load data from allNucloData, which contains RefSeq + GenRank
-    def loadGenBank(self):
-        # for row in tqdm(metaDF.itertuples(), desc="loading meta data"):
-        #     if ((not pandas.isnull(row.Species)) and row.Species in self.name2ID):
-        with open(f"{config.ncbiNucleotideFolder}/genbank.accession") as fp:
-            fp.readline()
-            lines = fp.readlines()
-        for line in tqdm(lines, desc="loading GenBank"):
-            comma = line.find(",")
-            accession = line[:comma]
-            species = line.strip()[comma + 1:]
-            if (species in self.name2ID):
-                node = self.getSpeciesNode(self.nodes[self.name2ID[species]])
-                if (node is not None):
-                    id = node.name
-
-                    # get filePath
-                    name = accession[:accession.index(".")]
-                    chunks = [name[i:i+3] for i in range(0, len(name), 3)]
-                    fileName = f"{chunks[-1]}.fasta"
-                    path = f"{config.ncbiNucleotideFolder}/fna/{'/'.join(chunks[:-1])}/{fileName}"
-
-                    # add path to species
-                    if (id in self.species):
-                        self.species[id].append((name, path))
-                    else:
-                        self.species[id] = [(name, path)]
+    def loadAccession(self):
+        id2AccessionFile = f"{config.cacheResultFolder}/NCBIID2Accesssion.json"
+        accession2IDFile = f"{config.cacheResultFolder}/Accession2NCBIID.json"
+        if (os.path.exists(id2AccessionFile) and os.path.exists(accession2IDFile)):
+            with open(id2AccessionFile) as fp:
+                self.ID2accession = json.load(fp)
+            with open(accession2IDFile) as fp:
+                self.accession2ID = json.load(fp)
+        else:
+            with open(f"{config.modelRoot}/NCBI/Nucleotide/genbank.accession") as fp:
+                fp.readline()
+                lines = fp.readlines()
+            for line in tqdm(lines, desc="loading Accession"):
+                comma = line.find(",")
+                accession = line[:comma]
+                species = line.strip()[comma + 1:]
+                if (species in self.name2ID):
+                    node = self.getSpeciesNode(self.nodes[self.name2ID[species]])
+                    if (node is not None):
+                        name = accession[:accession.index(".")]
+                        self.accession2ID[name] = node.name
+                        if (node.name not in self.ID2accession):
+                            self.ID2accession[node.name] = [name]
+                        else:
+                            self.ID2accession[node.name].append(name)
+            
+            with open(id2AccessionFile, 'wt') as fp:
+                json.dump(self.ID2accession, fp, indent=2, sort_keys=True)
+            with open(accession2IDFile, 'wt') as fp:
+                json.dump(self.accession2ID, fp, indent=2, sort_keys=True)
 
     # assume root is exported
     def exportSubTree(self, rootID, nodeFP, nameFP):

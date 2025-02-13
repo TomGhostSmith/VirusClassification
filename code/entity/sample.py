@@ -3,9 +3,9 @@ from prototype.result import Result
 class Sample():
     # the stdResult is ICTV name
     def __init__(self, seq):
-        self.id = seq.id
-        self.isATCG = None
-        self.length = len(seq.seq)
+        self.id:str = seq.id
+        self.isATCG:bool = None
+        self.length:int = len(seq.seq)
         self.seq = seq
         # if (stdResult is not None):
         #     self.stdResult = taxoTree.getTaxoNodeFromICTV(ICTVName=stdResult)
