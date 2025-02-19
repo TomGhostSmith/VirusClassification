@@ -1,6 +1,7 @@
 import datetime
 import os
 import sys
+import shutil
 from Bio import SeqIO
 from entity.sample import Sample
 
@@ -35,3 +36,9 @@ def findSample(samples:list[Sample], sampleID:str):
         if sample.id == sampleID:
             return sample
     return None
+
+def checkAndEmptyFolder(folder):
+    if os.path.exists(folder) and os.path.isdir(folder):
+        showInfo(f"Emptying {folder}", "WARN")
+        shutil.rmtree(folder)
+    os.makedirs(folder)

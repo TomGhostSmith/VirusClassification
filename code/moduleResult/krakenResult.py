@@ -1,6 +1,5 @@
 from prototype.result import Result
 from entity.taxoTree import taxoTree
-from config import config
 
 class KrakenResult(Result):
     def __init__(self, line:str):
