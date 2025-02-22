@@ -20,18 +20,19 @@ from moduleResult.phagcnResult import PhaGCNResult
 class PhaGCN(Module):
     def __init__(self, threads=12, lenThresh=8000):
         self.threads = threads
-        super().__init__("PhaGCN2.0")
+        super().__init__("PhaGCN-VMRv1")
         self.cacheResult = f"{config.cacheResultFolder}/{self.moduleName}.json"
-        self.cachedSamples:dict[str, int] = dict()
+        self.cachedSamples:dict[str, str] = dict()
         self.lenThresh = lenThresh   # PhaGCN recommend 8000, and the minimum is 1700
+        self.oomThresh = 4000000  # sequence longer than this should be run with CPU to avoid cuda OOM
 
     
-    def runOnePhagcn(self, outputFolder, idx):
-        env = {
-            'CUDA_VISIBLE_DEVICES': "1",
-            'MKL_SERVICE_FORCE_INTEL': "1"
-        }
-        env.update(os.environ)
+    def runOnePhagcn(self, outputFolder, idx, GPUDevice="1"):
+        env = os.environ.copy()
+        env['CUDA_VISIBLE_DEVICES'] = "1"
+        env['MKL_SERVICE_FORCE_INTEL'] = "1"
+        env["CNN_DEVICE"] = GPUDevice
+        
         cwd = "/Software/PhaGCN2.0"
         command = f"conda run -n phagcn python run_Speed_up.py --len {self.lenThresh} --outpath {outputFolder}"
         # subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd, env=env)
@@ -58,29 +59,32 @@ class PhaGCN(Module):
 
         params = list()
 
-        file_id = 0
         records = []
+        longRecords = []
         for sample in samples:
-            if len(records) == 1000:
-                outputFolder = f"{config.cacheFolder}/phagcn_output_{file_id}"
-                queryFile = f"{outputFolder}/input/contig_0.fasta"
-                # IOUtils.checkAndEmptyFolder(f"{outputFolder}")
-                os.makedirs(f"{outputFolder}/input")
-                IOUtils.writeSampleFasta(records, queryFile)
-                params.append([outputFolder, file_id])
-                records = []
-                file_id += 1
             if not bool(re.compile(r'[^ATCG]').search(str(sample.seq.seq).upper())):
                 if len(sample.seq.seq) > self.lenThresh:
-                    records.append(sample)
-        if len(records) != 0:
-            outputFolder = f"{config.cacheFolder}/phagcn_output_{file_id}"
+                    if (len(sample.seq.seq) < self.oomThresh):
+                        records.append(sample)
+                    else:
+                        longRecords.append(sample)
+
+        commonFiles = math.ceil(len(records)/1000)
+        for i in range(commonFiles):
+            outputFolder = f"{config.cacheFolder}/phagcn_output_{i}"
             queryFile = f"{outputFolder}/input/contig_0.fasta"
-            # IOUtils.checkAndEmptyFolder(f"{outputFolder}")
             os.makedirs(f"{outputFolder}/input")
-            IOUtils.writeSampleFasta(records, queryFile)
-            params.append([outputFolder, file_id])
-            file_id += 1
+            IOUtils.writeSampleFasta(records[i*1000:(i+1)*1000], queryFile)
+            params.append([outputFolder, str(i), "1"])
+        
+        longSeqFiles = math.ceil(len(longRecords)/100)
+        for i in range(longSeqFiles):
+            outputFolder = f"{config.cacheFolder}/phagcn_output_long_{i}"
+            queryFile = f"{outputFolder}/input/contig_0.fasta"
+            os.makedirs(f"{outputFolder}/input")
+            IOUtils.writeSampleFasta(longRecords[i*100:(i+1)*100], queryFile)
+            params.append([outputFolder, f"long_{i}", ""])
+        
 
         # for param in params:
         #     res = self.runOnePhagcn(*param)
@@ -102,7 +106,7 @@ class PhaGCN(Module):
             pool.close()
             pool.join()
         
-        for i in range(file_id):
+        for i in range(commonFiles):
             shutil.rmtree(f"{config.cacheFolder}/phagcn_output_{i}")
 
         for sample in samples:

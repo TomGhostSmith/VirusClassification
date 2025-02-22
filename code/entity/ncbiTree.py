@@ -33,7 +33,7 @@ class NCBITree():
         self.nodeLines = dict()
         self.nameLines = dict()
 
-        self.accession2ID = dict()  # key: accession (also known as ICTV ID)  value: node
+        self.accession2ID = dict()  # key: accession (also known as ICTV ID)  value: id
         self.ID2accession = dict()  # key: ID  value: a list of accessions (also known as ICTV IDs)
 
 

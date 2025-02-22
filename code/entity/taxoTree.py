@@ -21,6 +21,7 @@ class TaxoTree():
 
         IOUtils.showInfo('Loading ICTV Tree')
         self.ICTVTree.loadNodes()
+        self.ICTVTree.loadAccession()
 
         IOUtils.showInfo('Loading Viral NCBI Tree')
         self.viralNCBITree.loadNodes()

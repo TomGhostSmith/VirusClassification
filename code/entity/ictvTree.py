@@ -20,6 +20,9 @@ class ICTVTree():
         self.name2ID = dict()
         self.ID2name = dict()
 
+        self.accession2name = dict()  # key: accession (also known as ICTV ID)  value: name
+        self.name2accession = dict()  # key: Name  value: a list of accessions (also known as ICTV IDs)
+
         self.rankLevels = [
             "realm",     # the clade in NCBI tree is equal to the realm in the ICTV tree
             "subrealm",
@@ -63,6 +66,14 @@ class ICTVTree():
             # add synonyms, which is at terms[-2]
             self.nodes[terms[-2]] = parentNode
             self.name2ID[terms[-2]] = ID
+    
+    def loadAccession(self):
+        for accession, node in self.species.items():
+            if node.name not in self.name2accession:
+                self.name2accession[node.name] = [accession]
+            else:
+                self.name2accession[node.name].append(accession)
+            self.accession2name[accession] = node.name
 
     def showNode(self, node):
         result = list()
