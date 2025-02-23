@@ -21,7 +21,6 @@ class TaxoTree():
 
         IOUtils.showInfo('Loading ICTV Tree')
         self.ICTVTree.loadNodes()
-        self.ICTVTree.loadAccession()
 
         IOUtils.showInfo('Loading Viral NCBI Tree')
         self.viralNCBITree.loadNodes()
@@ -118,6 +117,8 @@ class TaxoTree():
             NCBISpeciesPath = NCBISpeciesNode.path
             for NCBINode in reversed(NCBISpeciesPath):
                 ncbiName = self.viralNCBITree.ID2name[NCBINode.name]  # note: the name of NCBI node is its id
+                if ncbiName.endswith("sp."):
+                    ncbiName = ncbiName[:-3].strip()
                 if (ncbiName in self.ICTVTree.nodes):
                     ICTVNode = self.ICTVTree.nodes[ncbiName]
 

@@ -44,14 +44,19 @@ class Vcontact(Module):
 
         params = list()
 
-        samplePerGroup = 300
+        samplePerGroup = 1000
+
+        # remove the cached folders to avoid chaos
+        # for i in range(commonFiles):
+        #     if (os.path.exists(f"{config.cacheFolder}/vcontact_output_{i}")):
+        #         shutil.rmtree(f"{config.cacheFolder}/vcontact_output_{i}")
 
         commonFiles = math.ceil(len(samples)/samplePerGroup)
         for i in range(commonFiles):
             outputFolder = f"{config.cacheFolder}/vcontact_output_{i}"
             queryFile = f"{outputFolder}/dna.fasta"
-            # os.makedirs(outputFolder)
-            os.makedirs(outputFolder, exist_ok=True)
+            os.makedirs(outputFolder)
+            # os.makedirs(outputFolder, exist_ok=True)
             IOUtils.writeSampleFasta(samples[i*samplePerGroup : (i+1)*samplePerGroup], queryFile)
             params.append([outputFolder, str(i)])
         
@@ -71,8 +76,8 @@ class Vcontact(Module):
             pool.close()
             pool.join()
         
-        # for i in range(commonFiles):
-        #     shutil.rmtree(f"{config.cacheFolder}/vcontact_output_{i}")
+        for i in range(commonFiles):
+            shutil.rmtree(f"{config.cacheFolder}/vcontact_output_{i}")
 
         for sample in samples:
             if sample.id not in self.cachedSamples:

@@ -33,8 +33,8 @@ class NCBITree():
         self.nodeLines = dict()
         self.nameLines = dict()
 
-        self.accession2ID = dict()  # key: accession (also known as ICTV ID)  value: id
-        self.ID2accession = dict()  # key: ID  value: a list of accessions (also known as ICTV IDs)
+        self.accession2ID = dict()  # key: accession  value: id
+        self.ID2accession = dict()  # key: ID  value: a list of accessions
 
 
     def loadNodes(self):
@@ -143,6 +143,13 @@ class NCBITree():
                 json.dump(self.ID2accession, fp, indent=2, sort_keys=True)
             with open(accession2IDFile, 'wt') as fp:
                 json.dump(self.accession2ID, fp, indent=2, sort_keys=True)
+    
+    def isValidTaxoNode(self, node):
+        acceptableRanks = set(config.evaluationRanks)
+        for n in node.path:
+            if n.rank not in acceptableRanks:
+                return False
+        return True
 
     # assume root is exported
     def exportSubTree(self, rootID, nodeFP, nameFP):
