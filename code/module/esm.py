@@ -1,4 +1,6 @@
+# reconstructed
 import os
+import json
 import pandas
 
 from config import config
@@ -26,12 +28,20 @@ class ESM(Module):
 
     def run(self, samples:list[Sample]):
         results = list()
-        viruses = set()
-        cacheFile = f"{config.resultRoot}/cachedResults/{config.datasetName}/VirusPred/esm2_t30_512.tsv"
+
+        cacheFile = f"{config.cacheResultFolder}/ESM_pred.json"
         if (os.path.exists(cacheFile)):
             with open(cacheFile) as fp:
-                viruses = {l.strip() for l in fp}
-        else:
+                thisRes = json.load(fp)
+
+        samplesToRun:list[Sample] = list()
+        for sample in samples:
+            if sample.id not in thisRes:
+                samplesToRun.append(sample)
+        
+        if (len(samplesToRun) > 0):
+            viruses = set()
+
             self.model = ESMRunner(512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)
             self.model.run(samples)
 
@@ -56,9 +66,15 @@ class ESM(Module):
                     viruses.add(row.seq_name)
 
             del self.model
+
+            for sample in samplesToRun:
+                if sample.id in viruses:
+                    thisRes[sample.id] = "Virus"
+                else:
+                    thisRes[sample.id] = "NonVirus"
             
         for sample in samples:
-            if sample.id in viruses:
+            if thisRes[sample.id] == "Virus":
                 results.append(VirusPredictionResult())
             else:
                 results.append(None)

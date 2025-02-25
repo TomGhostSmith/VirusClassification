@@ -19,4 +19,9 @@ class GenomadResult(Result):
         self.markerEnrichment = float(terms[9])
 
     def calcTaxoNode(self):
-        self.node = taxoTree.getTaxoNodeFromNCBI(NCBIName=self.finalSpecies)
+        if (self.finalSpecies in taxoTree.viralNCBITree.name2ID):
+            self.node = taxoTree.getTaxoNodeFromNCBI(NCBIName=self.finalSpecies)
+        elif (self.finalSpecies in taxoTree.ICTVTree.name2ID):
+            self.node = taxoTree.getTaxoNodeFromICTV(ICTVName=self.finalSpecies)
+        else:
+            self.node = None

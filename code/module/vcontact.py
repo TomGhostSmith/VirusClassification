@@ -14,7 +14,7 @@ from prototype.module import Module
 from config import config
 from utils import IOUtils
 from entity.sample import Sample
-from moduleResult.phagcnResult import PhaGCNResult
+from moduleResult.plainResult import PlainResult
 
 
 class Vcontact(Module):
@@ -107,10 +107,10 @@ class Vcontact(Module):
 
         return results
     
-    def getResult(self, sample:Sample)->PhaGCNResult:
+    def getResult(self, sample:Sample)->PlainResult:
         res = self.cachedSamples[sample.id]
         if (res != "N/A"):
-            result = PhaGCNResult(res)
+            result = PlainResult(res)
         else:
             result = None
 

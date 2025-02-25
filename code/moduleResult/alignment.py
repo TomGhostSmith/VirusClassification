@@ -1,14 +1,15 @@
 # reconstructed
 import re
+from entity.taxoTree import taxoTree
 
 class Alignment():
     # def __init__(self, ref, quality, cigar):
     def __init__(self, alignment:str):
         terms = alignment.strip().split('\t')
-        self.ref = terms[2] # the ref is supposed to be ICTV ID
-        if (self.ref == '*'):
+        if (terms[2] == '*'):
             self.ref = None
         else:
+            self.ref = taxoTree.ICTVTree.accession2ID[terms[2]] # the ref is accession, so we convert that to ICTV ID
             self.position = int(terms[3])
             self.quality = int(terms[4])
             self.cigar = terms[5]

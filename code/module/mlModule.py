@@ -1,4 +1,6 @@
+# reconstructed
 import os
+import json
 import pandas
 from config import config
 from prototype.module import Module
@@ -88,14 +90,24 @@ class MLModule(Module):
 
     def runModel(self, samples:list[Sample], rank:str)->list[Sample]:
 
-        abbr = self.modelParams[rank][1].split('/')[-1]
-        cachedRes = f"{config.resultRoot}/cachedResults/{config.datasetName}/MLResult/{rank}_{abbr}.csv"
-        if (os.path.exists(cachedRes)):
-            df_filtered = pandas.read_csv(cachedRes)
-        else:
+        # abbr = self.modelParams[rank][1].split('/')[-1]
 
+        cachedFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}.json"
+        if (os.path.exists(cachedFile)):
+            with open(cachedFile) as fp:
+                thisRes = json.load(fp)
+        else:
+            thisRes = dict()
+
+        samplesToRun:list[Sample] = list()
+        for sample in samples:
+            if (sample.id not in thisRes):
+                samplesToRun.append(sample)
+
+
+        if (len(samplesToRun) > 0):
             model = ESMRunner(*self.modelParams[rank])
-            model.run(samples)
+            model.run(samplesToRun)
 
             
             level = rank.capitalize()
@@ -131,14 +143,20 @@ class MLModule(Module):
 
             del model
 
-        thisRes = dict()
 
-        for row in df_filtered.itertuples():
-            id = row.seq_name
-            score = row.prediction_score
-            res = row.taxa_prediction
-            thisRes[id] = (res, score)
+            for row in df_filtered.itertuples():
+                id = row.seq_name
+                score = float(row.prediction_score)
+                res = row.taxa_prediction
+                thisRes[id] = [res, score]
+            
+            for sample in samplesToRun:
+                if (sample.id not in thisRes):
+                    thisRes[sample.id] = 'N/A'
 
+
+            with open(cachedFile, 'wt') as fp:
+                json.dump(thisRes, fp, indent=2)
 
             # if (id not in self.resultDict):
             #     self.resultDict[id] = MLResult(self.strategy, self.thresh)
@@ -148,7 +166,7 @@ class MLModule(Module):
         for sample in samples:
             if sample.id not in self.resultDict:
                 self.resultDict[sample.id] = MLResult(self.strategy, self.thresh)
-            if (sample.id in thisRes):
+            if (thisRes[sample.id] != 'N/A'):
                 self.resultDict[sample.id].addResult(*thisRes[sample.id])
             if not (self.resultDict[sample.id].terminate):
                 unTerminatedSamples.append(sample)

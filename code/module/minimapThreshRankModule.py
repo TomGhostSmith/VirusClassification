@@ -20,11 +20,10 @@ class MinimapThreshRankModule(Minimap):
         self.moduleName = f"minimapThRank-ref={self.reference};mode={self.mode};thRank-{self.code}"
 
     def run(self, samples):
-        super().run(samples)
-        return [self.getResult(sample) for sample in samples]
+        results = super().run(samples)
+        return [self.extractResult(sample, res) for sample, res in zip(samples, results)]
         
-    def getResult(self, sample:Sample):
-        res = super().getResult(sample)
+    def extractResult(self, sample, res):
         if (res is not None):
             alignment:Alignment = res.bestAlignment
             key = list()

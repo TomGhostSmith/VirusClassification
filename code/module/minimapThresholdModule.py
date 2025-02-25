@@ -16,12 +16,11 @@ class MinimapThresholdModule(Minimap):
         self.moduleName = f'minimapThresh-ref={self.reference};mode={self.mode};thresh-{"_".join(self.factors)}'
 
     def run(self, samples):
-        super().run(samples)
-        return [self.getResult(sample) for sample in samples]
+        results = super().run(samples)
+        return [self.extractResult(sample, result) for sample, result in zip(samples, results)]
     
     
-    def getResult(self, sample):
-        result = super().getResult(sample)
+    def extractResult(self, sample, result):
         if (result is not None):
             if ("positive" in self.factors and result.bestAlignment.quality == 0):
                 result = None

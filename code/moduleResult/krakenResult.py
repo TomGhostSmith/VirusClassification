@@ -18,4 +18,7 @@ class KrakenResult(Result):
                     self.kmerCounts[id] = count
 
     def calcTaxoNode(self):
-        self.node = taxoTree.getTaxoNodeFromNCBI(NCBIID=self.finalSpecies)
+        if (self.finalSpecies in taxoTree.viralNCBITree.nodes):
+            self.node = taxoTree.getTaxoNodeFromNCBI(NCBIID=self.finalSpecies)
+        else:
+            self.node = None

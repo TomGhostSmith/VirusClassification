@@ -1,12 +1,14 @@
 # reconstructing
 import re
+from entity.taxoTree import taxoTree
+
 
 class BlastAlignment():
     # def __init__(self, ref, quality, cigar):
     def __init__(self, alignment:str):
         terms = alignment.strip().split('\t')
 
-        self.ref = terms[1]
+        self.ref = taxoTree.ICTVTree.accession2ID[terms[1]]
         self.similarity = float(terms[2])
         self.length = int(terms[3])
         self.mismatch = int(terms[4])

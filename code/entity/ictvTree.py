@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import pandas
@@ -44,16 +45,42 @@ class ICTVTree():
         ]
 
     def loadNodes(self):
+        def handleAccession(accession):
+            if ("(" in accession):
+                accession = re.sub(r'\(.*?\)', '', accession).strip()
+    
+            if (";" in accession):
+                accessions = [a.strip() for a in accession.split(';')]
+            else:
+                accessions = [accession.strip()]
+            
+            tmp = accessions.copy()
+            accessions = list()
+            for a in tmp:
+                if (":" in a):
+                    accessions.append(a.split(':')[1].strip())
+                else:
+                    accessions.append(a.strip())
+            
+            return accessions
         df = pandas.read_csv(self.taxoFile)
         synonyms = dict()   # key: name. value: ID
+
+        # df['Virus GENBANK accession'] = df['Virus GENBANK accession'].apply(lambda x: re.sub(r'\(.*?\)', '', x))
         for _, row in df.iterrows():
+            # remove the parentheses in the accession
             accession = row["Virus GENBANK accession"]
-            ID = row["Species Sort"]
-            self.accession2ID[accession] = ID
-            if ID not in self.ID2accession:
-                self.ID2accession[ID] = [accession]
-            else:
-                self.ID2accession[ID].append(accession)
+            ID = str(row["Species Sort"])
+            if (not pandas.isna(accession)):
+                accessions = handleAccession(accession)
+                for accession in accessions:
+                    # if (re.search(r'[^0-9A-Z_]', accession)):
+                    #     raise ValueError(f"'{accession}' is invalid")
+                    self.accession2ID[accession] = ID
+                    if ID not in self.ID2accession:
+                        self.ID2accession[ID] = [accession]
+                    else:
+                        self.ID2accession[ID].append(accession)
             if (ID not in self.species):
                 parentNode = self.root
                 for rank in self.rankLevels:
