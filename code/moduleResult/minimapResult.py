@@ -49,3 +49,11 @@ class MinimapResult(Result):
                 if config.rankLevels[n.rank] <= targetRankLevel:
                     self.node = taxoTree.getTaxoNodeFromNode(ICTVNode=n)
                     break
+    
+    def __copy__(self):
+        obj = MinimapResult()
+        obj.alignments = self.alignments        # shallow copy, alignments are read only
+        obj.bestAlignment = self.bestAlignment  # shallow copy, alignments are read only
+        obj.rank = self.rank                    # a string, which will generate a new object
+        obj.scores = self.scores.copy()         # deep copy the scores inside the list
+        return obj

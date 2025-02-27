@@ -1,5 +1,6 @@
 from entity.sample import Sample
 from prototype.result import Result
+from utils import IOUtils
 
 class Module():
     def __init__(self, name):
@@ -14,6 +15,7 @@ class Module():
             results = self.run(samples)
             for sample, result in zip(samples, results):
                 sample.addResult(self.moduleName, result)
+        pass
 
     # only run the samples (which are not in the answer)
     def run(self, samples:list[Sample])->list[Result]:

@@ -1,6 +1,7 @@
 from module.minimap import Minimap
 from moduleResult.alignment import Alignment
 from entity.sample import Sample
+from moduleResult.minimapResult import MinimapResult
 
 class MinimapThreshRankModule(Minimap):
     def __init__(self, reference, mode='ont', threads=12, skipComments=True, limitOutputDict=None):
@@ -23,8 +24,10 @@ class MinimapThreshRankModule(Minimap):
         results = super().run(samples)
         return [self.extractResult(sample, res) for sample, res in zip(samples, results)]
         
-    def extractResult(self, sample, res):
+    def extractResult(self, sample, res:MinimapResult):
         if (res is not None):
+            # note: since we will modify the result later, we should copy the origin result object
+            res = res.__copy__()
             alignment:Alignment = res.bestAlignment
             key = list()
             if (alignment.quality == 60):
