@@ -9,9 +9,9 @@ from torch.nn import Softmax
 from Bio import SeqIO
 from torch import nn
 import transformers
+import subprocess
 import torch
 import csv
-import os
 
 from entity.sample import Sample
 from config import config
@@ -37,10 +37,10 @@ class DataCollatorForSupervisedDataset(object):
 
 class ESMRunner():
     def __init__(self, maxLen, modelFolder, baseModelFolder, n_class, batchSize=64, cachedResult=None):
-        self.tempDNAFasta = f"{config.tempFolder}/DNAs.fasta"
-        self.tempProFasta = f"{config.tempFolder}/proteins.fasta"
-        self.tempProCSV = f"{config.tempFolder}/proteins.csv"
-        self.tempResCSV = f"{config.tempFolder}/res.csv"
+        self.tempDNAFasta = f"{config.cacheFolder}/DNAs.fasta"
+        self.tempProFasta = f"{config.cacheFolder}/proteins.fasta"
+        self.tempProCSV = f"{config.cacheFolder}/proteins.csv"
+        self.tempResCSV = f"{config.cacheFolder}/res.csv"
 
         self.maxLen = maxLen
         self.modleFolder = modelFolder
@@ -97,7 +97,7 @@ class ESMRunner():
                 SeqIO.write(sample.seq, fp, 'fasta')
         
         # 2. convert DNA.fasta to protein.fasta (redundant though, do not store result for each one)
-        os.system(f"prodigal-gv -i {self.tempDNAFasta} -a {self.tempProFasta} -p meta")
+        subprocess.run(f"prodigal-gv -i {self.tempDNAFasta} -a {self.tempProFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         # 3. preprocee protein.fasta to a csv file
         with open(self.tempProCSV, "w") as f:
@@ -113,7 +113,7 @@ class ESMRunner():
         def tokenize_function(examples):
             return self.tokenizer(examples["sequence"], truncation=True)
 
-        test_dataset = load_dataset('csv', data_files={'test': self.tempProCSV}, cache_dir=config.tempFolder)
+        test_dataset = load_dataset('csv', data_files={'test': self.tempProCSV}, cache_dir=config.cacheFolder)
         tokenized_datasets = test_dataset.map(tokenize_function, batched=True, batch_size=self.batchSize, remove_columns=["sequence"])
         tokenized_datasets = tokenized_datasets.with_format("torch")
         test_loader = DataLoader(tokenized_datasets["test"], batch_size=self.batchSize, collate_fn=self.data_collator)

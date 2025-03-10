@@ -79,5 +79,7 @@ class ESM(Module):
             else:
                 results.append(None)
         
+        with open(cacheFile, 'wt') as fp:
+            json.dump(thisRes, fp, indent=2)
         
         return results
