@@ -155,23 +155,3 @@ class ESMRunner():
                     row[f'class_{idx}'] = prob
 
                 writer.writerow(row)
-
-
-# a = ESMRunner(512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)
-# del a
-# b = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
-# del b
-# c = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
-# del c
-# d = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
-# del d
-# e = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
-# del e
-# f = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
-# del f
-# g = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
-# del g
-# h = ESMRunner(512, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.esmBatchSize)
-# del h
-# print('?')
-# print('?')

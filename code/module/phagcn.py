@@ -145,6 +145,3 @@ class PhaGCN(Module):
             result = None
 
         return result
-    
-    def getKrakenCommand(self, queryFile):
-        return f"kraken2 --db {config.modelRoot}/kraken2 {queryFile}"
