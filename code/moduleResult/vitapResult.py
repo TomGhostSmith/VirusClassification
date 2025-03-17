@@ -7,7 +7,7 @@ class VitapResult(Result):
         self.finalSpecies = None
         terms = line.strip().split('\t')
         taxos = terms[0].split(";")
-        for taxo in reversed(taxos):
+        for taxo in taxos:
             if (taxo != '-'):
                 self.finalSpecies = taxo
                 break
@@ -15,7 +15,7 @@ class VitapResult(Result):
         self.confidence = terms[2]
 
     def calcTaxoNode(self):
-        if (self.finalSpecies in taxoTree.viralNCBITree.nodes):
-            self.node = taxoTree.getTaxoNodeFromNCBI(NCBIID=self.finalSpecies)
+        if (self.finalSpecies in taxoTree.ICTVTree.nodes):
+            self.node = taxoTree.getTaxoNodeFromICTV(ICTVName=self.finalSpecies)
         else:
             self.node = None

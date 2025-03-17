@@ -50,14 +50,15 @@ class VITAP(Module):
         params = list()
 
         # commonFiles = math.ceil(len(samples)/1000)
-        if (len(samples) > self.threads * 100):
-            threads = self.threads
-        else:
-            threads = math.ceil(len(samples) / 100)
+        # if (len(samples) > self.threads * 100):
+        threads = self.threads
+        # else:
+        #     threads = math.ceil(len(samples) / 100)
         filePerThread = math.ceil(len(samples) / threads)
         for i in range(threads):
             outputFolder = f"{config.cacheFolder}/vitap_output_{i}"
             queryFile = f"{outputFolder}/query.fasta"
+            os.makedirs(outputFolder)
             IOUtils.writeSampleFasta(samples[i*filePerThread:(i+1)*filePerThread], queryFile)
             params.append([outputFolder, str(i)])
 
@@ -66,7 +67,7 @@ class VITAP(Module):
 
 
         with multiprocessing.Pool(threads) as pool:
-            asyncResults = [pool.apply_async(self.runOnePhagcn, param) for param in params]
+            asyncResults = [pool.apply_async(self.runOneVitap, param) for param in params]
             for asyncResult in asyncResults:
                 idx = asyncResult.get()
                 outputFolder = f"{config.cacheFolder}/vitap_output_{idx}"

@@ -7,6 +7,7 @@ from config import config
 config.updatePath()
 from entity.taxoTree import taxoTree
 from prototype.result import Result
+from utils import IOUtils
 
 def evaluate(dataset, index):
     config.majorDataset = dataset
@@ -41,7 +42,11 @@ def analyseStatistics(preds, truths):
                 if sampleCounts[rank] > 0:
                     total += statistics[rank] * sampleCounts[rank]
                     totalCount += sampleCounts[rank]
-            return total / totalCount
+            if (totalCount == 0):
+                IOUtils.showInfo("0 samples available in statistics", "ERROR")
+                return 0
+            else:
+                return total / totalCount
             
 
         # Initialize metrics storage
