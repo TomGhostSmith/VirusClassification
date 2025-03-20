@@ -18,11 +18,12 @@ from moduleResult.catResult import CatResult
 
 
 class CAT(Module):
-    def __init__(self, threads=12):
-        self.threads = threads
+    def __init__(self):
         super().__init__("CAT-NCBI")
         self.cacheResult = f"{config.cacheResultFolder}/{self.moduleName}.json"
         self.cachedSamples:dict[str, str] = dict()
+        self.blockSize = 10
+        self.threads = 2
 
     
     def runOneCAT(self, outputFolder, idx):
@@ -30,7 +31,7 @@ class CAT(Module):
         
         cwd = "/Software/CAT_pack"
         inputFile = f"{outputFolder}/query.fasta"
-        command = f"conda run -n CAT CAT_pack/CAT_pack contigs -c {inputFile} -d ./model/20241212_CAT_nr_website/db -t ./model/20241212_CAT_nr_website/tax --path_to_diamond ./model/20241212_CAT_nr_website/diamond -o {outputFolder}/CAT"
+        command = f"conda run -n CAT CAT_pack/CAT_pack contigs -c {inputFile} -d /Software/CAT_pack/model/20241212_CAT_nr_website/db -t /Software/CAT_pack/model/20241212_CAT_nr_website/tax --path_to_diamond /Software/CAT_pack/model/20241212_CAT_nr_website/diamond -o {outputFolder}/CAT --block_size {self.blockSize:.1f}"
         # python run_Speed_up.py --len {self.lenThresh} --outpath {outputFolder}"
         # subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd, env=env)
         subprocess.run(command, shell=True, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stderr)
@@ -54,15 +55,41 @@ class CAT(Module):
 
         # divide sequences into groups of 1000
 
+        # re-collect former results:
+        modifiedResult = 0
+        hasFormerResult = False
+        for i in range(2):
+            outputFolder = f"{config.cacheFolder}/CAT_output_{i}"
+            resultFile = f"{outputFolder}/CAT.contig2classification.txt"
+            if (os.path.exists(outputFolder)):
+                hasFormerResult = True
+                if (os.path.exists(resultFile)):
+                    with open(resultFile) as fp:
+                        fp.readline()  # skip the title
+                        for line in fp:
+                            terms = line.strip().split('\t')
+                            sampleName = terms[0]
+                            sampleResult = "\t".join(terms[1:])
+                            self.cachedSamples[sampleName] = sampleResult
+                            modifiedResult += 1
+                shutil.rmtree(f"{config.cacheFolder}/CAT_output_{i}")
+        if (hasFormerResult):
+            with open(self.cacheResult, 'wt') as fp:
+                json.dump(self.cachedSamples, fp, indent=2)
+            IOUtils.showInfo(f"Found and saved previous {modifiedResult} results. Please re-run the command")
+            exit(-1)
+
         params = list()
 
-        # commonFiles = math.ceil(len(samples)/1000)
-        # if (len(samples) > self.threads * 100):
-        threads = self.threads
-        # else:
-        #     threads = math.ceil(len(samples) / 100)
-        filePerThread = math.ceil(len(samples) / threads)
-        for i in range(threads):
+        maxSamplePerThread = 1200
+        if (len(samples) > 2 * maxSamplePerThread):
+            processes = math.ceil(len(samples) / maxSamplePerThread / 2) * 2   # we want to avoid an "odd" number of threads
+        else:
+            processes = 2
+        filePerThread = math.ceil(len(samples) / processes)
+        # memory: 20GB + fpt/100 + blocksize + fpt * blocksize / 675 < 50
+        self.blockSize = (30 - filePerThread/100) / (filePerThread/675 + 1)
+        for i in range(processes):
             outputFolder = f"{config.cacheFolder}/CAT_output_{i}"
             queryFile = f"{outputFolder}/query.fasta"
             os.makedirs(outputFolder)
@@ -85,7 +112,7 @@ class CAT(Module):
             pool.close()
             pool.join()
         
-        for i in range(threads):
+        for i in range(processes):
             shutil.rmtree(f"{config.cacheFolder}/CAT_output_{i}")
 
         for sample in samples:
@@ -118,14 +145,14 @@ class CAT(Module):
     
     def getResult(self, sample:Sample)->CatResult:
         res = self.cachedSamples[sample.id]
+        result = None
         if (res != "N/A"):
             terms = res.split('\t')
-            taxos = terms[2].split(';')
-            scores = terms[3].split(';')
-            scores = [float(score) for score in scores]
-            taxoRes = list(zip(taxos, scores))
-            result = CatResult(taxoRes)
-        else:
-            result = None
-
+            if (len(terms) > 3):
+                taxos = terms[2].split(';')
+                scores = terms[3].split(';')
+                scores = [float(score) for score in scores]
+                taxoRes = list(zip(taxos, scores))
+                result = CatResult(taxoRes)
+                
         return result
