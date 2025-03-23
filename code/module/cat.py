@@ -4,6 +4,8 @@ import re
 import sys
 import json
 import math
+import time
+import psutil
 import shutil
 import multiprocessing
 import subprocess
@@ -22,19 +24,66 @@ class CAT(Module):
         super().__init__("CAT-NCBI")
         self.cacheResult = f"{config.cacheResultFolder}/{self.moduleName}.json"
         self.cachedSamples:dict[str, str] = dict()
-        self.blockSize = 10
         self.threads = 2
 
     
-    def runOneCAT(self, outputFolder, idx):
+    def runOneCAT(self, outputFolder, idx, blockSize):
+        IOUtils.showInfo(f"run cat for subset {idx}")
         env = os.environ.copy()
         
         cwd = "/Software/CAT_pack"
         inputFile = f"{outputFolder}/query.fasta"
-        command = f"conda run -n CAT CAT_pack/CAT_pack contigs -c {inputFile} -d /Software/CAT_pack/model/20241212_CAT_nr_website/db -t /Software/CAT_pack/model/20241212_CAT_nr_website/tax --path_to_diamond /Software/CAT_pack/model/20241212_CAT_nr_website/diamond -o {outputFolder}/CAT --block_size {self.blockSize:.1f}"
+        command = f"conda run -n CAT CAT_pack/CAT_pack contigs -c {inputFile} -d /Software/CAT_pack/model/20241212_CAT_nr_website/db -t /Software/CAT_pack/model/20241212_CAT_nr_website/tax --path_to_diamond /Software/CAT_pack/model/20241212_CAT_nr_website/diamond -o {outputFolder}/CAT --block_size {blockSize:.1f}"
         # python run_Speed_up.py --len {self.lenThresh} --outpath {outputFolder}"
         # subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd, env=env)
-        subprocess.run(command, shell=True, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stderr)
+        process = subprocess.Popen(command, shell=True, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stderr)
+
+        monitored_time = 0
+        cat_process = psutil.Process(process.pid)
+        wait_diamond_timeout = 300
+        monitor_timeout = 600
+        diamondPID = None
+        diamondProcess = None
+        mem_thresh = 60
+        # step 1: find diamond
+        while monitored_time < wait_diamond_timeout:
+            for child in cat_process.children(recursive=True):
+                if ("diamond" in child.name().lower()):
+                    diamondPID = child.pid
+                    diamondProcess = psutil.Process(child.pid)
+                    break
+            if (diamondPID is not None):
+                break
+            time.sleep(5)
+            monitored_time += 5
+
+        # handle error if timeout and not found diamond
+        if (diamondProcess is None):
+            IOUtils.showInfo("timeout for finding DIAMOND process")
+            return idx, blockSize, True
+        IOUtils.showInfo(f"found DIAMOND process: PID={diamondPID}")
+
+        while monitored_time < monitor_timeout:
+            if not diamondProcess.is_running():
+                return idx, blockSize, True
+            try:
+                mem_usage = diamondProcess.memory_percent()
+                totalUsed = psutil.virtual_memory().used/1024/1024/1024
+                totalMem = psutil.virtual_memory().total/1024/1024/1024
+            except psutil.NoSuchProcess:
+                return idx, blockSize, True
+            if (mem_usage > mem_thresh and totalMem - totalUsed < 10):
+                print(f"kill pid={diamondPID}, who uses memory {mem_usage}%, which is above the threshold {mem_thresh}%")
+                subprocess.run(f"kill {diamondPID}", shell=True)
+                return idx, blockSize, False
+
+            monitored_time += 5
+            time.sleep(5)
+        
+        process.wait()
+
+        return idx, blockSize, True
+
         
         # process = subprocess.Popen(command, shell=True, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         # while True:
@@ -44,24 +93,23 @@ class CAT(Module):
         #     if output:
         #         print(f"{output.strip()}")
 
-
-        return idx
     
 
     def cat(self, samples:list[Sample])->None:
 
         IOUtils.showInfo(f"Begin CAT on {len(samples)} samples")
 
-
-        # divide sequences into groups of 1000
-
         # re-collect former results:
         modifiedResult = 0
         hasFormerResult = False
-        for i in range(2):
-            outputFolder = f"{config.cacheFolder}/CAT_output_{i}"
-            resultFile = f"{outputFolder}/CAT.contig2classification.txt"
-            if (os.path.exists(outputFolder)):
+        potentialIndexes = list()
+        potentialIndexes += list(range(100))
+        potentialIndexes += [f"spec_{idx}" for idx in range(100)]
+        folders = os.listdir(config.cacheFolder)
+        for folder in folders:
+            folderPath = f"{config.cacheFolder}/{folder}"
+            if (folder.startswith("CAT_output_") and os.path.isdir(folderPath)):
+                resultFile = f"{folderPath}/CAT.contig2classification.txt"
                 hasFormerResult = True
                 if (os.path.exists(resultFile)):
                     with open(resultFile) as fp:
@@ -72,7 +120,7 @@ class CAT(Module):
                             sampleResult = "\t".join(terms[1:])
                             self.cachedSamples[sampleName] = sampleResult
                             modifiedResult += 1
-                shutil.rmtree(f"{config.cacheFolder}/CAT_output_{i}")
+                shutil.rmtree(folderPath)
         if (hasFormerResult):
             with open(self.cacheResult, 'wt') as fp:
                 json.dump(self.cachedSamples, fp, indent=2)
@@ -81,38 +129,97 @@ class CAT(Module):
 
         params = list()
 
-        maxSamplePerThread = 1200
-        if (len(samples) > 2 * maxSamplePerThread):
-            processes = math.ceil(len(samples) / maxSamplePerThread / 2) * 2   # we want to avoid an "odd" number of threads
+        # pickout too short samples (who may have too many alignments)
+        basicSamples = list()
+        remainedSamples = list()
+        for sample in samples:
+            # if (sample.length < 200):
+            #     specSamples.append(sample)
+            # else:
+            basicSamples.append(sample)
+        
+        indexes = list()
+
+        downGrades = [
+            2000,
+            1500,
+            1000,
+            750,
+            500,
+            300,
+            200,
+            100
+        ]
+        extCount = 0
+
+        maxSamplePerThread = 2000
+        if (len(basicSamples) > 2 * maxSamplePerThread):
+            processes = math.ceil(len(basicSamples) / maxSamplePerThread / 2) * 2   # we want to avoid an "odd" number of threads
         else:
             processes = 2
-        filePerThread = math.ceil(len(samples) / processes)
+        filePerThread = math.ceil(len(basicSamples) / processes)
         # memory: 20GB + fpt/100 + blocksize + fpt * blocksize / 675 < 50
-        self.blockSize = (30 - filePerThread/100) / (filePerThread/675 + 1)
+        # self.blockSize = (28 - filePerThread/100) / (filePerThread/675 + 1)
         for i in range(processes):
             outputFolder = f"{config.cacheFolder}/CAT_output_{i}"
             queryFile = f"{outputFolder}/query.fasta"
             os.makedirs(outputFolder)
-            IOUtils.writeSampleFasta(samples[i*filePerThread:(i+1)*filePerThread], queryFile)
-            params.append([outputFolder, str(i)])
+            IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
+            params.append([outputFolder, str(i), 10])
+            indexes.append(str(i))
 
         with multiprocessing.Pool(self.threads) as pool:
             asyncResults = [pool.apply_async(self.runOneCAT, param) for param in params]
-            for asyncResult in asyncResults:
-                idx = asyncResult.get()
-                outputFolder = f"{config.cacheFolder}/CAT_output_{idx}"
-                resultFile = f"{outputFolder}/CAT.contig2classification.txt"
-                with open(resultFile) as fp:
-                    fp.readline()  # skip the title
-                    for line in fp:
-                        terms = line.strip().split('\t')
-                        sampleName = terms[0]
-                        sampleResult = "\t".join(terms[1:])
-                        self.cachedSamples[sampleName] = sampleResult
+            while (len(asyncResults) > 0):
+                time.sleep(5)
+                for asyncResult in asyncResults[:]:
+                    if (asyncResult.ready()):
+                        idx, blkSize, success = asyncResult.get()
+                        asyncResults.remove(asyncResult)
+                        if (success):
+                            outputFolder = f"{config.cacheFolder}/CAT_output_{idx}"
+                            resultFile = f"{outputFolder}/CAT.contig2classification.txt"
+                            with open(resultFile) as fp:
+                                fp.readline()  # skip the title
+                                for line in fp:
+                                    terms = line.strip().split('\t')
+                                    sampleName = terms[0]
+                                    sampleResult = "\t".join(terms[1:])
+                                    self.cachedSamples[sampleName] = sampleResult
+                        else:  # OOM happened
+                            originFile = f"{config.cacheFolder}/CAT_output_{idx}/query.fasta"
+                            originSamples = IOUtils.loadSamples(originFile)
+                            subIndex = f"{idx}_degrade"
+                            outputFolder1 = f"{config.cacheFolder}/CAT_output_{subIndex}"
+                            queryFile1 = f"{outputFolder1}/query.fasta"
+                            os.makedirs(outputFolder1)
+                            # samplePerFile = math.ceil(len(originSamples) / 2)
+                            nextSampleCount = 50
+                            for k in downGrades:
+                                if (k < len(originSamples)):
+                                    nextSampleCount = k
+                            IOUtils.writeSampleFasta(originSamples[:nextSampleCount], queryFile1)
+                            asyncResults.append(pool.apply_async(self.runOneCAT, [outputFolder1, subIndex, blkSize-1]))
+                            remainedSamples += originSamples[nextSampleCount:]
+                            indexes.append(subIndex)
+
+                            while (len(remainedSamples) >= maxSamplePerThread or len(asyncResults) <= 1):
+                                subIndex = f"ext_{extCount}"
+                                outputFolder2 = f"{config.cacheFolder}/CAT_output_{subIndex}"
+                                queryFile2 = f"{outputFolder2}/query.fasta"
+                                os.makedirs(outputFolder2)
+                                IOUtils.writeSampleFasta(remainedSamples[:maxSamplePerThread], queryFile2)
+                                remainedSamples = remainedSamples[maxSamplePerThread:]
+                                asyncResults(pool.apply_async(self.runOneCAT, [outputFolder2, subIndex, 10]))
+                                indexes.append(subIndex)
+                                extCount += 1
+
+                            del originSamples
+
             pool.close()
             pool.join()
         
-        for i in range(processes):
+        for i in indexes:
             shutil.rmtree(f"{config.cacheFolder}/CAT_output_{i}")
 
         for sample in samples:

@@ -33,6 +33,8 @@ class ESM(Module):
         if (os.path.exists(cacheFile)):
             with open(cacheFile) as fp:
                 thisRes = json.load(fp)
+        else:
+            thisRes = dict()
 
         samplesToRun:list[Sample] = list()
         for sample in samples:
