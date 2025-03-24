@@ -27,7 +27,7 @@ class CAT(Module):
         self.threads = 2
 
     
-    def runOneCAT(self, outputFolder, idx, blockSize):
+    def runOneCAT(self, outputFolder, idx, blockSize, querySize):
         IOUtils.showInfo(f"run cat for subset {idx}")
         env = os.environ.copy()
         
@@ -60,29 +60,29 @@ class CAT(Module):
         # handle error if timeout and not found diamond
         if (diamondProcess is None):
             IOUtils.showInfo("timeout for finding DIAMOND process")
-            return idx, blockSize, True
+            return idx, blockSize, querySize, True
         IOUtils.showInfo(f"found DIAMOND process: PID={diamondPID}")
 
         while monitored_time < monitor_timeout:
             if not diamondProcess.is_running():
-                return idx, blockSize, True
+                return idx, blockSize, querySize, True
             try:
                 mem_usage = diamondProcess.memory_percent()
                 totalUsed = psutil.virtual_memory().used/1024/1024/1024
                 totalMem = psutil.virtual_memory().total/1024/1024/1024
             except psutil.NoSuchProcess:
-                return idx, blockSize, True
+                return idx, blockSize, querySize, True
             if (mem_usage > mem_thresh and totalMem - totalUsed < 10):
                 print(f"kill pid={diamondPID}, who uses memory {mem_usage}%, which is above the threshold {mem_thresh}%")
                 subprocess.run(f"kill {diamondPID}", shell=True)
-                return idx, blockSize, False
+                return idx, blockSize, querySize, False
 
             monitored_time += 5
             time.sleep(5)
         
         process.wait()
 
-        return idx, blockSize, True
+        return idx, blockSize, querySize, True
 
         
         # process = subprocess.Popen(command, shell=True, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -141,32 +141,59 @@ class CAT(Module):
         indexes = list()
 
         downGrades = [
-            2000,
-            1500,
-            1000,
-            750,
-            500,
-            300,
-            200,
-            100
+50, 40, 30, 20, 10
         ]
-        extCount = 0
+        # downGrades = [
+        #     2400,
+        #     1800,
+        #     1200,
+        #     800,
+        #     500,
+        #     300,
+        #     200,
+        #     100
+        # ]
+        # extCount = 0
 
-        maxSamplePerThread = 2000
-        if (len(basicSamples) > 2 * maxSamplePerThread):
-            processes = math.ceil(len(basicSamples) / maxSamplePerThread / 2) * 2   # we want to avoid an "odd" number of threads
-        else:
-            processes = 2
-        filePerThread = math.ceil(len(basicSamples) / processes)
+        # maxSamplePerThread = 1800
+        maxSamplePerThread = 60
+        # if (len(basicSamples) > 2 * maxSamplePerThread):
+        #     processes = math.ceil(len(basicSamples) / maxSamplePerThread / 2) * 2   # we want to avoid an "odd" number of threads
+        # else:
+        #     processes = 2
+        totalBP = 0
+        # processes = 0
+        # filePerThread = math.ceil(len(basicSamples) / processes)
         # memory: 20GB + fpt/100 + blocksize + fpt * blocksize / 675 < 50
         # self.blockSize = (28 - filePerThread/100) / (filePerThread/675 + 1)
-        for i in range(processes):
-            outputFolder = f"{config.cacheFolder}/CAT_output_{i}"
+        thisCollection = list()
+        thisIdx = 0
+        for sample in samples:
+            totalBP += sample.length
+            thisCollection.append(sample)
+            if totalBP > maxSamplePerThread * 1024 * 1024:
+                outputFolder = f"{config.cacheFolder}/CAT_output_{thisIdx}"
+                queryFile = f"{outputFolder}/query.fasta"
+                os.makedirs(outputFolder)
+                # IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
+                IOUtils.writeSampleFasta(thisCollection, queryFile)
+                params.append([outputFolder, str(thisIdx), 10, maxSamplePerThread])
+                indexes.append(str(thisIdx))
+                thisCollection = list()
+                totalBP = 0
+                thisIdx += 1
+        
+        if totalBP > 0:
+            outputFolder = f"{config.cacheFolder}/CAT_output_{thisIdx}"
             queryFile = f"{outputFolder}/query.fasta"
             os.makedirs(outputFolder)
-            IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
-            params.append([outputFolder, str(i), 10])
-            indexes.append(str(i))
+            # IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
+            IOUtils.writeSampleFasta(thisCollection, queryFile)
+            params.append([outputFolder, str(thisIdx), 10])
+            indexes.append(str(thisIdx))
+            thisCollection = list()
+            totalBP = 0
+            thisIdx += 1
 
         with multiprocessing.Pool(self.threads) as pool:
             asyncResults = [pool.apply_async(self.runOneCAT, param) for param in params]
@@ -174,7 +201,7 @@ class CAT(Module):
                 time.sleep(5)
                 for asyncResult in asyncResults[:]:
                     if (asyncResult.ready()):
-                        idx, blkSize, success = asyncResult.get()
+                        idx, blkSize, querySize, success = asyncResult.get()
                         asyncResults.remove(asyncResult)
                         if (success):
                             outputFolder = f"{config.cacheFolder}/CAT_output_{idx}"
@@ -189,32 +216,43 @@ class CAT(Module):
                         else:  # OOM happened
                             originFile = f"{config.cacheFolder}/CAT_output_{idx}/query.fasta"
                             originSamples = IOUtils.loadSamples(originFile)
-                            subIndex = f"{idx}_degrade"
-                            outputFolder1 = f"{config.cacheFolder}/CAT_output_{subIndex}"
-                            queryFile1 = f"{outputFolder1}/query.fasta"
-                            os.makedirs(outputFolder1)
-                            # samplePerFile = math.ceil(len(originSamples) / 2)
-                            nextSampleCount = 50
+                            remainedSamples += originSamples
+
+
+                            nextSampleSize = 50
                             for k in downGrades:
-                                if (k < len(originSamples)):
-                                    nextSampleCount = k
-                            IOUtils.writeSampleFasta(originSamples[:nextSampleCount], queryFile1)
-                            asyncResults.append(pool.apply_async(self.runOneCAT, [outputFolder1, subIndex, blkSize-1]))
-                            remainedSamples += originSamples[nextSampleCount:]
-                            indexes.append(subIndex)
+                                if (k < querySize):
+                                    nextSampleSize = k
+                                    break
 
-                            while (len(remainedSamples) >= maxSamplePerThread or len(asyncResults) <= 1):
-                                subIndex = f"ext_{extCount}"
-                                outputFolder2 = f"{config.cacheFolder}/CAT_output_{subIndex}"
-                                queryFile2 = f"{outputFolder2}/query.fasta"
-                                os.makedirs(outputFolder2)
-                                IOUtils.writeSampleFasta(remainedSamples[:maxSamplePerThread], queryFile2)
-                                remainedSamples = remainedSamples[maxSamplePerThread:]
-                                asyncResults(pool.apply_async(self.runOneCAT, [outputFolder2, subIndex, 10]))
-                                indexes.append(subIndex)
-                                extCount += 1
+                            thisCollection = list()
+                            for sample in remainedSamples:
+                                totalBP += sample.length
+                                thisCollection.append(sample)
+                                if totalBP > maxSamplePerThread * 1024 * 1024:
+                                    outputFolder = f"{config.cacheFolder}/CAT_output_{thisIdx}"
+                                    queryFile = f"{outputFolder}/query.fasta"
+                                    os.makedirs(outputFolder)
+                                    # IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
+                                    IOUtils.writeSampleFasta(thisCollection, queryFile)
+                                    asyncResults.append(pool.apply_async(self.runOneCAT, [outputFolder, str(thisIdx), blkSize - 1, nextSampleSize]))
+                                    indexes.append(str(thisIdx))
+                                    thisIdx += 1
+                                    thisCollection = list()
+                                    totalBP = 0
 
-                            del originSamples
+                        if (len(asyncResults) <= 1 and len(remainedSamples) > 0):
+                            outputFolder = f"{config.cacheFolder}/CAT_output_{thisIdx}"
+                            queryFile = f"{outputFolder}/query.fasta"
+                            os.makedirs(outputFolder)
+                            # IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
+                            IOUtils.writeSampleFasta(remainedSamples, queryFile)
+                            asyncResults.append(pool.apply_async(self.runOneCAT, [outputFolder, str(thisIdx), blkSize - 1, nextSampleSize]))
+                            indexes.append(str(thisIdx))
+                            thisIdx += 1
+                            thisCollection = list()
+                            totalBP = 0
+
 
             pool.close()
             pool.join()
