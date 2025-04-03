@@ -65,12 +65,14 @@ class CAT(Module):
 
         while monitored_time < monitor_timeout:
             if not diamondProcess.is_running():
+                IOUtils.showInfo("subprocess 'diamond' is finished", 'WARN')
                 return idx, blockSize, querySize, True
             try:
                 mem_usage = diamondProcess.memory_percent()
                 totalUsed = psutil.virtual_memory().used/1024/1024/1024
                 totalMem = psutil.virtual_memory().total/1024/1024/1024
             except psutil.NoSuchProcess:
+                IOUtils.showInfo("subprocess 'diamond' is lost", 'WARN')
                 return idx, blockSize, querySize, True
             if (mem_usage > mem_thresh and totalMem - totalUsed < 10):
                 print(f"kill pid={diamondPID}, who uses memory {mem_usage}%, which is above the threshold {mem_thresh}%")
@@ -79,8 +81,11 @@ class CAT(Module):
 
             monitored_time += 5
             time.sleep(5)
+
+        IOUtils.showInfo(f'monitor for PID={diamondPID} timeout. Diamond will keep running')
         
         process.wait()
+        IOUtils.showInfo("one CAT finished")
 
         return idx, blockSize, querySize, True
 
@@ -156,7 +161,8 @@ class CAT(Module):
         # extCount = 0
 
         # maxSamplePerThread = 1800
-        maxSamplePerThread = 60
+        # maxSamplePerThread = 60
+        maxSamplePerThread = 45
         # if (len(basicSamples) > 2 * maxSamplePerThread):
         #     processes = math.ceil(len(basicSamples) / maxSamplePerThread / 2) * 2   # we want to avoid an "odd" number of threads
         # else:
@@ -177,7 +183,7 @@ class CAT(Module):
                 os.makedirs(outputFolder)
                 # IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
                 IOUtils.writeSampleFasta(thisCollection, queryFile)
-                params.append([outputFolder, str(thisIdx), 10, maxSamplePerThread])
+                params.append([outputFolder, str(thisIdx), 10, totalBP/1024/1024])
                 indexes.append(str(thisIdx))
                 thisCollection = list()
                 totalBP = 0
@@ -189,7 +195,7 @@ class CAT(Module):
             os.makedirs(outputFolder)
             # IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
             IOUtils.writeSampleFasta(thisCollection, queryFile)
-            params.append([outputFolder, str(thisIdx), 10])
+            params.append([outputFolder, str(thisIdx), 10, totalBP/1024/1024])
             indexes.append(str(thisIdx))
             thisCollection = list()
             totalBP = 0

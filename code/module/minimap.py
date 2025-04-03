@@ -34,7 +34,7 @@ class Minimap(Module):
 
         command = self.getMinimapCommand(queryFile)
         with open(resultFile, 'wt') as fp:
-            subprocess.run(command, shell=True, stdout=fp, stderr=subprocess.DEVNULL)
+            subprocess.run(command, shell=True, stdout=fp, stderr=subprocess.STDOUT)
         targetFP = open(self.cacheFile, 'at')
 
         thisName = None

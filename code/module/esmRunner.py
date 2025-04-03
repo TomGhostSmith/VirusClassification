@@ -58,7 +58,9 @@ class ESMRunner():
     def loadModel(self):
         self.model = transformers.AutoModelForSequenceClassification.from_pretrained(self.baseModelFolder,
                                                                                 num_labels=self.n_class,
-                                                                                trust_remote_code=True)
+                                                                                trust_remote_code=True,
+                                                                                torch_dtype=torch.float16,
+                                                                                )
 
         self.model.load_state_dict(torch.load(f"{self.modleFolder}/pytorch_model.bin", map_location=torch.device('cpu')), strict=False)
 
@@ -67,7 +69,7 @@ class ESMRunner():
             model_max_length=self.maxLen,
             padding_side="right",
             use_fast=True,
-            trust_remote_code=True,
+            trust_remote_code=True
         )
 
         self.data_collator = DataCollatorForSupervisedDataset(tokenizer=self.tokenizer)
