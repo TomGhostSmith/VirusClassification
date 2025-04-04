@@ -10,12 +10,16 @@ from Bio import SeqIO
 from torch import nn
 import transformers
 import subprocess
+import multiprocessing
 import torch
+import math
 import csv
+import os
 
 from entity.sample import Sample
 from config import config
 from Bio import SeqIO
+from utils import IOUtils
 
 @dataclass
 class DataCollatorForSupervisedDataset(object):
@@ -52,8 +56,6 @@ class ESMRunner():
 
         if (self.useCache):
             self.tempResCSV = cachedResult
-        else:
-            self.loadModel()
 
     def loadModel(self):
         self.model = transformers.AutoModelForSequenceClassification.from_pretrained(self.baseModelFolder,
@@ -88,18 +90,40 @@ class ESMRunner():
         self.model.to(self.device)
         self.model.eval()
 
+        def runSingleProdigal(self, idx, dnaFasta, outputFasta):
+            subprocess.run(f"prodigal-gv -i {dnaFasta} -a {outputFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return idx
+
 
     def run(self, samples:list[Sample]):
         if (self.useCache):
             return
         
         # 1. store samples to a fasta file
-        with open(self.tempDNAFasta, 'wt') as fp:
-            for sample in samples:
-                SeqIO.write(sample.seq, fp, 'fasta')
+        # with open(self.tempDNAFasta, 'wt') as fp:
+        #     for sample in samples:
+        #         SeqIO.write(sample.seq, fp, 'fasta')
         
         # 2. convert DNA.fasta to protein.fasta (redundant though, do not store result for each one)
-        subprocess.run(f"prodigal-gv -i {self.tempDNAFasta} -a {self.tempProFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        recordPerThread = 100
+        splitCount = math.ceil(len(samples)/recordPerThread)
+        proteinFastaFP = open(self.tempProFasta, 'wt')
+
+        with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
+            asyncResults = list()
+            for i in range(splitCount):
+                IOUtils.writeSampleFasta(samples[recordPerThread * i : recordPerThread * (i+1)], f"{self.tempDNAFasta}.{i}")
+        
+                asyncResults.append(pool.apply_async(self.runSingleProdigal, 
+                                                [i, f"{self.tempDNAFasta}.{i}", f"{self.tempProFasta}.{i}"]))
+                
+            for asyncResult in asyncResults:
+                idx = asyncResult.get()
+                with open(f"{self.tempProFasta}.{idx}") as fp:
+                    proteinFastaFP.writelines(fp.readlines())
+        # subprocess.run(f"prodigal-gv -i {self.tempDNAFasta} -a {self.tempProFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for i in range(splitCount):
+            os.remove(f"{self.tempDNAFasta}.{i}")
 
         # 3. preprocee protein.fasta to a csv file
         with open(self.tempProCSV, "w") as f:
@@ -109,6 +133,7 @@ class ESMRunner():
                 f.write(f'{sequence},{record.id}\n')
 
         # 4. load model, run and save result
+        self.loadModel()
         self.runModel()
 
     def runModel(self):
