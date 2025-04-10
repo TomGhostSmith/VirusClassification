@@ -90,9 +90,9 @@ class ESMRunner():
         self.model.to(self.device)
         self.model.eval()
 
-        def runSingleProdigal(self, idx, dnaFasta, outputFasta):
-            subprocess.run(f"prodigal-gv -i {dnaFasta} -a {outputFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return idx
+    def runSingleProdigal(self, idx, dnaFasta, outputFasta):
+        subprocess.run(f"prodigal-gv -i {dnaFasta} -a {outputFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return idx
 
 
     def run(self, samples:list[Sample]):
@@ -124,6 +124,7 @@ class ESMRunner():
         # subprocess.run(f"prodigal-gv -i {self.tempDNAFasta} -a {self.tempProFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for i in range(splitCount):
             os.remove(f"{self.tempDNAFasta}.{i}")
+            os.remove(f"{self.tempProFasta}.{i}")
 
         # 3. preprocee protein.fasta to a csv file
         with open(self.tempProCSV, "w") as f:

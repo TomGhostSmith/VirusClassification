@@ -18,20 +18,21 @@ from moduleResult.plainResult import PlainResult
 
 
 class Vcontact(Module):
-    def __init__(self, threads=12):
+    def __init__(self, db, threads=multiprocessing.cpu_count()):
+        self.db = db
         self.threads = threads
-        super().__init__("vContact")
+        super().__init__(f"vContact-{db}")
         self.cacheResult = f"{config.cacheResultFolder}/{self.moduleName}.json"
         self.cachedSamples:dict[str, str] = dict()
 
     
-    def runOneVcontact(self, outputFolder, idx):
+    def runOneVcontact(self, outputFolder, idx, threads):
         cwd = "/Software/vcontact2"
-        command = f"conda run -n vContact2 python main.py --input {outputFolder}/dna.fasta --output {outputFolder}"
-        # subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd, env=env)
+        command = f"conda run -n vContact2 python main.py --input {outputFolder}/dna.fasta --output {outputFolder} --db {self.db} --threads {threads}"
         IOUtils.showInfo(f"Working on fragment {idx}")
-        IOUtils.showInfo(f"Finished on fragment {idx}")
+        # subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd, env=env)
         subprocess.run(command, shell=True, cwd=cwd, stdout=sys.stdout, stderr=sys.stderr)
+        IOUtils.showInfo(f"Finished on fragment {idx}")
         return idx
     
 
@@ -58,7 +59,11 @@ class Vcontact(Module):
             os.makedirs(outputFolder)
             # os.makedirs(outputFolder, exist_ok=True)
             IOUtils.writeSampleFasta(samples[i*samplePerGroup : (i+1)*samplePerGroup], queryFile)
-            params.append([outputFolder, str(i)])
+            if (i + 1 == commonFiles and i % 2 == 0):
+                threads = self.threads
+            else:
+                threads = self.threads // 2
+            params.append([outputFolder, str(i), threads])
         
 
         # for param in params:
