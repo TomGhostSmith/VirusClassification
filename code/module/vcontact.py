@@ -45,7 +45,7 @@ class Vcontact(Module):
 
         params = list()
 
-        samplePerGroup = 1000
+        samplePerGroup = 10000
 
         # remove the cached folders to avoid chaos
         # for i in range(commonFiles):

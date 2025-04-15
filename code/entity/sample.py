@@ -11,7 +11,7 @@ class Sample():
         #     self.stdResult = taxoTree.getTaxoNodeFromICTV(ICTVName=stdResult)
         # else:
         #     self.stdResult = None
-        self.results = dict()
+        self.results:dict[str, Result] = dict()
         self.info = dict()
 
     def addResult(self, name:str, result:Result):

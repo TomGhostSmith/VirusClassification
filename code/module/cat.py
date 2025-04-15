@@ -107,9 +107,6 @@ class CAT(Module):
         # re-collect former results:
         modifiedResult = 0
         hasFormerResult = False
-        potentialIndexes = list()
-        potentialIndexes += list(range(100))
-        potentialIndexes += [f"spec_{idx}" for idx in range(100)]
         folders = os.listdir(config.cacheFolder)
         for folder in folders:
             folderPath = f"{config.cacheFolder}/{folder}"
@@ -130,7 +127,7 @@ class CAT(Module):
             with open(self.cacheResult, 'wt') as fp:
                 json.dump(self.cachedSamples, fp, indent=2)
             IOUtils.showInfo(f"Found and saved previous {modifiedResult} results. Please re-run the command")
-            exit(-1)
+            exit(0)
 
         params = list()
 
