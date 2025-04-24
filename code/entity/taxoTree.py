@@ -133,6 +133,7 @@ class TaxoTree():
 
     def getTaxoNodeFromNCBI(self, NCBIID=None, NCBIName=None):
         result = TaxoNode()
+        result.origin = "NCBI"
 
         # convert invalid ID or name to None
         if (NCBIName is not None and NCBIName not in self.viralNCBITree.name2ID):
@@ -173,6 +174,7 @@ class TaxoTree():
 
     def getTaxoNodeFromICTV(self, ICTVID=None, ICTVName=None):
         result = TaxoNode()
+        result.origin = "ICTV"
 
         # convert invalid ID or name to None
         # if (ICTVName is not None and ICTVName not in self.ICTVTree.name2ID):
@@ -220,6 +222,7 @@ class TaxoTree():
         
         result = TaxoNode()
         if (ICTVNode is not None):
+            result.origin = "ICTV"
             result.ICTVNode = ICTVNode
             result.ICTVName = ICTVNode.name
             result.ICTVID = self.ICTVTree.name2ID.get(ICTVNode.name)# note: the ICTV name miight not be the species name, so there might be no ID for this
@@ -227,6 +230,7 @@ class TaxoTree():
             result.NCBIID = result.NCBINode.name   # yes, NCBI Node has ID as its name
             result.NCBIName = self.viralNCBITree.ID2name[result.NCBIID]
         elif (NCBINode is not None):
+            result.origin = "NCBI"
             result.NCBINode = NCBINode
             result.NCBIID = NCBINode.name
             result.NCBIName = self.viralNCBITree.ID2name[NCBINode.name]

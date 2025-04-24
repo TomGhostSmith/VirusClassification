@@ -7,6 +7,7 @@ from config import config
 config.updatePath()
 from entity.taxoTree import taxoTree
 from prototype.result import Result
+from entity.taxoNode import TaxoNode
 from utils import IOUtils
 
 def evaluate(dataset, index):
@@ -22,7 +23,7 @@ def evaluate(dataset, index):
     df.to_csv(f'{config.resultBase}/statistics-{index}.csv', index=False)
 
 
-def analyseStatistics(preds, truths):
+def analyseStatistics(preds:dict[str, TaxoNode], truths, missingLabel="Unknown"):
         def macro_accuracy(y_true, y_pred):
             classes = set(y_true)
             class_accuracies = []
@@ -68,11 +69,7 @@ def analyseStatistics(preds, truths):
             if (std == 'no answer'):
                 continue
             stdNode = taxoTree.getTaxoNodeFromICTV(ICTVName=std)
-            pred = preds[id]
-            if (pred == 'no result'):
-                predictNode = None
-            else:
-                predictNode = taxoTree.getTaxoNodeFromICTV(ICTVName=pred)
+            predictNode = preds.get(id)
 
             # currently we do not care about virus prediction
             # stdNode can still be None because there are nonVirus samples 
@@ -83,6 +80,11 @@ def analyseStatistics(preds, truths):
             if (predictNode is not None):
                 for node in predictNode.ICTVNode.path:
                     predictions[id][node.rank.capitalize()] = node.name
+                # if (predictNode.origin == "NCBI"):
+                #     for node in predictNode.NCBINode.path:
+                #         r = node.rank.capitalize()
+                #         if (r in taxonomic_levels and r not in predictions[id]):
+                #             predictions[id][r] = node.name
 
         # Calculate metrics for each taxonomic level
         for level in taxonomic_levels:
@@ -93,7 +95,7 @@ def analyseStatistics(preds, truths):
             bin_pred = list()
 
             for contig in true_labels.keys():
-                true_label = true_labels[contig].get(level, 'Unknown')
+                true_label = true_labels[contig].get(level, missingLabel)
                 pred_label = predictions[contig].get(level, 'Unknown') if contig in predictions else 'Unknown'
 
                 if pred_label != 'Unknown':

@@ -1,4 +1,3 @@
-from prototype.mergeModule import MergeModule
 from prototype.module import Module
 from moduleResult.minimapResult import MinimapResult
 from moduleResult.alignment import Alignment

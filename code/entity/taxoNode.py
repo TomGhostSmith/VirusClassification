@@ -6,6 +6,7 @@ class TaxoNode():
         self.NCBIName = None
         self.ICTVNode = None
         self.NCBINode = None
+        self.origin = None
 
         # note:
         # if there is no complete corresponding node, then find the most similar one. e.g. ICTVID, ICTVNode are the species-level, but the NCBIID, NCBIName, etc. are genus level
