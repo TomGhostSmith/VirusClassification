@@ -40,6 +40,8 @@ from module.metabuli import Metabuli
 from entity.taxoTree import taxoTree
 from entity.sample import Sample
 
+import matplotlib.markers as mmarkers
+
 
 def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset=None, missingLabel="Unknown"):
     queryFilePath = f"/Data/VirusClassification/dataset/{dataset}/{dataset}.fasta"
@@ -88,7 +90,11 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
     fig, ax = plt.subplots(figsize=(1.5*(1 + len(rankLevels)), 6))
     x = numpy.arange(len(rankLevels))
     width = 1.5 / (len(models) + 2)
+
+    modelRecalls = list()
+    modelPrecisions = list()
     
+    availableColors = plt.get_cmap('tab20').colors
 
     with pandas.ExcelWriter(fileName) as writer:
     # for _ in range(1):
@@ -111,7 +117,13 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
 
             recallList = list()
             accuracyList = list()
-            for row in df.itertuples():
+            precisionList = list()
+
+            totalPrecision = 0
+            totalPrecisionCount = 0
+            totalRecall = 0
+            totalRecallCount = 0
+            for _, row in df.iterrows():
                 bin_recall = f"{float(row.Recall_Binary):.3f}" if row.Recall_Binary != '-' else '-'
                 bin_precision = f"{float(row.Precision_Binary):.3f}" if row.Precision_Binary != '-' else '-'
                 overall_acc = f"{float(row.ACC_overall):.3f}" if row.ACC_overall != '-' else '-'
@@ -119,16 +131,28 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
 
                 rec = row.Recall_Binary if row.Recall_Binary != '-' else 0
                 acc = row.ACC_overall * rec if row.ACC_overall != '-' else 0
+                prec = row.Precision_overall if row.Precision_overall != '-' else 0
+
+
 
                 if (row.Level.lower() in rankLevels):
                     recallList.append(rec)
                     accuracyList.append(acc)
+                    precisionList.append(prec)
+                    sampleCount = row["#True_labels_available"]
+                    totalPrecision += prec * sampleCount
+                    totalPrecisionCount += sampleCount
+                    totalRecall += rec * sampleCount
+                    totalRecallCount += sampleCount
 
             # bars = ax.bar(x + idx*width, recallList, width, label=f"model {idx} recall", alpha=0.7)
-            bars = ax.bar(x*1.5 + idx*width, recallList, width, alpha=0.3)
+            bars = ax.bar(x*1.5 + idx*width, recallList, width, alpha=0.3, color=availableColors[idx])
             # ax.bar(x + idx*width, accuracyList, width, color=bars[0].get_facecolor(), label=f"model {idx} accuracy", hatch='//')
             # ax.bar(x*1.5 + idx*width, accuracyList, width, color=bars[0].get_facecolor(), hatch='/', edgecolor='black')
             ax.bar(x*1.5 + idx*width, accuracyList, width, color=bars[0].get_facecolor(), alpha=0.9, label=f"{modelDesc}")
+
+            modelRecalls.append(totalRecall / totalRecallCount if totalRecallCount > 0 else 0)
+            modelPrecisions.append(totalPrecision / totalPrecisionCount if totalPrecisionCount > 0 else 0)
 
         
         pandas.DataFrame(summaryDict).to_excel(writer, sheet_name='summary', index=False)
@@ -141,12 +165,37 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
     ax.legend(loc="upper left", bbox_to_anchor=(1, 1))
 
     if (withSubRank):
-        fileName = f"working/performance_withSub_{dataset}.png"
+        fileName = f"working/performance_withSub_{dataset}_{missingLabel}.png"
     else:
-        fileName = f"working/performance_{dataset}.png"
+        fileName = f"working/performance_{dataset}_{missingLabel}.png"
 
     plt.savefig(fileName, bbox_inches="tight")
     plt.close()
+
+
+    # save scatter plot
+    if (withSubRank):
+        fileName = f"working/performance_withSub_{dataset}_{missingLabel}_scatter.png"
+    else:
+        fileName = f"working/performance_{dataset}_{missingLabel}_scatter.png"
+
+    plt.figure(figsize=(6, 6))
+    markers = [m for m in mmarkers.MarkerStyle.markers.keys() if isinstance(m, str) and m not in (".", ",", " ", "")]
+    for idx, ((model, modelDesc), recall, precision) in enumerate(zip(models, modelRecalls, modelPrecisions)):
+        plt.scatter(recall, precision, color=availableColors[idx], marker=markers[idx], s=100, label=modelDesc)
+    
+    
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title(f"Performance of {len(models)} models on {dataset}. Missing label are set as {missingLabel}")
+    plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+    plt.grid(True)
+    # plt.xlim((int(min(modelRecalls) * 10 - 1))/10, 1)
+    # plt.ylim(0.5, 1)
+    plt.savefig(fileName, bbox_inches="tight")
+    plt.close()
+
+    
 
     IOUtils.showInfo('Done')
 
@@ -455,7 +504,9 @@ def getModels():
     blast = Blast(reference="VMRv4")
     blast_train = Blast(reference="VMRv4_ML_train")
     kraken = Kraken()
-    metabuli = Metabuli()
+    metabuli = Metabuli("VMRv4")
+    metabuli_train = Metabuli("VMRv4_ML_train")
+
     minimap = Minimap(reference='VMRv4')
     minimap_train = Minimap(reference='VMRv4_ML_train')
     minimap_thrank = MinimapThreshRankModule(reference="VMRv4", limitOutputDict=thRank)
@@ -521,13 +572,14 @@ def getModels():
         (genomad, "genomAD-1.9_NCBI"),
         (cat, "CAT_NCBI"),
         # (minimap, "minimap_VMRv4"), 
-        # (minimap_thrank, "minimap_VMRv4_threshold"), 
-        (minimap_train, "minimap_VMRv4(ESMTrain)"),
+        (minimap_thrank, "minimap_VMRv4_threshold"), 
+        # (minimap_train, "minimap_VMRv4(ESMTrain)"),
         # (minimap_thrank_train, "minimap_VMRv4_threshold(ESMTrain)"),
-        # (blast, "blast_VMRv4"),
-        (blast_train, "blast_VMRv4(ESMTrain)"),
+        (blast, "blast_VMRv4"),
+        # (blast_train, "blast_VMRv4(ESMTrain)"),
         (metabuli, "Metabuli v1.0.9.2"),
-        # (vcontact, "vConTACT2_ProkaryoticViralRefSeq211"),
+        # (metabuli_train, "Metabuli v1.0.9.2 (ESM Train)"),
+        (vcontact, "vConTACT2_ProkaryoticViralRefSeq211"),
         # (vcontact_VMRv4, "vConTACT2_VMRv4"),
         # (vcontact_ML_train, "vConTACT2_VMRv4(ESMTrain)"),
         # (phagcn2_1000, "PhaGCN2_n=1000_VMRv1"),
@@ -546,10 +598,10 @@ def getModels():
         (ml, "VirTaxonomer-ML_VMRv4"),
         # (virTaxonomer_virus_identify, "VirTaxonomer-Identify"),
         # (virTaxonomer_virus_identify_train, "VirTaxonomer-Identify(ESMTrain)")
-        # (virTaxonomerStandard, "VirTaxonomer"),
-        (virTaxonomerStandard_train, "VirTaxonomer (ESMTrain)"),
-        # (virTaxonomerTaxoOnly, "VirTaxonomer (no viral identify)"),
-        (virTaxonomerTaxoOnly_train, "VirTaxonomer (no viral identify) (ESMTrain)"),
+        (virTaxonomerStandard, "VirTaxonomer"),
+        # (virTaxonomerStandard_train, "VirTaxonomer (ESMTrain)"),
+        (virTaxonomerTaxoOnly, "VirTaxonomer (no viral identify)"),
+        # (virTaxonomerTaxoOnly_train, "VirTaxonomer (no viral identify) (ESMTrain)"),
         # (minimap_genomad, "minimap_genomad (no viral identify)"),
         # (minimap_genomad_train, "minimap_genomad (no viral identify) (ESMTrain)"),
         # (ml_genomad, "ml_genomad (no viral identify)"),
@@ -564,7 +616,7 @@ def getModels():
     ]
 
 def main():
-    # missingLabel = "Unknown"
+    missingLabel = "Unknown"
     missingLabel = "Other"
 
     # mergeCachedResults()
@@ -573,10 +625,10 @@ def main():
     # # testModel(models, 'genbank_2024_test', 'textMatch')
 
     # testModel(models, 'vitap', 'std', missingLabel=missingLabel)
-    testModel(models, 'VMRv4_test_subseq', 'accessionMatch', missingLabel=missingLabel)
-    testModel(models, 'VMRv4_test', 'accessionMatch', missingLabel=missingLabel)
-    # testModel(models, 'refseq_2024_test',  'accessionMatch', missingLabel=missingLabel)
-    # testModel(models, 'genbank_2024_test', 'accessionMatch', missingLabel=missingLabel)
+    # testModel(models, 'VMRv4_test_subseq', 'accessionMatch', missingLabel=missingLabel)
+    # testModel(models, 'VMRv4_test', 'accessionMatch', missingLabel=missingLabel)
+    testModel(models, 'refseq_2024_test',  'accessionMatch', missingLabel=missingLabel)
+    testModel(models, 'genbank_2024_test', 'accessionMatch', missingLabel=missingLabel)
     # testModelVirusIdentity(models, 'HGUT-Arch-Virus')
     # testModel(models, 'genbank_2024_test', 'accessionMatch')
     # testModel(models, 'genbank_2024_test', 'accessionMatch', "species")

@@ -13,8 +13,9 @@ from moduleResult.plainResult import PlainResult
 
 
 class Metabuli(Module):
-    def __init__(self, ):
-        super().__init__(f"metabuli-v1.0.9.2")
+    def __init__(self, trainset):
+        super().__init__(f"metabuli-v1.0.9.2-{trainset}")
+        IOUtils.showInfo("Currently, dataset should be manually set", "WARN")
         self.cacheResult = f"{config.cacheResultFolder}/{self.moduleName}.json"
         self.cachedSamples:dict[str, str] = dict()
     
