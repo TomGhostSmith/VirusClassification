@@ -91,8 +91,8 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
     x = numpy.arange(len(rankLevels))
     width = 1.5 / (len(models) + 2)
 
-    modelRecalls = list()
-    modelPrecisions = list()
+    modelRecalls = {r: list() for r in rankLevels}
+    modelPrecisions = {r: list() for r in rankLevels}
     
     availableColors = plt.get_cmap('tab20').colors
 
@@ -136,6 +136,9 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
 
 
                 if (row.Level.lower() in rankLevels):
+                    modelRecalls[row.Level.lower()].append(rec)
+                    modelPrecisions[row.Level.lower()].append(prec)
+
                     recallList.append(rec)
                     accuracyList.append(acc)
                     precisionList.append(prec)
@@ -151,8 +154,8 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
             # ax.bar(x*1.5 + idx*width, accuracyList, width, color=bars[0].get_facecolor(), hatch='/', edgecolor='black')
             ax.bar(x*1.5 + idx*width, accuracyList, width, color=bars[0].get_facecolor(), alpha=0.9, label=f"{modelDesc}")
 
-            modelRecalls.append(totalRecall / totalRecallCount if totalRecallCount > 0 else 0)
-            modelPrecisions.append(totalPrecision / totalPrecisionCount if totalPrecisionCount > 0 else 0)
+            # modelRecalls.append(totalRecall / totalRecallCount if totalRecallCount > 0 else 0)
+            # modelPrecisions.append(totalPrecision / totalPrecisionCount if totalPrecisionCount > 0 else 0)
 
         
         pandas.DataFrame(summaryDict).to_excel(writer, sheet_name='summary', index=False)
@@ -179,20 +182,40 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
     else:
         fileName = f"working/performance_{dataset}_{missingLabel}_scatter.png"
 
-    plt.figure(figsize=(6, 6))
     markers = [m for m in mmarkers.MarkerStyle.markers.keys() if isinstance(m, str) and m not in (".", ",", " ", "")]
-    for idx, ((model, modelDesc), recall, precision) in enumerate(zip(models, modelRecalls, modelPrecisions)):
-        plt.scatter(recall, precision, color=availableColors[idx], marker=markers[idx], s=100, label=modelDesc)
+    fig, axs = plt.subplots(2, 2, figsize=(12, 12))
+    for idx, ((model, modelDesc), recall, precision) in enumerate(zip(models, modelRecalls["order"], modelPrecisions["order"])):
+        axs[0, 0].scatter(recall, precision, color=availableColors[idx], marker=markers[idx], s=100, label=modelDesc)
+        axs[0, 0].set_title("order")
+        axs[0, 0].grid(True)
+        axs[0, 0].set_xlabel("Recall")
+        axs[0, 0].set_ylabel("Precision")
+    for idx, ((model, modelDesc), recall, precision) in enumerate(zip(models, modelRecalls["family"], modelPrecisions["family"])):
+        axs[0, 1].scatter(recall, precision, color=availableColors[idx], marker=markers[idx], s=100)
+        axs[0, 1].set_title("family")
+        axs[0, 1].grid(True)
+        axs[0, 1].set_xlabel("Recall")
+        axs[0, 1].set_ylabel("Precision")
+    for idx, ((model, modelDesc), recall, precision) in enumerate(zip(models, modelRecalls["genus"], modelPrecisions["genus"])):
+        axs[1, 0].scatter(recall, precision, color=availableColors[idx], marker=markers[idx], s=100)
+        axs[1, 0].set_title("genus")
+        axs[1, 0].grid(True)
+        axs[1, 0].set_xlabel("Recall")
+        axs[1, 0].set_ylabel("Precision")
+    for idx, ((model, modelDesc), recall, precision) in enumerate(zip(models, modelRecalls["species"], modelPrecisions["species"])):
+        axs[1, 1].scatter(recall, precision, color=availableColors[idx], marker=markers[idx], s=100)
+        axs[1, 1].set_title("species")
+        axs[1, 1].grid(True)
+        axs[1, 1].set_xlabel("Recall")
+        axs[1, 1].set_ylabel("Precision")
     
     
-    plt.xlabel("Recall")
-    plt.ylabel("Precision")
-    plt.title(f"Performance of {len(models)} models on {dataset}. Missing label are set as {missingLabel}")
-    plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
-    plt.grid(True)
+
+    fig.suptitle(f"Performance of {len(models)} models on {dataset}. Missing label are set as {missingLabel}")
+    fig.legend(loc="upper left", bbox_to_anchor=(1, 1))
     # plt.xlim((int(min(modelRecalls) * 10 - 1))/10, 1)
     # plt.ylim(0.5, 1)
-    plt.savefig(fileName, bbox_inches="tight")
+    fig.savefig(fileName, bbox_inches="tight")
     plt.close()
 
     
@@ -617,7 +640,7 @@ def getModels():
 
 def main():
     missingLabel = "Unknown"
-    missingLabel = "Other"
+    # missingLabel = "Other"
 
     # mergeCachedResults()
     models = getModels()
