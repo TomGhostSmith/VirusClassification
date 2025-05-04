@@ -121,6 +121,7 @@ class ESMRunner():
                 idx = asyncResult.get()
                 with open(f"{self.tempProFasta}.{idx}") as fp:
                     proteinFastaFP.writelines(fp.readlines())
+        proteinFastaFP.close()
         # subprocess.run(f"prodigal-gv -i {self.tempDNAFasta} -a {self.tempProFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for i in range(splitCount):
             os.remove(f"{self.tempDNAFasta}.{i}")

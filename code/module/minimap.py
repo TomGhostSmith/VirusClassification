@@ -45,7 +45,13 @@ class Minimap(Module):
 
         with open(resultFile) as fp:
             for line in fp:
+                if (line.startswith("[")):
+                    continue
                 terms = line.strip().split('\t')
+                if (len(terms) < 10):
+                    IOUtils.showInfo(f"The output of the minimap is not standard. Expect at least 10 columns, got {len(terms)}", "ERROR")
+                    IOUtils.showInfo(f"The error line is '{line}'")
+                    exit(-1)
                 terms[9] = '*'  # omit the query sequence to reduce storage space usage
                 sampleName = terms[0]
                 if (sampleName != thisName and thisName is not None):
