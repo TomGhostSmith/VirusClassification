@@ -11,6 +11,7 @@ from torch import nn
 import transformers
 import subprocess
 import multiprocessing
+from tqdm import tqdm
 import torch
 import math
 import csv
@@ -143,7 +144,7 @@ class ESMRunner():
             return self.tokenizer(examples["sequence"], truncation=True)
 
         test_dataset = load_dataset('csv', data_files={'test': self.tempProCSV}, cache_dir=config.cacheFolder)
-        tokenized_datasets = test_dataset.map(tokenize_function, batched=True, batch_size=self.batchSize, remove_columns=["sequence"])
+        tokenized_datasets = test_dataset.map(tokenize_function, batched=True, batch_size=self.batchSize, remove_columns=["sequence"], num_proc=multiprocessing.cpu_count())
         tokenized_datasets = tokenized_datasets.with_format("torch")
         test_loader = DataLoader(tokenized_datasets["test"], batch_size=self.batchSize, collate_fn=self.data_collator)
 
@@ -152,7 +153,7 @@ class ESMRunner():
 
 
         with torch.no_grad():
-            for step, batch in enumerate(test_loader):
+            for step, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
                 labels = batch['labels']
                 batch.pop('labels')
                 batch = {k: v.to(self.device) for k, v in batch.items()}
