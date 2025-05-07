@@ -25,7 +25,7 @@ class NCBITree():
         self.ranks = dict()  # key: ID   value: rank (e.g. species, genus, etc.)
         self.nodes = dict()  # key: ID   value: node on the tree
         # self.species = dict()  # key: NCBI genome file name   value: ID
-        self.species = dict()  # key: ID  value: a list of (fileName, filePath)
+        self.species:dict[str, list[tuple]] = dict()  # key: ID  value: a list of (fileName, filePath)
         self.hosts = dict() # key: ID value: host IDs
         self.root = None
 

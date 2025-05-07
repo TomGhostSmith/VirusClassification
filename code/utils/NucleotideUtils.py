@@ -131,7 +131,7 @@ def loadMetadata(version):
     return dataFrame
 
 def checkMetaSeqAlignment(version):
-    dataFrame = loadMetadata()
+    dataFrame = loadMetadata(version)
     metaNames = dataFrame["Accession"]
     metaNameset = set(metaNames)
     with open(f"{config.modelRoot}/NCBI/Nucleotide/{version}/names.txt") as fp:
@@ -152,10 +152,27 @@ def checkMetaSeqAlignment(version):
         for name in seqUnique:
             fp.write(f"{name}\n")
 
+    fnaFolder = f"{config.modelRoot}/NCBI/Nucleotide/{version}/fna"
+    count = 0
+    for name in metaUnique:
+        name = name[:name.index(".")]
+        chunks = [name[i:i+3] for i in range(0, len(name), 3)]
+        path = f"{os.path.join(fnaFolder, *chunks)}.fasta"
+        if (os.path.exists(path)):
+            if (os.path.getsize(path) == 0):
+                os.remove(path)
+                count += 1
+            else:
+                with open(path) as fp:
+                    line = fp.readline()
+                if not line.startswith(">"):
+                    os.remove(path)
+                    count += 1
+    IOUtils.showInfo(f"successfully removed {count} empty files")
 
 
 def getHost(version):
-    metaData = loadMetadata()
+    metaData = loadMetadata(version)
     host = dict()
     for row in tqdm(metaData.itertuples(), total=metadataLineCount-1):
         if ((not pandas.isnull(row.Species)) and (not pandas.isnull(row.Host))):
@@ -180,23 +197,31 @@ def getGenBank(version):
     
     tarFP.close()
 
+def getNewReleaseGenBank(version):
+    metaData = loadMetadata(version)
+    tarFP = open(f"{config.modelRoot}/NCBI/Nucleotide/{version}/genbank_2025Spring.accession", 'wt')
+    tarFP.write("Accession,Species\n")
+    for row in tqdm(metaData.itertuples(), total=metadataLineCount-1):
+        if ((not pandas.isnull(row.Species)) and (not pandas.isnull(row.Accession)) and row.Release_Date.startswith("2025")):
+            tarFP.write(f"{row.Accession},{row.Species}\n")
+    
+    tarFP.close()
+
 
 # note: there are some sequences in the fasta but has no metadata in the csv file. Please check missingFolder.txt
 def splitAllFasta(version):
-    createFolders(version)        # takes several minutes
+    # createFolders(version)        # takes several minutes
     splitFile(version)            # takes about an hour
 
 def main():
     version = "20250505"
     # createFolders(version)
-    downloadFile(version, "2025SpringNuclMetadata.csv")
+    # downloadFile(version, "2025SpringNuclMetadata.csv")
     # splitAllFasta(version)
-    # checkMetaSeqAlignment(version)
-    # checkTaxoAvailable(version)
-    # checkTaxoConnectable(version)
-    # randomPick(version)
+    checkMetaSeqAlignment(version)
     # getHost(version)
     # getGenBank(version)
+    # getNewReleaseGenBank(version)
 
 if (__name__ == '__main__'):
     main()
