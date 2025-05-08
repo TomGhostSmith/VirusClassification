@@ -684,6 +684,7 @@ def main():
     testModel(models, 'VMRv4_test', 'accessionMatch', missingLabel=missingLabel)
     # testModel(models, 'refseq_2024_test',  'accessionMatch', missingLabel=missingLabel)
     # testModel(models, 'genbank_2024_test', 'accessionMatch', missingLabel=missingLabel)
+    testModel(models, 'genbank_2025_2025Spring', 'accessionMatch', missingLabel=missingLabel)
     # testModelVirusIdentity(models, 'HGUT-Arch-Virus')
     # testModel(models, 'genbank_2024_test', 'accessionMatch')
     # testModel(models, 'genbank_2024_test', 'accessionMatch', "species")
