@@ -67,16 +67,6 @@ class ESMRunner():
 
         self.model.load_state_dict(torch.load(f"{self.modleFolder}/pytorch_model.bin", map_location=torch.device('cpu')), strict=False)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.modleFolder,
-            model_max_length=self.maxLen,
-            padding_side="right",
-            use_fast=True,
-            trust_remote_code=True
-        )
-
-        self.data_collator = DataCollatorForSupervisedDataset(tokenizer=self.tokenizer)
-        
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
         else:
@@ -136,12 +126,21 @@ class ESMRunner():
                 f.write(f'{sequence},{record.id}\n')
 
         # 4. load model, run and save result
-        self.loadModel()
         self.runModel()
 
     def runModel(self):
         def tokenize_function(examples):
             return self.tokenizer(examples["sequence"], truncation=True)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.modleFolder,
+            model_max_length=self.maxLen,
+            padding_side="right",
+            use_fast=True,
+            trust_remote_code=True
+        )
+
+        self.data_collator = DataCollatorForSupervisedDataset(tokenizer=self.tokenizer)
 
         test_dataset = load_dataset('csv', data_files={'test': self.tempProCSV}, cache_dir=config.cacheFolder)
         tokenized_datasets = test_dataset.map(tokenize_function, batched=True, batch_size=self.batchSize, remove_columns=["sequence"], num_proc=multiprocessing.cpu_count())
@@ -151,6 +150,7 @@ class ESMRunner():
         softmax = Softmax(dim=0)
         result = {}
 
+        self.loadModel()
 
         with torch.no_grad():
             for step, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
