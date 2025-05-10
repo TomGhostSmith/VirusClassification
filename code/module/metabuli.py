@@ -15,8 +15,8 @@ from moduleResult.plainResult import PlainResult
 class Metabuli(Module):
     def __init__(self, trainset):
         super().__init__(f"metabuli-v1.0.9.2-{trainset}")
-        IOUtils.showInfo("Currently, dataset should be manually set", "WARN")
         self.cacheResult = f"{config.cacheResultFolder}/{self.moduleName}.json"
+        self.trainset = trainset
         self.cachedSamples:dict[str, str] = dict()
     
 
@@ -47,7 +47,7 @@ class Metabuli(Module):
 
         IOUtils.writeSampleFasta(samples, inputFile)
         cwd = "/Software/Metabuli/working/Metabuli-ICTV-challenge"
-        command = f"../../build/src/metabuli classify --seq-mode 1 {inputFile} database {cacheFolder} 0 --lineage 1"
+        command = f"../../build/src/metabuli classify --seq-mode 1 {inputFile} db_{self.trainset} {cacheFolder} 0 --lineage 1"
 
         subprocess.run(command, shell=True, cwd=cwd, stdout=sys.stdout, stderr=sys.stderr)
 

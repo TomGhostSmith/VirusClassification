@@ -496,6 +496,7 @@ def getModels():
         MLModule('bottomup', 0.45, '1011000')
     )
     ml = MLModule('bottomup', 0.45, '1011000')
+    ml_highest = MLModule('highest', 0.45, '1011000')
     virTaxonomer_bottomup_train = Pipeline(
     VirusPred([
         MinimapThresholdModule('VMRv4_ML_train', factors=['60', 'completeMatch']), 
@@ -623,23 +624,23 @@ def getModels():
     # return [cat]
     # return [kraken]
     return [
-        (kraken, "kraken_NCBI"),
-        (genomad, "genomAD-1.9_NCBI"),
-        (cat, "CAT_NCBI"),
+        # (kraken, "kraken_NCBI"),
+        # (genomad, "genomAD-1.9_NCBI"),
+        # (cat, "CAT_NCBI"),
         # (minimap, "minimap_VMRv4"), 
-        (minimap_train, "minimap_VMRv4(ESMTrain)"),
+        # (minimap_train, "minimap_VMRv4(ESMTrain)"),
         # (minimap_thrank, "minimap_VMRv4_threshold"), 
         # (minimap_thrank_train, "minimap_VMRv4_threshold(ESMTrain)"),
         # (blast, "blast_VMRv4"),
-        (blast_train, "blast_VMRv4(ESMTrain)"),
+        # (blast_train, "blast_VMRv4(ESMTrain)"),
         # (metabuli, "Metabuli v1.0.9.2"),
-        (metabuli_train, "Metabuli v1.0.9.2 (ESM Train)"),
-        (vcontact, "vConTACT2_ProkaryoticViralRefSeq211"),
+        # (metabuli_train, "Metabuli v1.0.9.2 (ESM Train)"),
+        # (vcontact, "vConTACT2_ProkaryoticViralRefSeq211"),
         # (vcontact_VMRv4, "vConTACT2_VMRv4"),
         # (vcontact_ML_train, "vConTACT2_VMRv4(ESMTrain)"),
         # (phagcn2_1000, "PhaGCN2_n=1000_VMRv1"),
-        (phagcn2_10000, "PhaGCN2_n=10000_VMRv1"),
-        (phagcn3_10000, "PhaGCN3_n=10000_VMRv1"),
+        # (phagcn2_10000, "PhaGCN2_n=10000_VMRv1"),
+        # (phagcn3_10000, "PhaGCN3_n=10000_VMRv1"),
         # (phagcn3_100000, "PhaGCN3_n=100000_VMRv1"),
         # (phagcn3_10000_merge, "PhaGCN3-merge_n=10000_VMRv1"),
         # (virTaxonomer_bottomup_genus, "VirTaxonomer-bottomup-genus_VMRv4"),
@@ -650,11 +651,12 @@ def getModels():
         # (virTaxonomer_esm_train, "VirTaxonomer-Identify(ESMTrain)+ML_VMRv4"),
         # (virTaxonomer_minimap, "VirTaxonomer-Minimap_VMRv4"),
         # (virTaxonomer_minimap_train, "VirTaxonomer-Identify(ESMTrain)+Minimap(ESMTrain)_VMRv4"),
-        (ml, "VirTaxonomer-ML_VMRv4"),
+        # (ml, "VirTaxonomer-ML_VMRv4"),
+        (ml_highest, "VirTaxonomer-ML_VMRv4"),
         # (virTaxonomer_virus_identify, "VirTaxonomer-Identify"),
         # (virTaxonomer_virus_identify_train, "VirTaxonomer-Identify(ESMTrain)")
         # (virTaxonomerStandard, "VirTaxonomer"),
-        (virTaxonomerStandard_train, "VirTaxonomer (ESMTrain)"),
+        # (virTaxonomerStandard_train, "VirTaxonomer (ESMTrain)"),
         # (virTaxonomerTaxoOnly, "VirTaxonomer (no viral identify)"),
         # (virTaxonomerTaxoOnly_train, "VirTaxonomer (no viral identify) (ESMTrain)"),
         # (minimap_genomad, "minimap_genomad (no viral identify)"),
@@ -680,8 +682,8 @@ def main():
     # # testModel(models, 'genbank_2024_test', 'textMatch')
 
     # testModel(models, 'vitap', 'std', missingLabel=missingLabel)
-    testModel(models, 'VMRv4_test_subseq', 'accessionMatch', missingLabel=missingLabel)
-    testModel(models, 'VMRv4_test', 'accessionMatch', missingLabel=missingLabel)
+    # testModel(models, 'VMRv4_test_subseq', 'accessionMatch', missingLabel=missingLabel)
+    # testModel(models, 'VMRv4_test', 'accessionMatch', missingLabel=missingLabel)
     # testModel(models, 'refseq_2024_test',  'accessionMatch', missingLabel=missingLabel)
     # testModel(models, 'genbank_2024_test', 'accessionMatch', missingLabel=missingLabel)
     testModel(models, 'genbank_2025_2025Spring', 'accessionMatch', missingLabel=missingLabel)
