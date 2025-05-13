@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 sys.path.append('./code')
 
 from utils import IOUtils
+from utils.NucleotideUtils import NucleotideUtils
 from prototype.module import Module
 
 from config import config
@@ -50,13 +51,21 @@ def generateVcontactTrain(faaFile, p2cFile, taxoFile, trainset):
         compress = True
     else:
         rawFaaFile = faaFile
-    p2c = IOUtils.extractProtein(samples, rawFaaFile)
+    NucleotideUtils.extractProtein(samples)
+    NucleotideUtils.writeSampleProteinFasta(samples, rawFaaFile)
     if (compress):
         IOUtils.compress_to_gz(rawFaaFile)
         os.remove(rawFaaFile)
 
     # 3. build a protien2contig csv
-    pIDs, cIDs, indexes = zip(*p2c)
+    pIDs = list()
+    cIDs = list()
+    indexes = list()
+    for sample in samples:
+        for protein in sample.proteins:
+            pIDs.append(protein.id)
+            cIDs.append(sample.id)
+            indexes.append(f"segment{protein.index}")
     df = pandas.DataFrame({
         "protein_id": list(pIDs),
         "contig_id": list(cIDs),

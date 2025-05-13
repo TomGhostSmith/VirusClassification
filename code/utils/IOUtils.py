@@ -19,18 +19,29 @@ def showInfo(message, typ='INFO'):
     else:
         sys.stdout.write(msg)
 
-def writeSampleFasta(samples:list[Sample]|list[ProteinSample], targetFile:str, append=False):
+def writeSampleFasta(samples:list[Sample], targetFile:str, append=False):
     mode = 'at' if append else 'wt'
     with open(targetFile, mode) as fp:
         for sample in samples:
             SeqIO.write(sample.seq, fp, 'fasta')
 
+def writeSampleProteinFasta(samples:list[Sample], targetFile:str, append=False):
+    mode = 'at' if append else 'wt'
+    with open(targetFile, mode) as fp:
+        for sample in samples:
+            for protein in sample.proteins:
+                SeqIO.write(protein.seq, fp, 'fasta')
+
 # note: here we only consider the scenario that there is only one subset file
-def loadSamples(fastaFile:str, subsetFile:str=None)->list[Sample]:
+def loadSamples(fastaFile:str, subsetFile:str=None, subset:list=None)->list[Sample]:
     interestedSampleIDs = None
     if (subsetFile is not None):
         with open(subsetFile) as fp:
             interestedSampleIDs = {line.strip() for line in fp.readlines()}
+        if (subset is not None):
+            interestedSampleIDs = interestedSampleIDs & set(subset)
+    elif (subset is not None):
+        interestedSampleIDs = set(subsetFile)
     samples:list[Sample] = list()
     for record in SeqIO.parse(fastaFile, 'fasta'):
         if interestedSampleIDs is None or record.id in interestedSampleIDs:
@@ -38,11 +49,15 @@ def loadSamples(fastaFile:str, subsetFile:str=None)->list[Sample]:
     
     return samples
 
-def loadProteinSamples(fastaFile:str, subsetFile:str=None)->list[ProteinSample]:
+def loadProteinSamples(fastaFile:str, subsetFile:str=None, subset:list=None)->list[ProteinSample]:
     interestedSampleIDs = None
     if (subsetFile is not None):
         with open(subsetFile) as fp:
             interestedSampleIDs = {line.strip() for line in fp.readlines()}
+        if (subset is not None):
+            interestedSampleIDs = interestedSampleIDs & set(subset)
+    elif (subset is not None):
+        interestedSampleIDs = set(subsetFile)
     samples:list[ProteinSample] = list()
     for record in SeqIO.parse(fastaFile, 'fasta'):
         if interestedSampleIDs is None or record.id in interestedSampleIDs:
@@ -79,42 +94,3 @@ def compress_to_gz(input_path, output_path=None):
             shutil.copyfileobj(f_in, f_out)
     
     return output_path
-
-def runSingleProdigal(dnaFasta, outputFasta, idx=None):
-    subprocess.run(f"prodigal-gv -i {dnaFasta} -a {outputFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return idx
-
-# extract protein with prodigal-gv. Return tuples (pID, cID, index)
-def extractProtein(samples, outputFile, samplePerThread=100, threads=multiprocessing.cpu_count())-> list[tuple[str, str, int]]:
-    if (os.path.exists(outputFile)):
-        showInfo(f"File {outputFile} exists, will be overwritten")
-        os.remove(outputFile)
-
-    splitCount = math.ceil(len(samples)/samplePerThread)
-    tempFileName = f"{outputFile}.DNA"
-
-    contigIDs:list[tuple[str, str, int]] = list()
-
-    with multiprocessing.Pool(threads) as pool:
-        asyncResults = list()
-        for i in range(splitCount):
-            writeSampleFasta(samples[samplePerThread * i : samplePerThread * (i+1)], f"{tempFileName}.{i}")
-    
-            asyncResults.append(pool.apply_async(runSingleProdigal, 
-                                            [f"{tempFileName}.{i}", f"{outputFile}.{i}", 1]))
-            
-        for asyncResult in tqdm(asyncResults):
-            idx = asyncResult.get()
-            proteinSamlpes = loadProteinSamples(f"{outputFile}.{idx}")
-            for protein in proteinSamlpes:
-                # contigIDs[protein.id] = protein.contigID
-                contigIDs.append((protein.id, protein.contigID, f"segment{protein.index}"))
-            appendFile(f"{outputFile}.{idx}", outputFile, buffer_size=16*1024*1024)
-            
-            
-    # subprocess.run(f"prodigal-gv -i {self.tempDNAFasta} -a {self.tempProFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for i in range(splitCount):
-        os.remove(f"{tempFileName}.{i}")
-        os.remove(f"{outputFile}.{i}")
-
-    return contigIDs

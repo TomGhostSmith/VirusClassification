@@ -1,6 +1,8 @@
+from Bio.SeqRecord import SeqRecord
+
 class ProteinSample():
     # the stdResult is ICTV name
-    def __init__(self, seq):
+    def __init__(self, seq:SeqRecord):
         self.id:str = seq.id
         splitID = self.id.rsplit('_', 1)
         self.contigID = splitID[0]
@@ -9,7 +11,7 @@ class ProteinSample():
         else:
             self.index = 0
         self.length:int = len(seq.seq)
-        self.seq = seq
+        self.seq:SeqRecord = seq
         # if (stdResult is not None):
         #     self.stdResult = taxoTree.getTaxoNodeFromICTV(ICTVName=stdResult)
         # else:

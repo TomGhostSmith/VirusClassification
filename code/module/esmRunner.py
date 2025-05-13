@@ -42,6 +42,8 @@ class DataCollatorForSupervisedDataset(object):
 
 class ESMRunner():
     def __init__(self, maxLen, modelFolder, baseModelFolder, n_class, batchSize=64, cachedResult=None):
+        IOUtils.showInfo("RE-construct protein translation", "CRITCAL")
+        exit(-1)
         self.tempDNAFasta = f"{config.cacheFolder}/DNAs.fasta"
         self.tempProFasta = f"{config.cacheFolder}/proteins.fasta"
         self.tempProCSV = f"{config.cacheFolder}/proteins.csv"

@@ -10,51 +10,50 @@ from prototype.module import Module
 from moduleResult.blastResult import BlastResult
 from moduleResult.blastAlignment import BlastAlignment
 from entity.sample import Sample
+from entity.proteinSample import ProteinSample
 
 from utils import IOUtils
+from utils.NucleotideUtils import NucleotideUtils
 
-class BlastP(Module):
+class Diamond(Module):
     def __init__(self, reference, threads=12):
         self.reference=reference
         self.threads = threads
-        super().__init__(f'blast-ref={self.reference}')
+        super().__init__(f'diamond-ref={self.reference}')
         self.baseName = self.moduleName  # do not use 'self.moduleName' in code directly, in case of subClass!
 
         self.cacheFile = f"{config.cacheResultFolder}/{self.baseName}.tmp"
         self.cacheIndex = f"{config.cacheResultFolder}/{self.baseName}.json"
 
-        self.cachedSamples:dict[str, tuple[int, int]] = dict()
-    
-    def runSingleProdigal(self, idx, dnaFasta, outputFasta):
-        subprocess.run(f"prodigal-gv -i {dnaFasta} -a {outputFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return idx
+        self.cachedSamples:dict[str, tuple[int, int]] = dict()  # note: the cached samples are protein-level results
 
-    def blastP(self, samples:list[Sample]):
-        DNAFile = f"{config.cacheFolder}/blast_DNA.fasta"
+        self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_diamonddb"
+    
+    def buildDB(self):
+        IOUtils.showInfo(f"Making diamond database for {self.reference}")
+        referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
+        referenceProteinFasta = f"{config.cacheResultFolder}/{self.reference}.faa"
+        refSamples = IOUtils.loadSamples(referenceFasta)
+        NucleotideUtils.extractProtein(refSamples)
+        IOUtils.writeSampleProteinFasta(refSamples, referenceProteinFasta)
+        subprocess.run(f"diamond makedb --in {referenceProteinFasta} -d {self.referenceDB}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        with open(self.referenceMapping, 'wt') as fp:
+            json.dump(self.refP2C, fp, indent=2)
+
+
+    def diamond(self, samples:list[Sample]):
+        if not os.path.exists(self.referenceDB):
+            self.buildDB()
+
         queryFile = f"{config.cacheFolder}/blast.fasta"
         resultFile = f"{config.cacheFolder}/blast.tsv"
 
-        recordPerThread = 100
-        splitCount = math.ceil(len(samples)/recordPerThread)
-        proteinFastaFP = open(queryFile, 'wt')
-
-        with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
-            asyncResults = list()
-            for i in range(splitCount):
-                IOUtils.writeSampleFasta(samples[recordPerThread * i : recordPerThread * (i+1)], f"{DNAFile}.{i}")
-        
-                asyncResults.append(pool.apply_async(self.runSingleProdigal, 
-                                                [i, f"{DNAFile}.{i}", f"{queryFile}.{i}"]))
-                
-            for asyncResult in asyncResults:
-                idx = asyncResult.get()
-                with open(f"{queryFile}.{idx}") as fp:
-                    proteinFastaFP.writelines(fp.readlines())
-        proteinFastaFP.close()
-
-
-        IOUtils.writeSampleFasta(samples, queryFile)
         IOUtils.showInfo(f"Begin blast on {len(samples)} samples")
+        os.remove(queryFile)
+
+        NucleotideUtils.extractProtein(samples)
+        IOUtils.writeSampleProteinFasta(samples, queryFile)
 
         command = self.getBlastCommand(queryFile, resultFile)
         subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -90,8 +89,9 @@ class BlastP(Module):
         
         # if there is no alignment, then the query won't show up in the output file
         for sample in samples:
-            if sample.id not in self.cachedSamples:
-                self.cachedSamples[sample.id] = [0, 0]
+            for protein in sample.proteins:
+                if protein.id not in self.cachedSamples:
+                    self.cachedSamples[protein.id] = [0, 0]
 
         targetFP.close()
         os.remove(resultFile)
@@ -113,7 +113,7 @@ class BlastP(Module):
             samplesToRun = samples
         
         if (len(samplesToRun) > 0):
-            self.blast(samplesToRun)
+            self.diamond(samplesToRun)
                     
             with open(self.cacheIndex, 'wt') as fp:
                 json.dump(self.cachedSamples, fp, indent=2)
@@ -124,7 +124,7 @@ class BlastP(Module):
 
         return results
     
-    def getResult(self, sample:Sample, cachedResultFP)->BlastResult:
+    def getProteinResult(self, sample:ProteinSample, cachedResultFP)->BlastResult:
         # use baseName to cache the result in the results dict
         if (self.baseName in sample.results):
             return sample.results[self.baseName]
@@ -145,19 +145,8 @@ class BlastP(Module):
     
     def getBlastCommand(self, queryFile, resultFile):
         # first check if the reference fasta is made a database
-        referenceDB = f"{config.cacheResultFolder}/{self.reference}_blastdb"
-        dbFiles = [f"{referenceDB}.nhr", f"{referenceDB}.nin", f"{referenceDB}.nsq"]
-        dbvalid = True
-        for dbFile in dbFiles:
-            if not os.path.exists(dbFile):
-                dbvalid = False
-                break
-        if not dbvalid:
-            referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
-            IOUtils.showInfo(f"Making blast database for {self.reference}")
-            subprocess.run(f"makeblastdb -in {referenceFasta} -dbtype nucl -out {referenceDB}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         # cline = NcbiblastnCommandline(query=queryFile, db=referenceDB, evalue=1e-3, outfmt=5, out=resultFile)
         # stdout, stderr = cline()
-        command = f"blastn -query {queryFile} -db {referenceDB} -evalue 0.001 -outfmt 6 -out {resultFile} -num_threads {self.threads}"
+        command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads}"
         return command
