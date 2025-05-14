@@ -1,6 +1,7 @@
 import os
 import math
 import json
+import time
 from tqdm import tqdm
 import subprocess
 from Bio import SeqIO
@@ -14,11 +15,13 @@ from entity.proteinSample import ProteinSample
 from config import config
 from utils import IOUtils
 
+import fcntl
+
 class NucleotideUtil:
     def __init__(self):
         self.proteinIndex = f"{config.cacheFolder}/proteins.json"
         self.proteinFasta = f"{config.cacheFolder}/proteins.fasta"
-        self.c2pCache = f"{config.cacheResultFolder}/c2p.json"
+        self.c2pCache = f"{config.cacheFolder}/c2p.json"
 
         self.c2p:dict[str, list] = dict()
         self.cachedProteins:dict[str, int] = dict()
@@ -29,15 +32,10 @@ class NucleotideUtil:
                 self.cachedProteins = json.load(fp)
         
         self.thisOffset = self.cachedProteins["nextOffset"] if "nextOffset" in self.cachedProteins else 0
-        self.nextOffset = self.thisOffset
-
-    def runSingleProdigal(self, dnaFasta, outputFasta, idx=None):
-        subprocess.run(f"prodigal-gv -i {dnaFasta} -a {outputFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return idx
 
     # extract protein with prodigal-gv, store the ids of protein to the sample
     def extractProtein(self, samples:list[Sample], samplePerThread=100, threads=multiprocessing.cpu_count())-> None:
-        outputFile = f"{config.cacheFolder}/tmp.faa"
+        outputPrefix = f"{config.cacheFolder}/tmp.faa"
         # step 1: get samples to run, load cached samples
         samplesToRun:list[Sample] = list()
 
@@ -58,22 +56,37 @@ class NucleotideUtil:
         
 
         # step 2: run prodigal with multi-threads
-        splitCount = math.ceil(len(samplesToRun)/samplePerThread)
-        tempFileName = f"{outputFile}.DNA"
+        if (len(samplesToRun) > 0):
+            splitCount = math.ceil(len(samplesToRun)/samplePerThread)
+            tempFileName = f"{outputPrefix}.DNA"
 
-        targetFP = open(outputFile)
+            targetFP = open(self.proteinFasta, 'at')
 
-        with multiprocessing.Pool(threads) as pool:
-            asyncResults = list()
-            for i in range(splitCount):
-                IOUtils.writeSampleFasta(samplesToRun[samplePerThread * i : samplePerThread * (i+1)], f"{tempFileName}.{i}")
-        
-                asyncResults.append(pool.apply_async(self.runSingleProdigal, 
-                                                [f"{tempFileName}.{i}", f"{outputFile}.{i}", 1]))
+            procs:list[tuple] = list()
+            jobs = list(range(splitCount))
+            pbar = tqdm(total=len(jobs), desc="protein translation")
+
+            while procs or jobs:
+                for proc, idx in procs:
+                    if (proc.poll()) is not None:
+                        procs.remove((proc, idx))
+                        pbar.update(1)
                 
-            for asyncResult in tqdm(asyncResults):
-                idx = asyncResult.get()
-                proteinSamlpes = IOUtils.loadProteinSamples(f"{outputFile}.{idx}")
+                # if the pool has some room, apply more tasks
+                # do not use fork to avoid large memory copy problem
+                while len(procs) < threads and jobs:
+                    idx = jobs.pop(0)
+                    IOUtils.writeSampleFasta(samplesToRun[samplePerThread * idx : samplePerThread * (idx+1)], f"{tempFileName}.{idx}")
+                    proc = subprocess.Popen(f"prodigal-gv -i {tempFileName}.{idx} -a {outputPrefix}.{idx} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    procs.append((proc, idx))
+                
+                time.sleep(1)
+            
+            pbar.close()
+
+            # collect result when all done
+            for idx in tqdm(range(splitCount), desc="indexing result"):
+                proteinSamlpes = IOUtils.loadProteinSamples(f"{outputPrefix}.{idx}")
                 for protein in proteinSamlpes:
                     if (protein.contigID in self.c2p):
                         self.c2p[protein.contigID].append(protein.id)
@@ -87,27 +100,30 @@ class NucleotideUtil:
                     targetFP.write(seq)
 
                     self.cachedProteins[protein.id] = self.thisOffset + len(head)
-                    self.thisOffset = self.nextOffset
-                    self.nextOffset = self.nextOffset + len(head) + len(seq)
+                    self.thisOffset = self.thisOffset + len(head) + len(seq)
 
 
-        targetFP.close()
+            targetFP.close()
+            self.cachedProteins['nextOffset'] = self.thisOffset
+
+            for sample in samples:
+                if sample.id not in self.c2p:
+                    self.c2p[sample.id] = list()
+
+            with open(self.c2pCache, 'wt') as fp:
+                json.dump(self.c2p, fp, indent=2)
+            with open(self.proteinIndex, 'wt') as fp:
+                json.dump(self.cachedProteins, fp, indent=2)
+                
+            for i in range(splitCount):
+                os.remove(f"{tempFileName}.{i}")
+                if (os.path.exists(f"{outputPrefix}.{i}")):
+                    os.remove(f"{outputPrefix}.{i}")
 
         cachedProteinFP = open(self.proteinFasta)
         for sample in samples:
             self.loadProteinSample(sample, cachedProteinFP)
         cachedProteinFP.close()
-
-                
-        for i in range(splitCount):
-            os.remove(f"{tempFileName}.{i}")
-            os.remove(f"{outputFile}.{i}")
-        os.remove(outputFile)
-
-        with open(self.c2pCache, 'wt') as fp:
-            json.dump(self.c2p, fp, indent=2)
-        with open(self.proteinIndex, 'wt') as fp:
-            json.dump(self.cachedProteins, fp, indent=2)
 
 
     def loadProteinSample(self, sample:Sample, cachedProteinFP) -> None:

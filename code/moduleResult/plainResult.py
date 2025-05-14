@@ -2,7 +2,7 @@ from prototype.result import Result
 from entity.taxoTree import taxoTree
 
 class PlainResult(Result):
-    def __init__(self, pred:str):
+    def __init__(self, pred:str, score:float=0):
         super().__init__()
         if (pred.endswith('_like')):
             self.pred = pred[:-5]
@@ -10,6 +10,8 @@ class PlainResult(Result):
         else:
             self.pred = pred
             self.isVague = False
+        
+        self.score = score
 
     def calcTaxoNode(self):
         if (self.pred in taxoTree.ICTVTree.name2ID):

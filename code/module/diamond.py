@@ -7,27 +7,33 @@ import multiprocessing
 
 from config import config
 from prototype.module import Module
-from moduleResult.blastResult import BlastResult
-from moduleResult.blastAlignment import BlastAlignment
+from moduleResult.plainResult import PlainResult
+from moduleResult.diamondAlignment import DiamondAlignment
 from entity.sample import Sample
 from entity.proteinSample import ProteinSample
+from entity.taxoTree import taxoTree
 
 from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
 class Diamond(Module):
-    def __init__(self, reference, threads=12):
+    def __init__(self, reference, method, threads=multiprocessing.cpu_count()):
+        if (method not in ["sum", "vote"]):
+            raise ValueError("Unsupported pooling method")
+        self.method = method
         self.reference=reference
         self.threads = threads
-        super().__init__(f'diamond-ref={self.reference}')
-        self.baseName = self.moduleName  # do not use 'self.moduleName' in code directly, in case of subClass!
+        super().__init__(f'diamond-ref={self.reference};method={self.method}')
+        self.baseName = f'diamond-ref={self.reference}'  # do not use 'self.moduleName' in code directly, in case of subClass!
 
         self.cacheFile = f"{config.cacheResultFolder}/{self.baseName}.tmp"
         self.cacheIndex = f"{config.cacheResultFolder}/{self.baseName}.json"
 
         self.cachedSamples:dict[str, tuple[int, int]] = dict()  # note: the cached samples are protein-level results
+        self.cachedSampleNameFile = f"{config.cacheResultFolder}/{self.baseName}.names"
+        self.cachedSampleNames = set()
 
-        self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_diamonddb"
+        self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_diamonddb.dmnd"
     
     def buildDB(self):
         IOUtils.showInfo(f"Making diamond database for {self.reference}")
@@ -38,8 +44,6 @@ class Diamond(Module):
         IOUtils.writeSampleProteinFasta(refSamples, referenceProteinFasta)
         subprocess.run(f"diamond makedb --in {referenceProteinFasta} -d {self.referenceDB}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
-        with open(self.referenceMapping, 'wt') as fp:
-            json.dump(self.refP2C, fp, indent=2)
 
 
     def diamond(self, samples:list[Sample]):
@@ -49,8 +53,7 @@ class Diamond(Module):
         queryFile = f"{config.cacheFolder}/blast.fasta"
         resultFile = f"{config.cacheFolder}/blast.tsv"
 
-        IOUtils.showInfo(f"Begin blast on {len(samples)} samples")
-        os.remove(queryFile)
+        IOUtils.showInfo(f"Begin diamond on {len(samples)} samples")
 
         NucleotideUtils.extractProtein(samples)
         IOUtils.writeSampleProteinFasta(samples, queryFile)
@@ -93,6 +96,8 @@ class Diamond(Module):
                 if protein.id not in self.cachedSamples:
                     self.cachedSamples[protein.id] = [0, 0]
 
+            self.cachedSampleNames.add(sample.id)
+
         targetFP.close()
         os.remove(resultFile)
         os.remove(queryFile)
@@ -101,13 +106,15 @@ class Diamond(Module):
     def run(self, samples:list[Sample]):
         samplesToRun:list[Sample] = list()
 
-        if (os.path.exists(self.cacheIndex)):
+        if (os.path.exists(self.cacheIndex) and os.path.exists(self.cachedSampleNameFile)):
             with open(self.cacheIndex) as fp:
                 self.cachedSamples = json.load(fp)  # id: [offset, alignmentCount]
-
+            
+            with open(self.cachedSampleNameFile) as fp:
+                self.cachedSampleNames = set(json.load(fp))
         
             for sample in samples:
-                if (sample.id not in self.cachedSamples):
+                if (sample.id not in self.cachedSampleNames):
                     samplesToRun.append(sample)
         else:
             samplesToRun = samples
@@ -117,6 +124,9 @@ class Diamond(Module):
                     
             with open(self.cacheIndex, 'wt') as fp:
                 json.dump(self.cachedSamples, fp, indent=2)
+            
+            with open(self.cachedSampleNameFile, 'wt') as fp:
+                json.dump(list(self.cachedSampleNames), fp, indent=2)
 
         cachedResultFP = open(self.cacheFile)
         results = [self.getResult(sample, cachedResultFP) for sample in samples]
@@ -124,23 +134,45 @@ class Diamond(Module):
 
         return results
     
-    def getProteinResult(self, sample:ProteinSample, cachedResultFP)->BlastResult:
-        # use baseName to cache the result in the results dict
-        if (self.baseName in sample.results):
-            return sample.results[self.baseName]
+    def getResult(self, sample:Sample, cachedResultFP)->PlainResult:
+        # note: result of basename is not available
+        result = None
         
-        offset, alignmentCount = self.cachedSamples[sample.id]
-        cachedResultFP.seek(offset)
-        alignments:list[BlastAlignment] = [BlastAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+        if (self.method == "vote"):
+            votes:dict[str, int] = dict()
+            for protein in sample.proteins:
+                offset, alignmentCount = self.cachedSamples[protein.id]
+                cachedResultFP.seek(offset)
+                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                if (len(alignments) > 0):
+                    bestAlignment = alignments[0]
+                    for alignment in alignments[1:]:
+                        if alignment.betterThan(bestAlignment):
+                            bestAlignment = alignment
+                    ICTVID = taxoTree.ICTVTree.accession2ID[bestAlignment.refContig]
+                    if ICTVID in votes:
+                        votes[ICTVID] += 1
+                    else:
+                        votes[ICTVID] = 1
+            
+        elif (self.method == "sum"):
+            votes:dict[str, int] = dict()
+            for protein in sample.proteins:
+                offset, alignmentCount = self.cachedSamples[protein.id]
+                cachedResultFP.seek(offset)
+                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                for alignment in alignments:
+                    ICTVID = taxoTree.ICTVTree.accession2ID[alignment.refContig]
+                    if ICTVID in votes:
+                        votes[ICTVID] += alignment.similarity
+                    else:
+                        votes[ICTVID] = alignment.similarity
+            
+        if len(votes) > 0:
+            totalVotes = sum(votes.values())
+            winner, maxVotes = max(votes.items(), key=lambda x: x[1])
+            result = PlainResult(taxoTree.ICTVTree.ID2name[winner], score=maxVotes/totalVotes)
         
-        result = BlastResult()
-        for alignment in alignments:
-            if (alignment.ref is not None):
-                result.addAlignment(alignment)
-
-        if (result.bestAlignment is None):
-            result = None
-        sample.results[self.baseName] = result
         return result
     
     def getBlastCommand(self, queryFile, resultFile):

@@ -50,6 +50,8 @@ def loadSamples(fastaFile:str, subsetFile:str=None, subset:list=None)->list[Samp
     return samples
 
 def loadProteinSamples(fastaFile:str, subsetFile:str=None, subset:list=None)->list[ProteinSample]:
+    if (not os.path.exists(fastaFile)):
+        return list()
     interestedSampleIDs = None
     if (subsetFile is not None):
         with open(subsetFile) as fp:
