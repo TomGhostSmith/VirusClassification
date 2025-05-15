@@ -37,6 +37,8 @@ from module.mergeModule import MergeModule
 from module.metabuli import Metabuli
 from module.diamond import Diamond
 
+from moduleResult.plainResult import PlainResult
+from moduleResult.diamondAlignment import DiamondAlignment
 
 from entity.taxoTree import taxoTree
 from entity.sample import Sample
@@ -425,6 +427,16 @@ def errMerge(sample:Sample, modelNames, currentModelIndex):
     # Therefore, we can directly return the second result
     return result2
 
+def diamondMerge(sample:Sample, modelNames, currentModelIndex):
+    if (modelNames[currentModelIndex].startswith("diamond") and currentModelIndex != len(modelNames) - 1):
+        res:PlainResult = sample.results[modelNames[currentModelIndex]]
+        if (res is not None and res.score > 0.5):
+            return res
+        else:
+            return None
+    else:
+        return sample.results[modelNames[currentModelIndex]]
+
 
 def getModels():
     # VirTaxonomer
@@ -573,8 +585,15 @@ def getModels():
 
     diamond_sum = Diamond("VMRv4", "sum")
     diamond_sum_train = Diamond("VMRv4_ML_train", "sum")
+    diamond_top3 = Diamond("VMRv4", "top3")
+    diamond_top3_train = Diamond("VMRv4_ML_train", "top3")
     diamond_vote = Diamond("VMRv4", "vote")
     diamond_vote_train = Diamond("VMRv4_ML_train", "vote")
+
+    minimap_diamond_vote = MergeModule([minimap, diamond_vote], basicMerge, "minimap_diamond_vote")
+    minimap_diamond_top3 = MergeModule([minimap, diamond_top3], basicMerge, "minimap_diamond_top3")
+    minimap_diamond_vote_double = MergeModule([minimap_thrank, diamond_vote, minimap, diamond_vote], diamondMerge, "minimap_diamond_vote_double")
+    minimap_diamond_top3_double = MergeModule([minimap_thrank, diamond_top3, minimap, diamond_top3], diamondMerge, "minimap_diamond_top3_double")
 
     vitap = VITAP(threads=16)
 
@@ -639,10 +658,12 @@ def getModels():
         # (minimap_thrank_train, "minimap_VMRv4_threshold(ESMTrain)"),
         (blast, "blast_VMRv4"),
         # (blast_train, "blast_VMRv4(ESMTrain)"),
-        # (diamond_sum, "Diamond_sum_VMRv4"),
+        (diamond_sum, "Diamond_sum_VMRv4"),
         # (diamond_sum_train, "Diamond_sum_VMRv4(ESMTrain)"),
-        # (diamond_vote, "Diamond_vote_VMRv4"),
+        (diamond_vote, "Diamond_vote_VMRv4"),
         # (diamond_vote_train, "Diamond_vote_VMRv4(ESMTrain)"),
+        (diamond_top3, "Diamond_top3_VMRv4"),
+        # (diamond_top3_train, "Diamond_top3_VMRv4(ESMTrain)"),
         (metabuli, "Metabuli v1.0.9.2"),
         # (metabuli_train, "Metabuli v1.0.9.2 (ESM Train)"),
         (vcontact, "vConTACT2_ProkaryoticViralRefSeq211"),
@@ -680,6 +701,11 @@ def getModels():
         # (ml_genomad_err, "ml genomad fix (no viral identify)"),
         # (virTaxonomer_genomad_err, "minimap_ml genomad fix (no viral identify)"),
         # (virTaxonomer_genomad_err_train, "minimap_ml genomad fix (no viral identify) (ESMTrain)")
+
+        (minimap_diamond_vote, "minimap_diamond_vode"),
+        (minimap_diamond_top3, "minimap_diamond_top3"),
+        # (minimap_diamond_vote_double, "minimap_diamond_vote_double"),
+        # (minimap_diamond_top3_double, "minimap_diamond_top3_double")
     ]
 
 def main():
@@ -694,8 +720,8 @@ def main():
     # testModel(models, 'vitap', 'std', missingLabel=missingLabel)
     # testModel(models, 'VMRv4_test_subseq', 'accessionMatch', missingLabel=missingLabel)
     # testModel(models, 'VMRv4_test', 'accessionMatch', missingLabel=missingLabel)
-    # testModel(models, 'refseq_2024_test',  'accessionMatch', missingLabel=missingLabel)
-    # testModel(models, 'genbank_2024_test', 'accessionMatch', missingLabel=missingLabel)
+    testModel(models, 'refseq_2024_test',  'accessionMatch', missingLabel=missingLabel)
+    testModel(models, 'genbank_2024_test', 'accessionMatch', missingLabel=missingLabel)
     testModel(models, 'genbank_2025_2025Spring', 'accessionMatch', missingLabel=missingLabel)
     # testModelVirusIdentity(models, 'HGUT-Arch-Virus')
     # testModel(models, 'genbank_2024_test', 'accessionMatch')

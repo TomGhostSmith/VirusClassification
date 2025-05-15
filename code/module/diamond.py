@@ -3,6 +3,7 @@ import os
 import json
 import math
 import subprocess
+from functools import cmp_to_key
 import multiprocessing
 
 from config import config
@@ -18,7 +19,7 @@ from utils.NucleotideUtils import NucleotideUtils
 
 class Diamond(Module):
     def __init__(self, reference, method, threads=multiprocessing.cpu_count()):
-        if (method not in ["sum", "vote"]):
+        if (method not in ["sum", "vote"] and not method.startswith("top")):
             raise ValueError("Unsupported pooling method")
         self.method = method
         self.reference=reference
@@ -55,7 +56,6 @@ class Diamond(Module):
 
         IOUtils.showInfo(f"Begin diamond on {len(samples)} samples")
 
-        NucleotideUtils.extractProtein(samples)
         IOUtils.writeSampleProteinFasta(samples, queryFile)
 
         command = self.getBlastCommand(queryFile, resultFile)
@@ -105,6 +105,7 @@ class Diamond(Module):
 
     def run(self, samples:list[Sample]):
         samplesToRun:list[Sample] = list()
+        NucleotideUtils.extractProtein(samples)
 
         if (os.path.exists(self.cacheIndex) and os.path.exists(self.cachedSampleNameFile)):
             with open(self.cacheIndex) as fp:
@@ -138,8 +139,8 @@ class Diamond(Module):
         # note: result of basename is not available
         result = None
         
+        votes:dict[str, int] = dict()
         if (self.method == "vote"):
-            votes:dict[str, int] = dict()
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
@@ -156,7 +157,6 @@ class Diamond(Module):
                         votes[ICTVID] = 1
             
         elif (self.method == "sum"):
-            votes:dict[str, int] = dict()
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
@@ -167,7 +167,19 @@ class Diamond(Module):
                         votes[ICTVID] += alignment.similarity
                     else:
                         votes[ICTVID] = alignment.similarity
-            
+        elif (self.method.startswith("top")):
+            thresh = int(self.method[3:])
+            for protein in sample.proteins:
+                offset, alignmentCount = self.cachedSamples[protein.id]
+                cachedResultFP.seek(offset)
+                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
+                for alignment in alignments[:thresh]:
+                    ICTVID = taxoTree.ICTVTree.accession2ID[alignment.refContig]
+                    if ICTVID in votes:
+                        votes[ICTVID] += alignment.similarity
+                    else:
+                        votes[ICTVID] = alignment.similarity
         if len(votes) > 0:
             totalVotes = sum(votes.values())
             winner, maxVotes = max(votes.items(), key=lambda x: x[1])
@@ -180,5 +192,5 @@ class Diamond(Module):
 
         # cline = NcbiblastnCommandline(query=queryFile, db=referenceDB, evalue=1e-3, outfmt=5, out=resultFile)
         # stdout, stderr = cline()
-        command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads}"
+        command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20"
         return command
