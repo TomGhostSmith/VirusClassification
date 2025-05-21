@@ -17,6 +17,8 @@ queryFilePath = ""
 querySubsetFilePath = None
 config.setPath(modelRoot=modelRoot, outputRoot=outputRoot, queryFile=queryFilePath, querySubsetFile=querySubsetFilePath)
 
+from utils.NucleotideUtils import NucleotideUtils
+
 from module.pipeline import Pipeline
 from module.virusPredModule import VirusPred
 from module.minimapThresholdModule import MinimapThresholdModule
@@ -46,7 +48,8 @@ from entity.sample import Sample
 import matplotlib.markers as mmarkers
 
 
-def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset=None, missingLabel="Unknown"):
+def testModel(models:dict[str, Module], dataset, evaluationMethod, subset=None, missingLabel="Unknown"):
+    IOUtils.showInfo(f"Test {len(models)} models on {dataset}")
     queryFilePath = f"/Data/VirusClassification/dataset/{dataset}/{dataset}.fasta"
     if (subset is not None):
         querySubsetFilePath = f"/Data/VirusClassification/dataset/{dataset}/{subset}.txt"
@@ -57,7 +60,7 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
     from tools.evaluate import analyseStatistics
     samples = IOUtils.loadSamples(config.queryFilePath, config.querySubsetFilePath)
 
-    for model, modelDesc in models:
+    for modelDesc, model in models.items():
         IOUtils.showInfo(f'getting {model.moduleName} results')
         model.getResults(samples)
     
@@ -68,6 +71,15 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
     # with open("/Data/VirusClassification/dataset/refseq_2024_test/answer.json") as fp:
     with open(f"/Data/VirusClassification/dataset/{dataset}/answer_{evaluationMethod}.json") as fp:
         stdResults = json.load(fp)
+
+    for id, std in stdResults.items():
+        if (std == 'no answer'):
+            stdResults[id] = None
+        else:
+            stdResults[id] = taxoTree.getTaxoNodeFromICTV(ICTVName=std)
+
+    for sample in samples:
+        sample.info["stdResult"] = stdResults.get(sample.id)
     
 
     summaryDict = dict()
@@ -109,7 +121,7 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
     with pandas.ExcelWriter(fileName) as writer:
     # for _ in range(1):
     #     writer = pandas.ExcelWriter(fileName)
-        for idx, (model, modelDesc) in enumerate(models):
+        for idx, (modelDesc, model) in enumerate(list(models.items())):
             preds = dict()
             for sample in samples:
                 res = sample.results[model.moduleName]
@@ -219,25 +231,25 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
 
     markers = [m for m in mmarkers.MarkerStyle.markers.keys() if isinstance(m, str) and m not in (".", ",", " ", "")]
     fig, axs = plt.subplots(2, 2, figsize=(12, 12))
-    for idx, ((model, modelDesc), recall, precision) in enumerate(zip(models, modelRecalls["order"], modelPrecisions["order"])):
+    for idx, (modelDesc, recall, precision) in enumerate(zip(list(models.keys()), modelRecalls["order"], modelPrecisions["order"])):
         axs[0, 0].scatter(recall, precision, color=availableColors[idx], marker=markers[idx], s=100, label=modelDesc)
         axs[0, 0].set_title("order")
         axs[0, 0].grid(True)
         axs[0, 0].set_xlabel("Recall")
         axs[0, 0].set_ylabel("Precision")
-    for idx, ((model, modelDesc), recall, precision) in enumerate(zip(models, modelRecalls["family"], modelPrecisions["family"])):
+    for idx, (recall, precision) in enumerate(zip(modelRecalls["family"], modelPrecisions["family"])):
         axs[0, 1].scatter(recall, precision, color=availableColors[idx], marker=markers[idx], s=100)
         axs[0, 1].set_title("family")
         axs[0, 1].grid(True)
         axs[0, 1].set_xlabel("Recall")
         axs[0, 1].set_ylabel("Precision")
-    for idx, ((model, modelDesc), recall, precision) in enumerate(zip(models, modelRecalls["genus"], modelPrecisions["genus"])):
+    for idx, (recall, precision) in enumerate(zip(modelRecalls["genus"], modelPrecisions["genus"])):
         axs[1, 0].scatter(recall, precision, color=availableColors[idx], marker=markers[idx], s=100)
         axs[1, 0].set_title("genus")
         axs[1, 0].grid(True)
         axs[1, 0].set_xlabel("Recall")
         axs[1, 0].set_ylabel("Precision")
-    for idx, ((model, modelDesc), recall, precision) in enumerate(zip(models, modelRecalls["species"], modelPrecisions["species"])):
+    for idx, (recall, precision) in enumerate(zip(modelRecalls["species"], modelPrecisions["species"])):
         axs[1, 1].scatter(recall, precision, color=availableColors[idx], marker=markers[idx], s=100)
         axs[1, 1].set_title("species")
         axs[1, 1].grid(True)
@@ -256,8 +268,9 @@ def testModel(models:list[tuple[Module, str]], dataset, evaluationMethod, subset
     
 
     IOUtils.showInfo('Done')
+    return samples
 
-def testModelVirusIdentity(models:list[tuple[Module, str]], dataset):
+def testModelVirusIdentity(models:dict[str, Module], dataset):
     queryFilePath = f"/Data/VirusClassification/dataset/{dataset}/{dataset}.fasta"
     querySubsetFilePath = None
     config.setPath(modelRoot=modelRoot, outputRoot=outputRoot, queryFile=queryFilePath, querySubsetFile=querySubsetFilePath)
@@ -265,7 +278,7 @@ def testModelVirusIdentity(models:list[tuple[Module, str]], dataset):
     # from tools.evaluate import analyseStatistics
     samples = IOUtils.loadSamples(config.queryFilePath, config.querySubsetFilePath)
 
-    for model, modelDesc in models:
+    for modelDesc, model in models.items():
         IOUtils.showInfo(f'getting {model.moduleName} results')
         model.getResults(samples)
     IOUtils.showInfo('calculating statistics')
@@ -290,7 +303,7 @@ def testModelVirusIdentity(models:list[tuple[Module, str]], dataset):
     
 
     # with pandas.ExcelWriter(fileName) as writer:
-    for idx, (model, modelDesc) in enumerate(models):
+    for idx, (modelDesc, model) in enumerate(list(models.items())):
         summaryDict["index"].append(idx)
         summaryDict["model"].append(modelDesc)
         TP, TN, FP, FN = 0, 0, 0, 0
@@ -315,6 +328,167 @@ def testModelVirusIdentity(models:list[tuple[Module, str]], dataset):
         
 
     IOUtils.showInfo('Done')
+
+def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subset=None, missingLabel="Unknown", analyseList:list[tuple[str, str]]=list()):
+    samples = testModel(models, dataset, evaluationMethod, subset, missingLabel)
+    if (analyseList is None):
+        IOUtils.showInfo("Nothing to analyse. Exit")
+        return
+    NucleotideUtils.extractProtein(samples)
+    analysisIndex = 0
+    fileName = f"{config.cacheAnalysisFolder}/sampleAnalysis_{dataset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
+    while (os.path.exists(fileName)):
+        analysisIndex += 1
+        fileName = f"{config.cacheAnalysisFolder}/sampleAnalysis_{dataset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
+    
+    with pandas.ExcelWriter(fileName) as writer:
+    # for _ in range(1):
+    #     writer = pandas.ExcelWriter(fileName)
+        # sheet 1: all information
+        sampleIDs = list()
+        sampleLengths = list()
+        sampleProteinCounts = list()
+        sampleProteinLengths = list()
+        stdResults = list()
+        stdResultRank = list()
+        modelResults:dict[str, list[tuple[str, str, str, str]]] = {model.moduleName: list() for model in models.values()} # for each model, provide a list of (model_result, model_result_rank, LCA_rank)
+
+
+        for sample in samples:
+            sampleIDs.append(sample.id)
+            sampleLengths.append(sample.length)
+            sampleProteinCounts.append(len(sample.proteins))
+            sampleProteinLengths.append(sum(p.length for p in sample.proteins))
+            std = sample.info["stdResult"]
+            if (std is not None and std.ICTVNode is not None):
+                stdNode = std.ICTVNode
+                stdResults.append(stdNode.name)
+                stdResultRank.append(stdNode.rank)
+            else:
+                stdNode = None
+                stdResults.append('N/A')
+                stdResultRank.append('N/A')
+
+            for model in models.values():
+                pred = sample.results[model.moduleName]
+                if (pred is not None and pred.node is not None):
+                    pred = pred.node.ICTVNode
+                    if (stdNode is not None):
+                        LCANode = taxoTree.ICTVTree.findLCA([pred, stdNode])
+                        modelResults[model.moduleName].append((pred.name, pred.rank, LCANode.name, LCANode.rank))
+                    else:
+                        modelResults[model.moduleName].append((pred.name, pred.rank, "N/A", "N/A"))
+                else:
+                    modelResults[model.moduleName].append(("N/A", "N/A", "N/A", "N/A"))
+
+        summaryDict = {
+            "id": sampleIDs,
+            "length": sampleLengths,
+            "protein_count": sampleProteinCounts,
+            "protein_length": sampleProteinLengths,
+            "ground_truth": stdResults,
+            "ground_truth_rank": stdResultRank
+        }
+
+        for modelDesc, model in models.items():
+            preds, predRanks, LCAs, LCARanks = zip(*modelResults[model.moduleName])
+            summaryDict[f"{modelDesc}_pred"] = preds
+            summaryDict[f"{modelDesc}_pred_rank"] = predRanks
+            summaryDict[f"{modelDesc}_LCA"] = LCAs
+            summaryDict[f"{modelDesc}_LCA_rank"] = LCARanks
+
+        # for (k, v) in summaryDict.items():
+        #     IOUtils.showInfo(f"{k}: {len(v)}")
+        
+        summaryDF = pandas.DataFrame(summaryDict)
+        
+
+        summaryDF.to_excel(writer, sheet_name='summary', index=False)
+
+        # sheet 2: protein related info
+        for factor1, factor2 in analyseList:
+            if (factor2 in ["length", "protein_count", "protein_length"]):
+                modelDesc = factor1
+                # need to manually bin the factor 2
+                if (factor2 in ["length", "protein_length"]):
+                    bins = list(range(0, 10000, 1000)) + list(range(10000, 100000, 10000)) + [numpy.inf]
+                    # bins = numpy.linspace(summaryDF[factor2].min(), summaryDF[factor2].max(), 21)
+                else:
+                    bins = list(range(10)) + list(range(10, 200, 10)) + [numpy.inf]
+                summaryDF['A_bin'] = pandas.cut(summaryDF[factor2], bins=bins, include_lowest=True)
+                summaryDF["tmp"] = pandas.Categorical(summaryDF[f"{modelDesc}_LCA_rank"], categories=["N/A"] + list(config.rankLevels.keys()), ordered=True)
+                analyseDF = pandas.crosstab(summaryDF['A_bin'], summaryDF["tmp"])
+                analyseDF.to_excel(writer, sheet_name=f'{modelDesc}_{factor2}'[:31])
+
+            else:
+                modelDesc1 = factor1
+                modelDesc2 = factor2
+                model1 = models[modelDesc1]
+                model2 = models[modelDesc2]
+                # df1: cross table of two models
+                cellText = f"{modelDesc1} \\ {modelDesc2}"
+                summaryDF[cellText] = pandas.Categorical(summaryDF[f"{modelDesc1}_LCA_rank"], categories=["N/A"] + list(config.rankLevels.keys()), ordered=True)
+                summaryDF["tmp2"] = pandas.Categorical(summaryDF[f"{modelDesc2}_LCA_rank"], categories=["N/A"] + list(config.rankLevels.keys()), ordered=True)
+                analyseDF = pandas.crosstab(summaryDF[cellText], summaryDF[f"tmp2"])
+                analyseDF.to_excel(writer, sheet_name=f'{modelDesc1}_{modelDesc2}'[:31])
+
+
+                # df2: similarity table of two models
+                modelLCAs = {rank: 0 for rank in config.rankLevels.keys()}
+                modelGTLCAs = {rank: 0 for rank in config.rankLevels.keys()}
+
+                modelLCAs["N/A"] = 0
+                modelLCAs["No GT"] = 0
+                modelLCAs[f"{modelDesc1}_only"] = 0
+                modelLCAs[f"{modelDesc2}_only"] = 0
+
+                modelGTLCAs["N/A"] = 0
+                modelGTLCAs["No GT"] = 0
+                modelGTLCAs[f"{modelDesc1}_only"] = 0
+                modelGTLCAs[f"{modelDesc2}_only"] = 0
+                for sample in samples:
+                    std = sample.info["stdResult"]
+                    if (std is None or std.ICTVNode is None):  # currently we only focus those with GT
+                        modelLCAs["No GT"] += 1
+                        modelGTLCAs["No GT"] += 1
+                        continue
+                    stdNode = std.ICTVNode
+                    pred1 = sample.results[model1.moduleName]
+                    pred2 = sample.results[model2.moduleName]
+
+                    pred1Avail = pred1 is not None and pred1.node is not None
+                    pred2Avail = pred2 is not None and pred2.node is not None
+                    if (pred1Avail):
+                        pred1 = pred1.node.ICTVNode
+                    if (pred2Avail):
+                        pred2 = pred2.node.ICTVNode
+
+                    if (pred1Avail and pred2Avail):
+                        LCANode1 = taxoTree.ICTVTree.findLCA([pred1, pred2])
+                        LCANode2 = taxoTree.ICTVTree.findLCA([pred1, pred2, stdNode])
+                        modelLCAs[LCANode1.rank] += 1
+                        modelGTLCAs[LCANode2.rank] += 1
+                    elif (pred1Avail):
+                        modelLCAs[f"{modelDesc1}_only"] += 1
+                        modelGTLCAs[f"{modelDesc1}_only"] += 1
+                    elif (pred2Avail):
+                        modelLCAs[f"{modelDesc2}_only"] += 1
+                        modelGTLCAs[f"{modelDesc2}_only"] += 1
+                    else:
+                        modelLCAs["N/A"] += 1
+                        modelGTLCAs["N/A"] += 1
+
+                analyseDF = pandas.DataFrame({
+                    "LCA_rank": list(modelLCAs.keys()),
+                    "model_LCA_count": list(modelLCAs.values()),
+                    "model_GT_LCA_count": list(modelGTLCAs.values())
+                })
+
+
+
+                analyseDF.to_excel(writer, sheet_name=f'{modelDesc1}_{modelDesc2}'[:27] + '_LCA')
+                
+    # writer.close()
 
 
 def mergeCachedResults():
@@ -588,9 +762,14 @@ def getModels():
     diamond_top3 = Diamond("VMRv4", "top3")
     diamond_top3_train = Diamond("VMRv4_ML_train", "top3")
     diamond_vote = Diamond("VMRv4", "vote")
+    diamond_vote_genus = Diamond("VMRv4", "vote", threshRank='genus')
     diamond_vote_train = Diamond("VMRv4_ML_train", "vote")
+    diamond_vote_genus_train = Diamond("VMRv4_ML_train", "vote", threshRank='genus')
 
     minimap_diamond_vote = MergeModule([minimap, diamond_vote], basicMerge, "minimap_diamond_vote")
+    minimap_diamond_vote_genus = MergeModule([minimap, diamond_vote_genus], basicMerge, "minimap_diamond_vote_genus")
+    minimap_diamond_vote_train = MergeModule([minimap_train, diamond_vote_train], basicMerge, "minimap_diamond_vote_train")
+    minimap_diamond_vote_genus_train = MergeModule([minimap_train, diamond_vote_genus_train], basicMerge, "minimap_diamond_vote_genus_train")
     minimap_diamond_top3 = MergeModule([minimap, diamond_top3], basicMerge, "minimap_diamond_top3")
     minimap_diamond_vote_double = MergeModule([minimap_thrank, diamond_vote, minimap, diamond_vote], diamondMerge, "minimap_diamond_vote_double")
     minimap_diamond_top3_double = MergeModule([minimap_thrank, diamond_top3, minimap, diamond_top3], diamondMerge, "minimap_diamond_top3_double")
@@ -648,32 +827,34 @@ def getModels():
     # return [minimap, blast, genomad, vcontact, phagcn, vitap, cat]
     # return [cat]
     # return [kraken]
-    return [
-        (kraken, "kraken_NCBI"),
-        (genomad, "genomAD-1.9_NCBI"),
-        (cat, "CAT_NCBI"),
-        (minimap, "minimap_VMRv4"), 
-        # (minimap_train, "minimap_VMRv4(ESMTrain)"),
-        # (minimap_thrank, "minimap_VMRv4_threshold"), 
-        # (minimap_thrank_train, "minimap_VMRv4_threshold(ESMTrain)"),
-        (blast, "blast_VMRv4"),
-        # (blast_train, "blast_VMRv4(ESMTrain)"),
-        (diamond_sum, "Diamond_sum_VMRv4"),
-        # (diamond_sum_train, "Diamond_sum_VMRv4(ESMTrain)"),
-        (diamond_vote, "Diamond_vote_VMRv4"),
-        # (diamond_vote_train, "Diamond_vote_VMRv4(ESMTrain)"),
-        (diamond_top3, "Diamond_top3_VMRv4"),
-        # (diamond_top3_train, "Diamond_top3_VMRv4(ESMTrain)"),
-        (metabuli, "Metabuli v1.0.9.2"),
-        # (metabuli_train, "Metabuli v1.0.9.2 (ESM Train)"),
-        (vcontact, "vConTACT2_ProkaryoticViralRefSeq211"),
-        # (vcontact_VMRv4, "vConTACT2_VMRv4"),
-        # (vcontact_ML_train, "vConTACT2_VMRv4(ESMTrain)"),
-        # (phagcn2_1000, "PhaGCN2_n=1000_VMRv1"),
-        # (phagcn2_10000, "PhaGCN2_n=10000_VMRv1"),
-        (phagcn3_10000, "PhaGCN3_n=10000_VMRv1"),
-        # (phagcn3_100000, "PhaGCN3_n=100000_VMRv1"),
-        # (phagcn3_10000_merge, "PhaGCN3-merge_n=10000_VMRv1"),
+    return {
+        "kraken_NCBI": kraken,
+        # "genomAD-1.9_NCBI": genomad,
+        "CAT_NCBI": cat,
+        "minimap_VMRv4": minimap, 
+        # "minimap_VMRv4(ESMTrain)": minimap_train,
+        # "minimap_VMRv4_threshold": minimap_thrank, 
+        # "minimap_VMRv4_threshold(ESMTrain)": minimap_thrank_train,
+        "blast_VMRv4": blast,
+        # "blast_VMRv4(ESMTrain)": blast_train,
+        "Diamond_sum_VMRv4": diamond_sum,
+        # "Diamond_sum_VMRv4(ESMTrain)": diamond_sum_train,
+        "Diamond_vote_VMRv4": diamond_vote,
+        # "Diamond_vote_VMRv4(ESMTrain)": diamond_vote_train,
+        "Diamond_vote_genus_VMRv4": diamond_vote_genus,
+        # "Diamond_vote_genus_VMRv4(ESMTrain)": diamond_vote_genus_train,
+        # "Diamond_top3_VMRv4": diamond_top3,
+        # "Diamond_top3_VMRv4(ESMTrain)": diamond_top3_train,
+        "Metabuli v1.0.9.2": metabuli,
+        # "Metabuli v1.0.9.2 (ESM Train)": metabuli_train,
+        # "vConTACT2_ProkaryoticViralRefSeq211": vcontact,
+        # "vConTACT2_VMRv4": vcontact_VMRv4,
+        # "vConTACT2_VMRv4(ESMTrain)": vcontact_ML_train,
+        # "PhaGCN2_n=1000_VMRv1": phagcn2_1000,
+        # "PhaGCN2_n=10000_VMRv1": phagcn2_10000,
+        # "PhaGCN3_n=10000_VMRv1": phagcn3_10000,
+        # "PhaGCN3_n=100000_VMRv1": phagcn3_100000,
+        # "PhaGCN3-merge_n=10000_VMRv1": phagcn3_10000_merge,
         # (virTaxonomer_bottomup_genus, "VirTaxonomer-bottomup-genus_VMRv4"),
         # (virTaxonomer_highest_genus, "VirTaxonomer-highest-genus_VMRv4"),
         # (virTaxonomer_bottomup, "VirTaxonomer-buttomup_VMRv4"),
@@ -682,35 +863,52 @@ def getModels():
         # (virTaxonomer_esm_train, "VirTaxonomer-Identify(ESMTrain)+ML_VMRv4"),
         # (virTaxonomer_minimap, "VirTaxonomer-Minimap_VMRv4"),
         # (virTaxonomer_minimap_train, "VirTaxonomer-Identify(ESMTrain)+Minimap(ESMTrain)_VMRv4"),
-        (ml, "VirTaxonomer-ML_VMRv4"),
-        # (ml_highest, "VirTaxonomer-ML_VMRv4"),
         # (virTaxonomer_virus_identify, "VirTaxonomer-Identify"),
         # (virTaxonomer_virus_identify_train, "VirTaxonomer-Identify(ESMTrain)")
-        (virTaxonomerStandard, "VirTaxonomer"),
-        # (virTaxonomerStandard_train, "VirTaxonomer (ESMTrain)"),
-        # (virTaxonomerTaxoOnly, "VirTaxonomer (no viral identify)"),
-        # (virTaxonomerTaxoOnly_train, "VirTaxonomer (no viral identify) (ESMTrain)"),
-        # (minimap_genomad, "minimap_genomad (no viral identify)"),
-        # (minimap_genomad_train, "minimap_genomad (no viral identify) (ESMTrain)"),
-        # (ml_genomad, "ml_genomad (no viral identify)"),
-        # (virTaxonomer_genomad, "minimap_ml_genomad (no viral identify)"),
-        # (virTaxonomer_genomad_train, "minimap_ml_genomad (no viral identify) (ESMTrain)"),
+        "VirTaxonomer-ML_VMRv4": ml,
+        # "VirTaxonomer-ML_VMRv4": ml_highest,
+        "VirTaxonomer": virTaxonomerStandard,
+        # "VirTaxonomer (ESMTrain)": virTaxonomerStandard_train,
+        # "VirTaxonomer (no viral identify)": virTaxonomerTaxoOnly,
+        # "VirTaxonomer (no viral identify) (ESMTrain)": virTaxonomerTaxoOnly_train,
+        # "minimap_genomad (no viral identify)": minimap_genomad,
+        # "minimap_genomad (no viral identify) (ESMTrain)": minimap_genomad_train,
+        # "ml_genomad (no viral identify)": ml_genomad,
+        # "minimap_ml_genomad (no viral identify)": virTaxonomer_genomad,
+        # "minimap_ml_genomad (no viral identify) (ESMTrain)": virTaxonomer_genomad_train,
 
-        # (minimap_genomad_err, "minimap, genomad fix (no viral identify)"),
-        # (minimap_genomad_err_train, "minimap, genomad fix (no viral identify) (ESMTrain)"),
-        # (ml_genomad_err, "ml genomad fix (no viral identify)"),
-        # (virTaxonomer_genomad_err, "minimap_ml genomad fix (no viral identify)"),
-        # (virTaxonomer_genomad_err_train, "minimap_ml genomad fix (no viral identify) (ESMTrain)")
+        # "minimap, genomad fix (no viral identify)": minimap_genomad_err,
+        # "minimap, genomad fix (no viral identify) (ESMTrain)": minimap_genomad_err_train,
+        # "ml genomad fix (no viral identify)": ml_genomad_err,
+        # "minimap_ml genomad fix (no viral identify)": virTaxonomer_genomad_err,
+        # "minimap_ml genomad fix (no viral identify) (ESMTrain)": virTaxonomer_genomad_err_train,
 
-        (minimap_diamond_vote, "minimap_diamond_vode"),
-        (minimap_diamond_top3, "minimap_diamond_top3"),
-        # (minimap_diamond_vote_double, "minimap_diamond_vote_double"),
-        # (minimap_diamond_top3_double, "minimap_diamond_top3_double")
-    ]
+        "minimap_diamond_vote": minimap_diamond_vote,
+        # "minimap_diamond_vote(ESMTrain)": minimap_diamond_vote_train,
+        "minimap_diamond_vote_genus": minimap_diamond_vote_genus,
+        # "minimap_diamond_vote_genus(ESMTrain)": minimap_diamond_vote_genus_train,
+        # "minimap_diamond_top3": minimap_diamond_top3,
+        # "minimap_diamond_vote_double": minimap_diamond_vote_double,
+        # "minimap_diamond_top3_double": minimap_diamond_top3_double,
+    }
 
 def main():
     # missingLabel = "Unknown"
     missingLabel = "Other"
+
+    analyseList = [
+        ("minimap_VMRv4", "Diamond_vote_VMRv4"),
+        # ("minimap_VMRv4(ESMTrain)", "Diamond_vote_VMRv4(ESMTrain)"),
+        ("Diamond_vote_VMRv4", "length"),
+        # ("Diamond_vote_VMRv4(ESMTrain)", "length"),
+        ("Diamond_vote_VMRv4", "protein_count"),
+        # ("Diamond_vote_VMRv4(ESMTrain)", "protein_count"),
+        # ("Diamond_vote_VMRv4", "protein_length"),
+        # ("Diamond_vote_VMRv4(ESMTrain)", "protein_length"),
+        # ("minimap_diamond_vote", "minimapÞ_diamond_vote_genus"),
+    ]
+
+    # analyseList = None
 
     # mergeCachedResults()
     models = getModels()
@@ -720,9 +918,15 @@ def main():
     # testModel(models, 'vitap', 'std', missingLabel=missingLabel)
     # testModel(models, 'VMRv4_test_subseq', 'accessionMatch', missingLabel=missingLabel)
     # testModel(models, 'VMRv4_test', 'accessionMatch', missingLabel=missingLabel)
-    testModel(models, 'refseq_2024_test',  'accessionMatch', missingLabel=missingLabel)
-    testModel(models, 'genbank_2024_test', 'accessionMatch', missingLabel=missingLabel)
-    testModel(models, 'genbank_2025_2025Spring', 'accessionMatch', missingLabel=missingLabel)
+    # testModel(models, 'refseq_2024_test',  'accessionMatch', missingLabel=missingLabel)
+    # testModel(models, 'genbank_2024_test', 'accessionMatch', missingLabel=missingLabel)
+    # testModel(models, 'genbank_2025_2025Spring', 'accessionMatch', missingLabel=missingLabel)
+
+    # sampleWiseAnalysis(models, 'VMRv4_test_subseq',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
+    # sampleWiseAnalysis(models, 'VMRv4_test',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
+    sampleWiseAnalysis(models, 'refseq_2024_test',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
+    sampleWiseAnalysis(models, 'genbank_2024_test',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
+    sampleWiseAnalysis(models, 'genbank_2025_2025Spring',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
     # testModelVirusIdentity(models, 'HGUT-Arch-Virus')
     # testModel(models, 'genbank_2024_test', 'accessionMatch')
     # testModel(models, 'genbank_2024_test', 'accessionMatch', "species")

@@ -18,13 +18,14 @@ from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
 class Diamond(Module):
-    def __init__(self, reference, method, threads=multiprocessing.cpu_count()):
+    def __init__(self, reference, method, threads=multiprocessing.cpu_count(), threshRank='species'):
         if (method not in ["sum", "vote"] and not method.startswith("top")):
             raise ValueError("Unsupported pooling method")
         self.method = method
         self.reference=reference
+        self.threshRank = threshRank
         self.threads = threads
-        super().__init__(f'diamond-ref={self.reference};method={self.method}')
+        super().__init__(f'diamond-ref={self.reference};method={self.method};thresh={self.threshRank}')
         self.baseName = f'diamond-ref={self.reference}'  # do not use 'self.moduleName' in code directly, in case of subClass!
 
         self.cacheFile = f"{config.cacheResultFolder}/{self.baseName}.tmp"
@@ -183,7 +184,14 @@ class Diamond(Module):
         if len(votes) > 0:
             totalVotes = sum(votes.values())
             winner, maxVotes = max(votes.items(), key=lambda x: x[1])
-            result = PlainResult(taxoTree.ICTVTree.ID2name[winner], score=maxVotes/totalVotes)
+            winnerNode = taxoTree.ICTVTree.nodes[taxoTree.ICTVTree.ID2name[winner]]
+            for n in reversed(winnerNode.path):
+                if (config.rankLevels[n.rank] <= config.rankLevels[self.threshRank] ):
+                    result = PlainResult(n.name, score=maxVotes/totalVotes)
+                    break
+            if result is None:
+                result = PlainResult(taxoTree.ICTVTree.ID2name[winner], score=maxVotes/totalVotes)
+
         
         return result
     

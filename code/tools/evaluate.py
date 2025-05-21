@@ -11,6 +11,8 @@ from entity.taxoNode import TaxoNode
 from utils import IOUtils
 
 def evaluate(dataset, index):
+    IOUtils.showInfo("analyse statistics function is modified")
+    raise ValueError("function expired")
     config.majorDataset = dataset
     config.updatePath()
     predFileName = f"{config.resultBase}/result-{index}.json"
@@ -23,7 +25,7 @@ def evaluate(dataset, index):
     df.to_csv(f'{config.resultBase}/statistics-{index}.csv', index=False)
 
 
-def analyseStatistics(preds:dict[str, TaxoNode], truths, missingLabel="Unknown"):
+def analyseStatistics(preds:dict[str, TaxoNode], truths:dict[str, TaxoNode], missingLabel="Unknown"):
         def macro_accuracy(y_true, y_pred):
             classes = set(y_true)
             class_accuracies = []
@@ -65,10 +67,9 @@ def analyseStatistics(preds:dict[str, TaxoNode], truths, missingLabel="Unknown")
         true_labels = defaultdict(dict)
 
         # extract labels
-        for id, std in truths.items():
-            if (std == 'no answer'):
+        for id, stdNode in truths.items():
+            if (stdNode is None):
                 continue
-            stdNode = taxoTree.getTaxoNodeFromICTV(ICTVName=std)
             predictNode = preds.get(id)
 
             # currently we do not care about virus prediction

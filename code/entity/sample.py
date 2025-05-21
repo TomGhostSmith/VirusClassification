@@ -22,6 +22,3 @@ class Sample():
             result.calcTaxoNode()
         
         self.results[name] = result
-
-    def addInfo(self, key, value):
-        self.info[key] = value

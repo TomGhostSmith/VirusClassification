@@ -4,7 +4,7 @@ from utils import IOUtils
 
 class Module():
     def __init__(self, name):
-        self.moduleName = name
+        self.moduleName:str = name
 
     def getResults(self, sampleList:list[Sample]):
         samples:list[Sample] = list()

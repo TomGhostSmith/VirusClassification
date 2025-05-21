@@ -14,7 +14,7 @@ class PlainResult(Result):
         self.score = score
 
     def calcTaxoNode(self):
-        if (self.pred in taxoTree.ICTVTree.name2ID):
+        if (self.pred in taxoTree.ICTVTree.nodes):
             self.node = taxoTree.getTaxoNodeFromICTV(ICTVName=self.pred)
         elif (self.pred in taxoTree.viralNCBITree.name2ID):
             self.node = taxoTree.getTaxoNodeFromNCBI(NCBIName=self.pred)

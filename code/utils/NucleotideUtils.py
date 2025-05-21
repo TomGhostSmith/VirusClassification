@@ -38,12 +38,15 @@ class NucleotideUtil:
         outputPrefix = f"{config.cacheFolder}/tmp.faa"
         # step 1: get samples to run, load cached samples
         samplesToRun:list[Sample] = list()
-
+        samplesNotLoaded:list[Sample] = list()
 
         for sample in samples:
+            if (sample.proteins is not None): # skip the sample that already has protein annotation
+                continue
+            samplesNotLoaded.append(sample)
+
+        for sample in samplesNotLoaded:
             cached = True
-            if (sample.proteins is not None):
-                continue  # skip the sample that already has protein annotation
             if sample.id in self.c2p:
                     proteins = self.c2p[sample.id]
                     for protein in proteins:
@@ -121,7 +124,7 @@ class NucleotideUtil:
                     os.remove(f"{outputPrefix}.{i}")
 
         cachedProteinFP = open(self.proteinFasta)
-        for sample in samples:
+        for sample in samplesNotLoaded:
             self.loadProteinSample(sample, cachedProteinFP)
         cachedProteinFP.close()
 
