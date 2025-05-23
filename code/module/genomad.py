@@ -15,7 +15,7 @@ from moduleResult.genomadResult import GenomadResult
 
 
 class Genomad(Module):
-    def __init__(self, threads=12):
+    def __init__(self, threads=multiprocessing.cpu_count()):
         super().__init__("genomad-1.9")
         self.threads = threads
         self.cacheFile = f"{config.cacheResultFolder}/{self.moduleName}.tmp"

@@ -3,6 +3,7 @@ import os
 import json
 import subprocess
 from Bio.Blast import NCBIXML
+import multiprocessing
 
 from config import config
 from prototype.module import Module
@@ -13,7 +14,7 @@ from entity.sample import Sample
 from utils import IOUtils
 
 class Blast(Module):
-    def __init__(self, reference, threads=12):
+    def __init__(self, reference, threads=multiprocessing.cpu_count()):
         self.reference=reference
         self.threads = threads
         super().__init__(f'blast-ref={self.reference}')

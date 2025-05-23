@@ -18,7 +18,7 @@ from moduleResult.vitapResult import VitapResult
 
 
 class VITAP(Module):
-    def __init__(self, threads=12):
+    def __init__(self, threads=multiprocessing.cpu_count()):
         self.threads = threads
         super().__init__("VITAP-VMRv4")
         self.cacheResult = f"{config.cacheResultFolder}/{self.moduleName}.json"

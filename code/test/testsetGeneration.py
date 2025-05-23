@@ -154,9 +154,10 @@ def generateTestset(source, species, seed, addNonVirus=False, maxPerSpecies=floa
 
 def main():
     # species = loadGenbankSpecies("20241225")
-    species = loadGenbankSpecies("20250505", "genbank_2025Spring.accession")
+    # species = loadGenbankSpecies("20250505", "genbank_2025Spring.accession")
+    species = loadGenbankSpecies("20250505", "genbank_2024.accession")
     # generateTestset("genbank", species, 2024, True, 2, "test")
-    generateTestset("genbank", species, 2025, False, 2, "2025Spring")
+    generateTestset("genbank", species, 2024, False, 2, "2024")
 
 if (__name__ == '__main__'):
     main()

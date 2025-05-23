@@ -3,6 +3,7 @@ import os
 import json
 import subprocess
 from Bio import SeqIO
+import multiprocessing
 
 from config import config
 from prototype.module import Module
@@ -13,7 +14,7 @@ from entity.sample import Sample
 from utils import IOUtils
 
 class Minimap(Module):
-    def __init__(self, reference, mode='ont', threads=12, skipComments=True):
+    def __init__(self, reference, mode='ont', threads=multiprocessing.cpu_count(), skipComments=True):
         self.reference=reference
         self.mode = mode
         self.threads = threads

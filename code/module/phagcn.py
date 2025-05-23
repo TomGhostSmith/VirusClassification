@@ -18,7 +18,7 @@ from moduleResult.plainResult import PlainResult
 
 
 class PhaGCN(Module):
-    def __init__(self, version, threads=12, lenThresh=8000, n=10000):
+    def __init__(self, version, threads=multiprocessing.cpu_count(), lenThresh=8000, n=10000):
         self.threads = threads
         self.version = version
         super().__init__(f"PhaGCN{self.version}_n={n}-VMRv1")

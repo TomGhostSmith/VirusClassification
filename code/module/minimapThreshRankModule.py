@@ -1,10 +1,12 @@
+import multiprocessing
+
 from module.minimap import Minimap
 from moduleResult.alignment import Alignment
 from entity.sample import Sample
 from moduleResult.minimapResult import MinimapResult
 
 class MinimapThreshRankModule(Minimap):
-    def __init__(self, reference, mode='ont', threads=12, skipComments=True, limitOutputDict=None):
+    def __init__(self, reference, mode='ont', threads=multiprocessing.cpu_count(), skipComments=True, limitOutputDict=None):
         super().__init__(reference, mode, threads, skipComments)
         self.limitOutputRanks = ["species"]*12
         if (limitOutputDict is not None):

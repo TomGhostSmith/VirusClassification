@@ -774,7 +774,7 @@ def getModels():
     minimap_diamond_vote_double = MergeModule([minimap_thrank, diamond_vote, minimap, diamond_vote], diamondMerge, "minimap_diamond_vote_double")
     minimap_diamond_top3_double = MergeModule([minimap_thrank, diamond_top3, minimap, diamond_top3], diamondMerge, "minimap_diamond_top3_double")
 
-    vitap = VITAP(threads=16)
+    vitap = VITAP()
 
     cat = CAT()
 

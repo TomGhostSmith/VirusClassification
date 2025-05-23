@@ -197,12 +197,12 @@ def getGenBank(version):
     
     tarFP.close()
 
-def getNewReleaseGenBank(version):
+def getNewReleaseGenBank(version, date, name):
     metaData = loadMetadata(version)
-    tarFP = open(f"{config.modelRoot}/NCBI/Nucleotide/{version}/genbank_2025Spring.accession", 'wt')
+    tarFP = open(f"{config.modelRoot}/NCBI/Nucleotide/{version}/{name}.accession", 'wt')
     tarFP.write("Accession,Species\n")
     for row in tqdm(metaData.itertuples(), total=metadataLineCount-1):
-        if ((not pandas.isnull(row.Species)) and (not pandas.isnull(row.Accession)) and row.Release_Date.startswith("2025")):
+        if ((not pandas.isnull(row.Species)) and (not pandas.isnull(row.Accession)) and row.Release_Date.startswith(date)):
             tarFP.write(f"{row.Accession},{row.Species}\n")
     
     tarFP.close()
@@ -218,10 +218,10 @@ def main():
     # createFolders(version)
     # downloadFile(version, "2025SpringNuclMetadata.csv")
     # splitAllFasta(version)
-    checkMetaSeqAlignment(version)
+    # checkMetaSeqAlignment(version)
     # getHost(version)
     # getGenBank(version)
-    # getNewReleaseGenBank(version)
+    getNewReleaseGenBank(version, "2024", "genbank_2024")
 
 if (__name__ == '__main__'):
     main()

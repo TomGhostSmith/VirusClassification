@@ -1,5 +1,6 @@
 import os
 import subprocess
+import multiprocessing
 
 from config import config
 from prototype.module import Module
@@ -10,7 +11,7 @@ from moduleResult.alignment import Alignment
 from utils import IOUtils
 
 class MinimapThresholdModule(Minimap):
-    def __init__(self, reference, mode='ont', threads=12, skipComments=True, factors=['most']):
+    def __init__(self, reference, mode='ont', threads=multiprocessing.cpu_count(), skipComments=True, factors=['most']):
         super().__init__(reference, mode, threads, skipComments)
         self.factors = factors if isinstance(factors, list) else [factors]
         self.moduleName = f'minimapThresh-ref={self.reference};mode={self.mode};thresh-{"_".join(self.factors)}'
