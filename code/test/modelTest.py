@@ -40,6 +40,7 @@ from module.metabuli import Metabuli
 from module.diamond import Diamond
 
 from moduleResult.plainResult import PlainResult
+from moduleResult.mlResult import MLResult
 from moduleResult.diamondAlignment import DiamondAlignment
 
 from entity.taxoTree import taxoTree
@@ -611,6 +612,130 @@ def diamondMerge(sample:Sample, modelNames, currentModelIndex):
     else:
         return sample.results[modelNames[currentModelIndex]]
 
+def virtaxDiamondMerge1(sample: Sample, modelNames, currentModelIndex):
+    if (currentModelIndex == 0 or currentModelIndex == 3):
+        return sample.results[modelNames[currentModelIndex]]
+    if (currentModelIndex == 1):
+        return None
+    if (currentModelIndex == 2):
+        result1:PlainResult = sample.results[modelNames[1]]
+        result2:MLResult = sample.results[modelNames[2]]
+        if (result1 is None):
+            return result2
+        elif (result2 is None):
+            if (diamondScore > 0.45):
+                return result1
+            else:
+                return None
+        else:
+            diamondScore = result1.score
+            # IOUtils.showInfo(f"diamond score: {diamondScore}, ML score: {list(result2.scores.values())}")
+            if diamondScore > 0.45:
+                return result1
+            else:
+                return result2
+
+def virtaxDiamondMerge2(sample: Sample, modelNames, currentModelIndex):
+    if (currentModelIndex == 0):
+        return sample.results[modelNames[currentModelIndex]]
+    if (currentModelIndex == 1 or currentModelIndex == 2):
+        return None
+    if (currentModelIndex == 3):
+        result1:PlainResult = sample.results[modelNames[1]]
+        result2:MLResult = sample.results[modelNames[2]]
+        result3 = sample.results[modelNames[3]]  # minimap result
+        if (result1 is None or result1.node is None):
+            return result2
+        elif (result2 is None or result2.node is None):
+            if (diamondScore > 0.45):
+                return result1
+            else:
+                return None
+        else:
+            node1 = result1.node.ICTVNode
+            node2 = result2.node.ICTVNode
+            diamondScore = result1.score
+            if (result3 is not None and result3.node is not None):
+                node3 = result3.node.ICTVNode
+            else:
+                node3 = None
+            
+            if (node3 is not None):
+                # case 1: minimap align with diamond, select minimap result
+                for n in node3.path:
+                    if node1.name == n.name:
+                        return result3
+
+                # case 2: ML align with minimap, select ML result
+                for n in node3.path:
+                    if node2.name == n.name:
+                        return result2
+                    
+            # case 3:ML align with diamond, select ML result
+            for n in node1.path:
+                if n.name == node2.name:
+                    return result2
+            
+            # case 4： results are all different, and minimap is available
+            if (node3 is not None):
+                alignLCA = taxoTree.ICTVTree.findLCA([node1, node3])  # find LCA of minimap and diamond
+                LCAResult = PlainResult(alignLCA.name)
+
+                return LCAResult
+            
+            # case 5: all different, and minimap is unavailable
+            return PlainResult(taxoTree.ICTVTree.findLCA([node1, node2]).name)
+            
+            # # case 4.1: ML result on LCA path, return LCA result
+            # for n in alignLCA.path:
+            #     if node2.name == n.name:
+            #         return LCAResult
+
+            # # case 4.2: LCA result on ML path, return LCA result
+            # for n in node2.path:
+            #     if alignLCA.name == n.name:
+            #         return LCAResult
+            
+            # # case 4.3: LCA and ML are of different path, return 
+
+def virtaxDiamondMerge3(sample: Sample, modelNames, currentModelIndex):
+    if (currentModelIndex == 0):
+        return sample.results[modelNames[currentModelIndex]]
+    if (currentModelIndex == 1 or currentModelIndex == 2):
+        return None
+    if (currentModelIndex == 3):
+        result1:PlainResult = sample.results[modelNames[1]]
+        result2:MLResult = sample.results[modelNames[2]]
+        result3 = sample.results[modelNames[3]]  # minimap result
+        if (result1 is None or result1.node is None):
+            return result2
+        # elif (result2 is None or result2.node is None):
+        #     if (diamondScore > 0.45):
+        #         return result1
+        #     else:
+        #         return None
+        else:
+            node1 = result1.node.ICTVNode
+            node2 = result2.node.ICTVNode
+            diamondScore = result1.score
+            minimapScore = 0
+            if (result3 is not None and result3.node is not None):
+                node3 = result3.node.ICTVNode
+                minimapScore = list(result3.scores.values())[0]
+            else:
+                node3 = None
+
+            if (diamondScore > minimapScore):
+                alignNode = node1
+                alignScore = diamondScore
+            else:
+                alignNode = node3
+                alignScore = minimapScore
+
+            if (alignScore > 0.45):
+                return PlainResult(alignNode.name, alignScore)
+            return result2
+        
 
 def getModels():
     # VirTaxonomer
@@ -752,10 +877,13 @@ def getModels():
 
     minimap = Minimap(reference='VMRv4')
     minimap_train = Minimap(reference='VMRv4_ML_train')
-    minimap_thrank = MinimapThreshRankModule(reference="VMRv4", limitOutputDict=thRank)
-    minimap_thrank_train = MinimapThreshRankModule(reference="VMRv4_ML_train", limitOutputDict=thRank)
-    minimap_thrank_genusonly = MinimapThreshRankModule(reference="VMRv4", limitOutputDict=thRank2)
-    minimap_thrank_genusonly_train = MinimapThreshRankModule(reference="VMRv4_ML_train", limitOutputDict=thRank2)
+    # minimap_thrank = MinimapThreshRankModule(reference="VMRv4", limitOutputDict=thRank)
+    # minimap_thrank_train = MinimapThreshRankModule(reference="VMRv4_ML_train", limitOutputDict=thRank)
+    # minimap_thrank_genusonly = MinimapThreshRankModule(reference="VMRv4", limitOutputDict=thRank2)
+    # minimap_thrank_genusonly_train = MinimapThreshRankModule(reference="VMRv4_ML_train", limitOutputDict=thRank2)
+
+    minimap_thresh = MinimapThresholdModule(reference="VMRv4", factors=["60", "completeMatch"])
+    minimap_thresh_train = MinimapThresholdModule(reference="VMRv4_ML_train", factors=["60", "completeMatch"])
 
     diamond_sum = Diamond("VMRv4", "sum")
     diamond_sum_train = Diamond("VMRv4_ML_train", "sum")
@@ -771,15 +899,16 @@ def getModels():
     minimap_diamond_vote_train = MergeModule([minimap_train, diamond_vote_train], basicMerge, "minimap_diamond_vote_train")
     minimap_diamond_vote_genus_train = MergeModule([minimap_train, diamond_vote_genus_train], basicMerge, "minimap_diamond_vote_genus_train")
     minimap_diamond_top3 = MergeModule([minimap, diamond_top3], basicMerge, "minimap_diamond_top3")
-    minimap_diamond_vote_double = MergeModule([minimap_thrank, diamond_vote, minimap, diamond_vote], diamondMerge, "minimap_diamond_vote_double")
-    minimap_diamond_top3_double = MergeModule([minimap_thrank, diamond_top3, minimap, diamond_top3], diamondMerge, "minimap_diamond_top3_double")
+    minimap_diamond_vote_double = MergeModule([minimap_thresh, diamond_vote, minimap, diamond_vote], diamondMerge, "minimap_diamond_vote_double")
+    minimap_diamond_top3_double = MergeModule([minimap_thresh, diamond_top3, minimap, diamond_top3], diamondMerge, "minimap_diamond_top3_double")
 
     vitap = VITAP()
 
     cat = CAT()
 
-    virTaxonomerTaxoOnly = MergeModule([minimap_thrank, ml, minimap], basicMerge, "minimap_ml")
-    virTaxonomerTaxoOnly_train = MergeModule([minimap_thrank_train, ml, minimap_train], basicMerge, "minimap_ml_train")
+    # virTaxonomerTaxoOnly = MergeModule([minimap_thrank, ml, minimap], basicMerge, "minimap_ml")
+    virTaxonomerTaxoOnly = MergeModule([minimap_thresh, ml, minimap], basicMerge, "minimap_ml")
+    virTaxonomerTaxoOnly_train = MergeModule([minimap_thresh_train, ml, minimap_train], basicMerge, "minimap_ml_train")
 
     virTaxonomerStandard = Pipeline(
     VirusPred([
@@ -801,17 +930,30 @@ def getModels():
 
     
 
-    minimap_genomad = MergeModule([minimap_thrank, genomad, minimap], basicMerge, "minimap_genomad")
-    minimap_genomad_train = MergeModule([minimap_thrank_train, genomad, minimap_train], basicMerge, "minimap_genomad_train")
+    minimap_genomad = MergeModule([minimap_thresh, genomad, minimap], basicMerge, "minimap_genomad")
+    minimap_genomad_train = MergeModule([minimap_thresh_train, genomad, minimap_train], basicMerge, "minimap_genomad_train")
     ml_genomad = MergeModule([ml, genomad], basicMerge, "ml_genomad")
-    virTaxonomer_genomad = MergeModule([minimap_thrank, ml, minimap, genomad], taxoGenoMerge, "minimap_ml_genomad")
-    virTaxonomer_genomad_train = MergeModule([minimap_thrank_train, ml, minimap_train, genomad], taxoGenoMerge, "minimap_ml_genomad_train")
+    virTaxonomer_genomad = MergeModule([minimap_thresh, ml, minimap, genomad], taxoGenoMerge, "minimap_ml_genomad")
+    virTaxonomer_genomad_train = MergeModule([minimap_thresh_train, ml, minimap_train, genomad], taxoGenoMerge, "minimap_ml_genomad_train")
 
-    minimap_genomad_err = MergeModule([minimap_thrank, genomad], errMerge, "minimap_genomad_err")
-    minimap_genomad_err_train = MergeModule([minimap_thrank_train, genomad], errMerge, "minimap_genomad_err_train")
+    minimap_genomad_err = MergeModule([minimap_thresh, genomad], errMerge, "minimap_genomad_err")
+    minimap_genomad_err_train = MergeModule([minimap_thresh_train, genomad], errMerge, "minimap_genomad_err_train")
     ml_genomad_err = MergeModule([ml, genomad], errMerge, "ml_genomad_err")
     virTaxonomer_genomad_err = MergeModule([virTaxonomerTaxoOnly, genomad], errMerge, "minimap_ml_genomad_err")
     virTaxonomer_genomad_err_train = MergeModule([virTaxonomerTaxoOnly_train, genomad], errMerge, "minimap_ml_genomad_err_train")
+
+    virTaxonomer_diamond_taxoOnly = MergeModule([minimap_thresh, diamond_top3, ml, minimap], virtaxDiamondMerge1, "virTaxoDiamond")
+    virTaxonomer_diamond_taxoOnly2 = MergeModule([minimap_thresh, diamond_top3, ml, minimap], virtaxDiamondMerge2, "virTaxoDiamond2")
+    virTaxonomer_diamond_taxoOnly3 = MergeModule([minimap_thresh, diamond_top3, ml, minimap], virtaxDiamondMerge3, "virTaxoDiamond3")
+
+    virTaxonomer_diamond = Pipeline(
+    VirusPred([
+        MinimapThresholdModule('VMRv4', factors=['60', 'completeMatch']), 
+        ESM()]),
+        # MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
+        # MLModule('bottomup', 0.45, '1011000')
+        virTaxonomer_diamond_taxoOnly
+    )
 
     # return [minimap, blast, kraken, genomad, vcontact, phagcn, virTaxonomer_bottomup_genus, virTaxonomer_bottomup, virTaxonomer_highest_genus]
     # return [minimap, blast, genomad, phagcn, vcontact, virTaxonomer_virus_identify]
@@ -828,20 +970,20 @@ def getModels():
     # return [cat]
     # return [kraken]
     return {
-        "kraken_NCBI": kraken,
+        # "kraken_NCBI": kraken,
         # "genomAD-1.9_NCBI": genomad,
-        "CAT_NCBI": cat,
+        # "CAT_NCBI": cat,
         "minimap_VMRv4": minimap, 
         # "minimap_VMRv4(ESMTrain)": minimap_train,
         # "minimap_VMRv4_threshold": minimap_thrank, 
         # "minimap_VMRv4_threshold(ESMTrain)": minimap_thrank_train,
         "blast_VMRv4": blast,
         # "blast_VMRv4(ESMTrain)": blast_train,
-        "Diamond_sum_VMRv4": diamond_sum,
+        # "Diamond_sum_VMRv4": diamond_sum,
         # "Diamond_sum_VMRv4(ESMTrain)": diamond_sum_train,
         "Diamond_vote_VMRv4": diamond_vote,
         # "Diamond_vote_VMRv4(ESMTrain)": diamond_vote_train,
-        "Diamond_vote_genus_VMRv4": diamond_vote_genus,
+        # "Diamond_vote_genus_VMRv4": diamond_vote_genus,
         # "Diamond_vote_genus_VMRv4(ESMTrain)": diamond_vote_genus_train,
         # "Diamond_top3_VMRv4": diamond_top3,
         # "Diamond_top3_VMRv4(ESMTrain)": diamond_top3_train,
@@ -857,7 +999,7 @@ def getModels():
         # "PhaGCN3-merge_n=10000_VMRv1": phagcn3_10000_merge,
         # (virTaxonomer_bottomup_genus, "VirTaxonomer-bottomup-genus_VMRv4"),
         # (virTaxonomer_highest_genus, "VirTaxonomer-highest-genus_VMRv4"),
-        # (virTaxonomer_bottomup, "VirTaxonomer-buttomup_VMRv4"),
+        "VirTaxonomer-buttomup_VMRv4": virTaxonomer_bottomup,
         # (virTaxonomer_bottomup_train, "VirTaxonomer-buttomup_VMRv4_ESMTrain"),
         # (virTaxonomer_esm, "VirTaxonomer-Identify+ML_VMRv4"),
         # (virTaxonomer_esm_train, "VirTaxonomer-Identify(ESMTrain)+ML_VMRv4"),
@@ -885,11 +1027,16 @@ def getModels():
 
         "minimap_diamond_vote": minimap_diamond_vote,
         # "minimap_diamond_vote(ESMTrain)": minimap_diamond_vote_train,
-        "minimap_diamond_vote_genus": minimap_diamond_vote_genus,
+        # "minimap_diamond_vote_genus": minimap_diamond_vote_genus,
         # "minimap_diamond_vote_genus(ESMTrain)": minimap_diamond_vote_genus_train,
         # "minimap_diamond_top3": minimap_diamond_top3,
         # "minimap_diamond_vote_double": minimap_diamond_vote_double,
         # "minimap_diamond_top3_double": minimap_diamond_top3_double,
+
+        "virTax_diamond_vote": virTaxonomer_diamond,
+        "virTax_diamond_vote_taxoOnly": virTaxonomer_diamond_taxoOnly,
+        "virTax_diamond_vote_taxoOnly2": virTaxonomer_diamond_taxoOnly2,
+        "virTax_diamond_vote_taxoOnly3": virTaxonomer_diamond_taxoOnly3,
     }
 
 def main():
@@ -897,11 +1044,12 @@ def main():
     missingLabel = "Other"
 
     analyseList = [
-        ("minimap_VMRv4", "Diamond_vote_VMRv4"),
+        # ("minimap_VMRv4", "Diamond_vote_VMRv4"),
         # ("minimap_VMRv4(ESMTrain)", "Diamond_vote_VMRv4(ESMTrain)"),
-        ("Diamond_vote_VMRv4", "length"),
+        # ("Diamond_vote_VMRv4", "length"),
         # ("Diamond_vote_VMRv4(ESMTrain)", "length"),
-        ("Diamond_vote_VMRv4", "protein_count"),
+        # ("Diamond_vote_VMRv4", "protein_count"),
+        ("VirTaxonomer-buttomup_VMRv4", "VirTaxonomer")
         # ("Diamond_vote_VMRv4(ESMTrain)", "protein_count"),
         # ("Diamond_vote_VMRv4", "protein_length"),
         # ("Diamond_vote_VMRv4(ESMTrain)", "protein_length"),
@@ -924,9 +1072,10 @@ def main():
 
     # sampleWiseAnalysis(models, 'VMRv4_test_subseq',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
     # sampleWiseAnalysis(models, 'VMRv4_test',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
-    sampleWiseAnalysis(models, 'refseq_2024_test',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
-    sampleWiseAnalysis(models, 'genbank_2024_test',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
-    sampleWiseAnalysis(models, 'genbank_2025_2025Spring',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
+    # sampleWiseAnalysis(models, 'refseq_2024_test',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
+    # sampleWiseAnalysis(models, 'genbank_2024_test',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
+    sampleWiseAnalysis(models, 'genbank_2024_2024',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
+    # sampleWiseAnalysis(models, 'genbank_2025_2025Spring',  'accessionMatch', missingLabel=missingLabel, analyseList=analyseList)
     # testModelVirusIdentity(models, 'HGUT-Arch-Virus')
     # testModel(models, 'genbank_2024_test', 'accessionMatch')
     # testModel(models, 'genbank_2024_test', 'accessionMatch', "species")

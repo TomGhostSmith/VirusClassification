@@ -21,6 +21,7 @@ from entity.sample import Sample
 from config import config
 from Bio import SeqIO
 from utils import IOUtils
+from utils.NucleotideUtils import NucleotideUtils
 
 @dataclass
 class DataCollatorForSupervisedDataset(object):
@@ -42,8 +43,6 @@ class DataCollatorForSupervisedDataset(object):
 
 class ESMRunner():
     def __init__(self, maxLen, modelFolder, baseModelFolder, n_class, batchSize=64, cachedResult=None):
-        IOUtils.showInfo("RE-construct protein translation", "CRITCAL")
-        exit(-1)
         self.tempDNAFasta = f"{config.cacheFolder}/DNAs.fasta"
         self.tempProFasta = f"{config.cacheFolder}/proteins.fasta"
         self.tempProCSV = f"{config.cacheFolder}/proteins.csv"
@@ -83,49 +82,19 @@ class ESMRunner():
         self.model.to(self.device)
         self.model.eval()
 
-    def runSingleProdigal(self, idx, dnaFasta, outputFasta):
-        subprocess.run(f"prodigal-gv -i {dnaFasta} -a {outputFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return idx
-
-
     def run(self, samples:list[Sample]):
         if (self.useCache):
             return
         
         # 1. store samples to a fasta file
-        # with open(self.tempDNAFasta, 'wt') as fp:
-        #     for sample in samples:
-        #         SeqIO.write(sample.seq, fp, 'fasta')
-        
-        # 2. convert DNA.fasta to protein.fasta (redundant though, do not store result for each one)
-        recordPerThread = 100
-        splitCount = math.ceil(len(samples)/recordPerThread)
-        proteinFastaFP = open(self.tempProFasta, 'wt')
-
-        with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
-            asyncResults = list()
-            for i in range(splitCount):
-                IOUtils.writeSampleFasta(samples[recordPerThread * i : recordPerThread * (i+1)], f"{self.tempDNAFasta}.{i}")
-        
-                asyncResults.append(pool.apply_async(self.runSingleProdigal, 
-                                                [i, f"{self.tempDNAFasta}.{i}", f"{self.tempProFasta}.{i}"]))
-                
-            for asyncResult in asyncResults:
-                idx = asyncResult.get()
-                with open(f"{self.tempProFasta}.{idx}") as fp:
-                    proteinFastaFP.writelines(fp.readlines())
-        proteinFastaFP.close()
-        # subprocess.run(f"prodigal-gv -i {self.tempDNAFasta} -a {self.tempProFasta} -p meta", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for i in range(splitCount):
-            os.remove(f"{self.tempDNAFasta}.{i}")
-            os.remove(f"{self.tempProFasta}.{i}")
-
+        # 2. convert DNA.fasta to protein.fasta
         # 3. preprocee protein.fasta to a csv file
+        NucleotideUtils.extractProtein(samples)
         with open(self.tempProCSV, "w") as f:
             f.write(f'sequence,accession\n')
-            for record in SeqIO.parse(self.tempProFasta, "fasta"):
-                sequence = str(record.seq).upper()
-                f.write(f'{sequence},{record.id}\n')
+            for sample in samples:
+                for protein in sample.proteins:
+                    f.write(f'{str(protein.seq.seq).upper()},{protein.id}\n')
 
         # 4. load model, run and save result
         self.runModel()

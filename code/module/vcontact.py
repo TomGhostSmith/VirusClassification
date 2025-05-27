@@ -15,6 +15,7 @@ from config import config
 from utils import IOUtils
 from entity.sample import Sample
 from moduleResult.plainResult import PlainResult
+from utils.NucleotideUtils import NucleotideUtils
 
 
 class Vcontact(Module):
@@ -46,6 +47,7 @@ class Vcontact(Module):
         params = list()
 
         samplePerGroup = 10000
+        NucleotideUtils.extractProtein(samples)
 
         # remove the cached folders to avoid chaos
         # for i in range(commonFiles):
@@ -55,10 +57,10 @@ class Vcontact(Module):
         commonFiles = math.ceil(len(samples)/samplePerGroup)
         for i in range(commonFiles):
             outputFolder = f"{config.cacheFolder}/vcontact_output_{i}"
-            queryFile = f"{outputFolder}/dna.fasta"
+            queryFile = f"{outputFolder}/protein.fasta"
             os.makedirs(outputFolder)
             # os.makedirs(outputFolder, exist_ok=True)
-            IOUtils.writeSampleFasta(samples[i*samplePerGroup : (i+1)*samplePerGroup], queryFile)
+            IOUtils.writeSampleProteinFasta(samples[i*samplePerGroup : (i+1)*samplePerGroup], queryFile)
             if (i + 1 == commonFiles and i % 2 == 0):
                 threads = self.threads
             else:
