@@ -184,10 +184,12 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset=None, 
                     F1s.append(2*rec*prec / (rec+prec) if (rec+prec > 0) else 0)  # note: this is not a typical F1 score, but a coverage-precision F1 score
 
             # bars = ax.bar(x + idx*width, recallList, width, label=f"model {idx} recall", alpha=0.7)
-            bars = ax.bar(x*1.5 + idx*width, recallList, width, alpha=0.3, color=availableColors[idx])
+            # bars = ax.bar(x*1.5 + idx*width, recallList, width, alpha=0.3, color=availableColors[idx])
+            bars = ax.bar(x*1.5 + idx*width, recallList, width, color='white', hatch='/', edgecolor=availableColors[idx])
             # ax.bar(x + idx*width, accuracyList, width, color=bars[0].get_facecolor(), label=f"model {idx} accuracy", hatch='//')
-            # ax.bar(x*1.5 + idx*width, accuracyList, width, color=bars[0].get_facecolor(), hatch='/', edgecolor='black')
-            ax.bar(x*1.5 + idx*width, accuracyList, width, color=bars[0].get_facecolor(), alpha=0.9, label=f"{modelDesc}")
+            # ax.bar(x*1.5 + idx*width, accuracyList, width, color='white', hatch='/', edgecolor=bars[0].get_facecolor(), label=f"{modelDesc}")
+            # ax.bar(x*1.5 + idx*width, accuracyList, width, color=bars[0].get_facecolor(), alpha=0.9, label=f"{modelDesc}")
+            ax.bar(x*1.5 + idx*width, accuracyList, width, color=availableColors[idx], alpha=1, label=f"{modelDesc}")
 
             # modelRecalls.append(totalRecall / totalRecallCount if totalRecallCount > 0 else 0)
             # modelPrecisions.append(totalPrecision / totalPrecisionCount if totalPrecisionCount > 0 else 0)
@@ -406,7 +408,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
 
         summaryDF.to_excel(writer, sheet_name='summary', index=False)
 
-        # sheet 2: protein related info
+        # sheet 2: performance related analysis
         for factor1, factor2 in analyseList:
             if (factor2 in ["length", "protein_count", "protein_length"]):
                 modelDesc = factor1
@@ -435,23 +437,13 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
 
 
                 # df2: similarity table of two models
-                modelLCAs = {rank: 0 for rank in config.rankLevels.keys()}
-                modelGTLCAs = {rank: 0 for rank in config.rankLevels.keys()}
-
-                modelLCAs["N/A"] = 0
-                modelLCAs["No GT"] = 0
-                modelLCAs[f"{modelDesc1}_only"] = 0
-                modelLCAs[f"{modelDesc2}_only"] = 0
-
-                modelGTLCAs["N/A"] = 0
-                modelGTLCAs["No GT"] = 0
-                modelGTLCAs[f"{modelDesc1}_only"] = 0
-                modelGTLCAs[f"{modelDesc2}_only"] = 0
+                modelLCAs = list()
+                modelGTLCAs = list()
                 for sample in samples:
                     std = sample.info["stdResult"]
                     if (std is None or std.ICTVNode is None):  # currently we only focus those with GT
-                        modelLCAs["No GT"] += 1
-                        modelGTLCAs["No GT"] += 1
+                        modelLCAs.append("No GT")
+                        modelGTLCAs.append("No GT")
                         continue
                     stdNode = std.ICTVNode
                     pred1 = sample.results[model1.moduleName]
@@ -467,25 +459,29 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
                     if (pred1Avail and pred2Avail):
                         LCANode1 = taxoTree.ICTVTree.findLCA([pred1, pred2])
                         LCANode2 = taxoTree.ICTVTree.findLCA([pred1, pred2, stdNode])
-                        modelLCAs[LCANode1.rank] += 1
-                        modelGTLCAs[LCANode2.rank] += 1
+                        modelLCAs.append(LCANode1.rank)
+                        modelGTLCAs.append(LCANode2.rank)
                     elif (pred1Avail):
-                        modelLCAs[f"{modelDesc1}_only"] += 1
-                        modelGTLCAs[f"{modelDesc1}_only"] += 1
+                        modelLCAs.append(f"{modelDesc1}_only")
+                        modelGTLCAs.append(f"{modelDesc1}_only")
                     elif (pred2Avail):
-                        modelLCAs[f"{modelDesc2}_only"] += 1
-                        modelGTLCAs[f"{modelDesc2}_only"] += 1
+                        modelLCAs.append(f"{modelDesc2}_only")
+                        modelGTLCAs.append(f"{modelDesc2}_only")
                     else:
-                        modelLCAs["N/A"] += 1
-                        modelGTLCAs["N/A"] += 1
+                        modelLCAs.append("N/A")
+                        modelGTLCAs.append("N/A")
+                
+                tmpDF = pandas.DataFrame({
+                    "id": [sample.id for sample in samples],
+                    "modelLCA": modelLCAs,
+                    "modelGTLCA": modelGTLCAs
+                    }
+                )
 
-                analyseDF = pandas.DataFrame({
-                    "LCA_rank": list(modelLCAs.keys()),
-                    "model_LCA_count": list(modelLCAs.values()),
-                    "model_GT_LCA_count": list(modelGTLCAs.values())
-                })
-
-
+                cellText = "model_LCA \\ model_GT_LCA"
+                tmpDF[cellText] = pandas.Categorical(tmpDF["modelLCA"], categories=["N/A"] + list(config.rankLevels.keys()) + ["No GT", f"{modelDesc1}_only", f"{modelDesc2}_only"], ordered=True)
+                tmpDF["tmp2"] = pandas.Categorical(tmpDF["modelGTLCA"], categories=["N/A"] + list(config.rankLevels.keys()) + ["No GT", f"{modelDesc1}_only", f"{modelDesc2}_only"], ordered=True)
+                analyseDF = pandas.crosstab(tmpDF[cellText], tmpDF[f"tmp2"])
 
                 analyseDF.to_excel(writer, sheet_name=f'{modelDesc1}_{modelDesc2}'[:27] + '_LCA')
                 
@@ -737,6 +733,51 @@ def virtaxDiamondMerge3(sample: Sample, modelNames, currentModelIndex):
             return result2
         
 
+def virtaxDiamondMerge4(sample: Sample, modelNames, currentModelIndex):
+    if (currentModelIndex == 0):
+        return sample.results[modelNames[currentModelIndex]]
+    if (currentModelIndex == 1 or currentModelIndex == 2):
+        return None
+    if (currentModelIndex == 3):
+        result1:PlainResult = sample.results[modelNames[1]]
+        result2:MLResult = sample.results[modelNames[2]]
+        result3 = sample.results[modelNames[3]]  # minimap result
+        if (result2 is not None and result2.node is not None):
+            virTaxNode = result2.node.ICTVNode
+        elif (result3 is not None and result3.node is not None):
+            node3 = result3.node.ICTVNode
+            virTaxNode = node3
+        else:
+            return result1
+        
+        if (result1 is None or result1.node is None):
+            return PlainResult(virTaxNode.name)
+        else:
+            node1 = result1.node.ICTVNode
+
+            lcaNode = taxoTree.ICTVTree.findLCA([node1, virTaxNode])
+            if (config.rankLevels[lcaNode.rank] <= config.rankLevels["family"]):  # use Diamond result, because it is robust above family level
+                for n in reversed(node1.path):
+                    if (config.rankLevels[n.rank]  <= config.rankLevels["family"]):
+                        return PlainResult(n.name, result1.score)
+            else:
+                return PlainResult(virTaxNode.name)
+
+def LCAmerge(sample:Sample, modelNames, currentModelIndex):
+    if (currentModelIndex < len(modelNames) - 1):
+        return None
+    nodes = list()
+    for modelName in modelNames:
+        res = sample.results[modelName]
+        if (res is not None and res.node is not None):
+            nodes.append(res.node.ICTVNode)
+    
+    if (len(nodes) == 0):
+        return None
+    LCANode = taxoTree.ICTVTree.findLCA(nodes)
+    return PlainResult(LCANode.name)
+            
+
 def getModels():
     # VirTaxonomer
     thRank = {
@@ -902,6 +943,8 @@ def getModels():
     minimap_diamond_vote_double = MergeModule([minimap_thresh, diamond_vote, minimap, diamond_vote], diamondMerge, "minimap_diamond_vote_double")
     minimap_diamond_top3_double = MergeModule([minimap_thresh, diamond_top3, minimap, diamond_top3], diamondMerge, "minimap_diamond_top3_double")
 
+    minimap_diamond_LCA = MergeModule([minimap_thresh, diamond_top3], LCAmerge, "minimap_diamond_LCA")
+
     vitap = VITAP()
 
     cat = CAT()
@@ -945,6 +988,7 @@ def getModels():
     virTaxonomer_diamond_taxoOnly = MergeModule([minimap_thresh, diamond_top3, ml, minimap], virtaxDiamondMerge1, "virTaxoDiamond")
     virTaxonomer_diamond_taxoOnly2 = MergeModule([minimap_thresh, diamond_top3, ml, minimap], virtaxDiamondMerge2, "virTaxoDiamond2")
     virTaxonomer_diamond_taxoOnly3 = MergeModule([minimap_thresh, diamond_top3, ml, minimap], virtaxDiamondMerge3, "virTaxoDiamond3")
+    virTaxonomer_diamond_taxoOnly4 = MergeModule([minimap_thresh, diamond_top3, ml, minimap], virtaxDiamondMerge4, "virTaxoDiamond4")
 
     virTaxonomer_diamond = Pipeline(
     VirusPred([
@@ -970,9 +1014,9 @@ def getModels():
     # return [cat]
     # return [kraken]
     return {
-        # "kraken_NCBI": kraken,
-        # "genomAD-1.9_NCBI": genomad,
-        # "CAT_NCBI": cat,
+        "kraken_NCBI": kraken,
+        "genomAD-1.9_NCBI": genomad,
+        "CAT_NCBI": cat,
         "minimap_VMRv4": minimap, 
         # "minimap_VMRv4(ESMTrain)": minimap_train,
         # "minimap_VMRv4_threshold": minimap_thrank, 
@@ -989,17 +1033,17 @@ def getModels():
         # "Diamond_top3_VMRv4(ESMTrain)": diamond_top3_train,
         "Metabuli v1.0.9.2": metabuli,
         # "Metabuli v1.0.9.2 (ESM Train)": metabuli_train,
-        # "vConTACT2_ProkaryoticViralRefSeq211": vcontact,
+        "vConTACT2_ProkaryoticViralRefSeq211": vcontact,
         # "vConTACT2_VMRv4": vcontact_VMRv4,
         # "vConTACT2_VMRv4(ESMTrain)": vcontact_ML_train,
         # "PhaGCN2_n=1000_VMRv1": phagcn2_1000,
         # "PhaGCN2_n=10000_VMRv1": phagcn2_10000,
-        # "PhaGCN3_n=10000_VMRv1": phagcn3_10000,
+        "PhaGCN3_n=10000_VMRv1": phagcn3_10000,
         # "PhaGCN3_n=100000_VMRv1": phagcn3_100000,
         # "PhaGCN3-merge_n=10000_VMRv1": phagcn3_10000_merge,
         # (virTaxonomer_bottomup_genus, "VirTaxonomer-bottomup-genus_VMRv4"),
         # (virTaxonomer_highest_genus, "VirTaxonomer-highest-genus_VMRv4"),
-        "VirTaxonomer-buttomup_VMRv4": virTaxonomer_bottomup,
+        # "VirTaxonomer-buttomup_VMRv4": virTaxonomer_bottomup,
         # (virTaxonomer_bottomup_train, "VirTaxonomer-buttomup_VMRv4_ESMTrain"),
         # (virTaxonomer_esm, "VirTaxonomer-Identify+ML_VMRv4"),
         # (virTaxonomer_esm_train, "VirTaxonomer-Identify(ESMTrain)+ML_VMRv4"),
@@ -1029,14 +1073,16 @@ def getModels():
         # "minimap_diamond_vote(ESMTrain)": minimap_diamond_vote_train,
         # "minimap_diamond_vote_genus": minimap_diamond_vote_genus,
         # "minimap_diamond_vote_genus(ESMTrain)": minimap_diamond_vote_genus_train,
-        # "minimap_diamond_top3": minimap_diamond_top3,
+        "minimap_diamond_top3": minimap_diamond_top3,
         # "minimap_diamond_vote_double": minimap_diamond_vote_double,
         # "minimap_diamond_top3_double": minimap_diamond_top3_double,
 
-        "virTax_diamond_vote": virTaxonomer_diamond,
-        "virTax_diamond_vote_taxoOnly": virTaxonomer_diamond_taxoOnly,
-        "virTax_diamond_vote_taxoOnly2": virTaxonomer_diamond_taxoOnly2,
-        "virTax_diamond_vote_taxoOnly3": virTaxonomer_diamond_taxoOnly3,
+        "virTax_diamond_top3": virTaxonomer_diamond,
+        "virTax_diamond_top3_taxoOnly": virTaxonomer_diamond_taxoOnly,
+        "virTax_diamond_top3_taxoOnly2": virTaxonomer_diamond_taxoOnly2,
+        "virTax_diamond_top3_taxoOnly3": virTaxonomer_diamond_taxoOnly3,
+        "virTax_diamond_top3_taxoOnly4": virTaxonomer_diamond_taxoOnly4,
+        "minimap_diamond_LCA": minimap_diamond_LCA
     }
 
 def main():
@@ -1044,19 +1090,16 @@ def main():
     missingLabel = "Other"
 
     analyseList = [
-        # ("minimap_VMRv4", "Diamond_vote_VMRv4"),
-        # ("minimap_VMRv4(ESMTrain)", "Diamond_vote_VMRv4(ESMTrain)"),
-        # ("Diamond_vote_VMRv4", "length"),
-        # ("Diamond_vote_VMRv4(ESMTrain)", "length"),
-        # ("Diamond_vote_VMRv4", "protein_count"),
-        ("VirTaxonomer-buttomup_VMRv4", "VirTaxonomer")
-        # ("Diamond_vote_VMRv4(ESMTrain)", "protein_count"),
+        ("minimap_VMRv4", "Diamond_vote_VMRv4"),
+        ("VirTaxonomer", "Diamond_vote_VMRv4"),
+        ("VirTaxonomer-ML_VMRv4", "Diamond_vote_VMRv4"),
+        ("Diamond_vote_VMRv4", "length"),
+        ("Diamond_vote_VMRv4", "protein_count"),
         # ("Diamond_vote_VMRv4", "protein_length"),
-        # ("Diamond_vote_VMRv4(ESMTrain)", "protein_length"),
-        # ("minimap_diamond_vote", "minimapÞ_diamond_vote_genus"),
+        # ("VirTaxonomer-buttomup_VMRv4", "VirTaxonomer")
     ]
 
-    # analyseList = None
+    analyseList = None
 
     # mergeCachedResults()
     models = getModels()
