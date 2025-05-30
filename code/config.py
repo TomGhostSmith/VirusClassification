@@ -85,14 +85,17 @@ class Config():
             return os.path.splitext(os.path.basename(filePath))[0]
         self.cacheFolder = f"{self.outputRoot}/cache"
         self.cacheResultFolder = f"{self.cacheFolder}/CachedResults"
-        self.cacheAnalysisFolder = f"{self.cacheFolder}/CachedAnalysis"
+        self.analysisFolder = f"{self.outputRoot}/analysis"
         self.datasetName = getFileNameWithoutExt(self.queryFilePath)
         self.subsetName = getFileNameWithoutExt(self.querySubsetFilePath) if self.querySubsetFilePath is not None else "all"
 
         if(not os.path.exists(self.modelRoot)):
             raise ValueError("model folder not found")
         os.makedirs(self.cacheResultFolder, exist_ok=True)
-        os.makedirs(self.cacheAnalysisFolder, exist_ok=True)
+        os.makedirs(self.analysisFolder, exist_ok=True)
+        os.makedirs(f"{self.analysisFolder}/table", exist_ok=True)
+        os.makedirs(f"{self.analysisFolder}/figure", exist_ok=True)
+        os.makedirs(f"{self.analysisFolder}/samplewise", exist_ok=True)
 
     def setPath(self, modelRoot, outputRoot, queryFile, querySubsetFile=None):
         self.modelRoot = modelRoot

@@ -1,6 +1,7 @@
 import json
 import pandas
 from collections import defaultdict
+from tqdm import tqdm
 from sklearn.metrics import precision_score, recall_score, accuracy_score, f1_score
 
 from config import config
