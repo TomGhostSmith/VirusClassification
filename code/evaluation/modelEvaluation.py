@@ -481,13 +481,13 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             cellText = f"{modelDesc1} \\ {modelDesc2}"
             categories = ["correct", "wrong", "No_pred has_GT", "has_pred No_GT", "No_pred No_GT"]
             for r in config.evaluationRanks:
-                stackDFs.append(pandas.DataFrame([[r] + categories], columns=['confusion matrics'] + categories))
+                stackDFs.append(pandas.DataFrame([[r, "", "", "", "", ""]], columns=['confusion matrics'] + categories))
+                stackDFs.append(pandas.DataFrame([[cellText] + categories], columns=['confusion matrics'] + categories))
                 tmpDF[cellText] = pandas.Categorical(tmpDF[f"model1_{r}"], categories=categories, ordered=True)
                 tmpDF["tmp"] = pandas.Categorical(tmpDF[f"model2_{r}"], categories=categories, ordered=True)
                 rankDF = pandas.crosstab(tmpDF[cellText], tmpDF[f"tmp"], dropna=False)
                 rankDF["confusion matrics"] = categories
                 stackDFs.append(rankDF)
-                stackDFs.append(pandas.DataFrame([["", "", "", "", "", ""]], columns=['confusion matrics'] + categories))
 
             stackDF = pandas.concat(stackDFs)
             DFs[f'{modelDesc1} vs {modelDesc2}: confusion matrics'] = stackDF

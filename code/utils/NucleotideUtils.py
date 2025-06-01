@@ -19,9 +19,9 @@ import fcntl
 
 class NucleotideUtil:
     def __init__(self):
-        self.proteinIndex = f"{config.cacheFolder}/proteins.json"
-        self.proteinFasta = f"{config.cacheFolder}/proteins.fasta"
-        self.c2pCache = f"{config.cacheFolder}/c2p.json"
+        self.proteinIndex = f"{config.cacheResultFolder}/proteins.json"
+        self.proteinFasta = f"{config.cacheResultFolder}/proteins.fasta"
+        self.c2pCache = f"{config.cacheResultFolder}/c2p.json"
 
         self.c2p:dict[str, list] = dict()
         self.cachedProteins:dict[str, int] = dict()
