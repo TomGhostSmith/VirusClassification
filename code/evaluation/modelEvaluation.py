@@ -409,9 +409,35 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             analyseDF = pandas.crosstab(summaryDF['A_bin'], summaryDF["tmp"], dropna=False)
             DFs[f'{modelDesc} vs {factor2}'] = analyseDF
 
+        elif (isinstance(factor2, list) and len(factor2) > 1):
+            # one model compared to multi model, confusion matrix only
+            tmpDF = {}
+            stackDFs = list()
+            for r in config.evaluationRanks:
+                tmpDF[f"model1_{r}"] = modelRankResults[modelDesc1][r]
+                modelDesc = factor2[0]
+                tmpDF[f"model2_{r}"] = numpy.array(modelRankResults[modelDesc][r])
+                for modelDesc in factor2[1:]:
+                    tmpDF[f"model2_{r}"] = numpy.where(numpy.array(modelRankResults[modelDesc][r]) == tmpDF[f"model2_{r}"], tmpDF[f"model2_{r}"], "Other")
+            tmpDF = pandas.DataFrame(tmpDF)
+            
+            cellText = f"{modelDesc1} \\ {','.join(factor2)}"
+            categories = ["correct", "wrong", "No_pred has_GT", "has_pred No_GT", "No_pred No_GT"]
+            for r in config.evaluationRanks:
+                stackDFs.append(pandas.DataFrame([[r, "", "", "", "", "", ""]], columns=['confusion matrics'] + categories + ["Other"]))
+                stackDFs.append(pandas.DataFrame([[cellText] + categories + ["Other"]], columns=['confusion matrics'] + categories + ["Other"]))
+                tmpDF[cellText] = pandas.Categorical(tmpDF[f"model1_{r}"], categories=categories, ordered=True)
+                tmpDF["tmp"] = pandas.Categorical(tmpDF[f"model2_{r}"], categories=categories + ["Other"], ordered=True)
+                rankDF = pandas.crosstab(tmpDF[cellText], tmpDF[f"tmp"], dropna=False)
+                rankDF["confusion matrics"] = categories
+                stackDFs.append(rankDF)
+
+            stackDF = pandas.concat(stackDFs)
+            DFs[f'{modelDesc1} vs {",".join(factor2)}: confusion matrics'] = stackDF
+
         else:
             modelDesc1 = factor1
-            modelDesc2 = factor2
+            modelDesc2 = factor2[0] if isinstance(factor2, list) else factor2
             model1 = models[modelDesc1]
             model2 = models[modelDesc2]
             # df1: cross table of two models
