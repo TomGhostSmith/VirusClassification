@@ -403,7 +403,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
                 bins = list(range(0, 10000, 1000)) + list(range(10000, 100000, 10000)) + [numpy.inf]
                 # bins = numpy.linspace(summaryDF[factor2].min(), summaryDF[factor2].max(), 21)
             else:
-                bins = list(range(10)) + list(range(10, 200, 10)) + [numpy.inf]
+                bins = list(range(-1, 10)) + list(range(10, 200, 10)) + [numpy.inf]
             summaryDF['A_bin'] = pandas.cut(summaryDF[factor2], bins=bins, include_lowest=True)
             summaryDF["tmp"] = pandas.Categorical(summaryDF[f"{modelDesc}_LCA_rank"], categories=["N/A"] + config.evaluationRanks, ordered=True)
             analyseDF = pandas.crosstab(summaryDF['A_bin'], summaryDF["tmp"], dropna=False)
