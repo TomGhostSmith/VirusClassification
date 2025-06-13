@@ -60,6 +60,7 @@ def analyseStatistics(preds:dict[str, TaxoNode], truths:dict[str, TaxoNode], mis
         prediction_counts = defaultdict(int)
         true_label_counts = defaultdict(int)
         prediction_with_label_counts = defaultdict(int)
+        correct_counts, error_counts, no_pred_has_GT_counts, has_pred_no_GT_counts, no_pred_no_GT_counts = defaultdict(int), defaultdict(int), defaultdict(int), defaultdict(int), defaultdict(int)
 
         taxonomic_levels = ["Realm", "Subrealm", "Kingdom", "Subkingdom", "Phylum", "Subphylum", "Class",
                         "Subclass", "Order", "Suborder", "Family", "Subfamily", "Genus", "Subgenus", "Species"]
@@ -99,6 +100,19 @@ def analyseStatistics(preds:dict[str, TaxoNode], truths:dict[str, TaxoNode], mis
             for contig in true_labels.keys():
                 true_label = true_labels[contig].get(level, missingLabel)
                 pred_label = predictions[contig].get(level, 'Unknown') if contig in predictions else 'Unknown'
+
+                if (true_label != missingLabel):
+                    if (pred_label == true_label):
+                        correct_counts[level] += 1
+                    elif (pred_label == 'Unknown'):
+                        no_pred_has_GT_counts[level] += 1
+                    else:
+                        error_counts[level] += 1
+                else:
+                    if (pred_label == 'Unknown'):
+                        no_pred_no_GT_counts[level] += 1
+                    else:
+                        has_pred_no_GT_counts[level] += 1
 
                 if pred_label != 'Unknown':
                     prediction_counts[level] += 1
@@ -154,7 +168,12 @@ def analyseStatistics(preds:dict[str, TaxoNode], truths:dict[str, TaxoNode], mis
             "F1_Binary": [binary_f1[level] for level in taxonomic_levels],
             "#Predictions": [prediction_counts[level] for level in taxonomic_levels],
             "#Predictions_with_labels": [prediction_with_label_counts[level] for level in taxonomic_levels],
-            "#True_labels_available": [true_label_counts[level] for level in taxonomic_levels]
+            "#True_labels_available": [true_label_counts[level] for level in taxonomic_levels],
+            "correct": [correct_counts[level] for level in taxonomic_levels],
+            "error": [error_counts[level] for level in taxonomic_levels],
+            "no_pred_has_GT": [no_pred_has_GT_counts[level] for level in taxonomic_levels],
+            "has_pred_no_GT": [has_pred_no_GT_counts[level] for level in taxonomic_levels],
+            "no_pred_no_GT": [no_pred_no_GT_counts[level] for level in taxonomic_levels]
         }
 
         # print(f"{modelName}: {overall_acc['Genus']:.3f} (n={len(samples)})", end='')

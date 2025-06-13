@@ -17,8 +17,13 @@ datasetRoot = "/Data/VirusClassification/dataset"
 from utils.NucleotideUtils import NucleotideUtils
 
 from entity.taxoTree import taxoTree
+from tools.evaluate import analyseStatistics
 
 import matplotlib.markers as mmarkers
+from matplotlib.cm import get_cmap
+
+from openpyxl import load_workbook
+from openpyxl.drawing.image import Image as XLImage
 
 
 def testModel(models:dict[str, Module], dataset, evaluationMethod, subset=None, missingLabel="Unknown"):
@@ -32,7 +37,7 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset=None, 
     outputRoot = config.outputRoot
     config.setPath(modelRoot=modelRoot, outputRoot=outputRoot, queryFile=queryFilePath, querySubsetFile=querySubsetFilePath)
 
-    from tools.evaluate import analyseStatistics
+    
     samples = IOUtils.loadSamples(config.queryFilePath, config.querySubsetFilePath)
 
     for modelDesc, model in models.items():
@@ -91,7 +96,8 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset=None, 
     modelRecalls = {r: list() for r in rankLevels}
     modelPrecisions = {r: list() for r in rankLevels}
     
-    availableColors = plt.get_cmap('tab20').colors
+    availableColors = numpy.vstack((plt.get_cmap('tab20').colors, plt.get_cmap('tab20b').colors, plt.get_cmap('tab20c').colors))
+    # availableColors = numpy.vstack((availableColors[::2], availableColors[1::2]))
 
     with pandas.ExcelWriter(fileName) as writer:
     # for _ in range(1):
@@ -312,6 +318,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     NucleotideUtils.extractProtein(samples)
 
     DFs:dict[str, pandas.DataFrame] = dict()  # desc: DF
+    imgs:dict[str, str] = dict()
     
     # sheet 1: all information
     sampleIDs = list()
@@ -324,7 +331,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
 
     modelRankResults:dict[str, dict[str, list[str]]] = {modelDesc: {r: list() for r in config.evaluationRanks} for modelDesc in models.keys()}
 
-    for sample in tqdm(samples, desc="sample wise analysis"):
+    for sample in tqdm(samples, desc="sample wise result"):
         sampleIDs.append(sample.id)
         sampleLengths.append(sample.length)
         sampleProteinCounts.append(len(sample.proteins))
@@ -395,19 +402,59 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     DFs["raw results"] = summaryDF
 
     # sheet 2: performance related analysis
-    for factor1, factor2 in analyseList:
+    for factor1, factor2 in tqdm(analyseList, desc="sample wise analysis"):
         if (factor2 in ["length", "protein_count", "protein_length"]):
             modelDesc = factor1
             # need to manually bin the factor 2
             if (factor2 in ["length", "protein_length"]):
-                bins = list(range(0, 10000, 1000)) + list(range(10000, 100000, 10000)) + [numpy.inf]
+                bins = [-1] + list(range(0, 10000, 1000)) + list(range(10000, 100000, 10000)) + [numpy.inf]
+                bin2 = [-1] + list(range(0, 100000, 100))
+                gap = 50
                 # bins = numpy.linspace(summaryDF[factor2].min(), summaryDF[factor2].max(), 21)
             else:
-                bins = list(range(-1, 10)) + list(range(10, 200, 10)) + [numpy.inf]
-            summaryDF['A_bin'] = pandas.cut(summaryDF[factor2], bins=bins, include_lowest=True)
+                bins = [-1, 0, 5] + list(range(10, 210, 10)) + [numpy.inf]
+                bin2 = list(range(-1, 200))
+                gap = 10
+            summaryDF[f"{factor2}_"] = pandas.cut(summaryDF[factor2], bins=bins, include_lowest=True)
+            summaryDF['A_bin2'] = pandas.cut(summaryDF[factor2], bins=bin2, include_lowest=True)
             summaryDF["tmp"] = pandas.Categorical(summaryDF[f"{modelDesc}_LCA_rank"], categories=["N/A"] + config.evaluationRanks, ordered=True)
-            analyseDF = pandas.crosstab(summaryDF['A_bin'], summaryDF["tmp"], dropna=False)
+            analyseDF = pandas.crosstab(summaryDF[f"{factor2}_"], summaryDF["tmp"], dropna=False)
             DFs[f'{modelDesc} vs {factor2}'] = analyseDF
+
+            ct = pandas.crosstab(summaryDF['A_bin2'], summaryDF["tmp"], dropna=False)
+            ct_percent = ct.div(ct.sum(axis=1), axis=0).fillna(0)
+            x = [str(interval) for interval in ct_percent.index]
+            ys = ct_percent.T.values
+            n_cate = len(config.evaluationRanks) + 1
+            cmap = get_cmap('plasma')
+            colors = [cmap(i / n_cate) for i in range(n_cate)]
+
+            plt.figure(figsize=(20, 6))
+            plt.stackplot(x, ys, labels=["N/A"] + config.evaluationRanks, colors=colors)
+            plt.xticks(ticks = range(0, len(x), gap), labels=[x[i] for i in range(0, len(x), gap)], rotation=90)
+            plt.legend(loc='upper right')
+            plt.title(f'{modelDesc} vs {factor2}')
+            plt.xlabel(factor2)
+            plt.ylabel("Proportion")
+            plt.tight_layout()
+            plt.savefig(f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png")
+            imgs[f"{modelDesc} vs {factor2}"] = f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png"
+
+            # another df, shows detailed statistics (correct, error, etc.) vs factor 2
+            stackDFs = list()
+            categories = ["correct", "wrong", "No_pred has_GT", "has_pred No_GT", "No_pred No_GT"]
+            for r in config.evaluationRanks:
+                tmpDF = pandas.DataFrame({
+                    "tmp": modelRankResults[modelDesc][r]
+                })
+                tmpDF[factor2] = summaryDF[f"{factor2}_"]
+                stackDFs.append(pandas.DataFrame([[r, "", "", "", "", ""]], columns=[factor2] + categories))
+                stackDFs.append(pandas.DataFrame([[factor2] + categories], columns=[factor2] + categories))
+                cf = pandas.crosstab(tmpDF[factor2], tmpDF["tmp"], dropna=False)
+                cf[factor2] = tmpDF[factor2].cat.categories
+                stackDFs.append()
+            stackDF = pandas.concat(stackDFs)
+            DFs[f"{modelDesc} vs {factor2} confusion matrics"] = stackDF
 
         elif (isinstance(factor2, list) and len(factor2) > 1):
             # one model compared to multi model, confusion matrix only
@@ -525,6 +572,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
         fileName = f"{config.analysisFolder}/samplewise/sampleAnalysis_{dataset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
     
     with pandas.ExcelWriter(fileName) as writer:
+        sheetNames = dict()
         contentDF = {
             "sheet": list(range(1, len(DFs))),
             "content": list(DFs.keys())[1:]
@@ -534,8 +582,19 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             if (desc == "raw results"):
                 df.to_excel(writer, sheet_name='raw results', index=False)
             else:
+                sheetNames[desc] = f"sheet {idx}"
                 df.to_excel(writer, sheet_name=f"sheet {idx}", index=(not desc.endswith("confusion matrics")))
+        
+    # insert images
+    wb = load_workbook(fileName)
 
+    for sheet, img in imgs.items():
+        ws = wb[sheetNames[sheet]]
+        ws.add_image(XLImage(img), 'S1')
+
+    wb.save(fileName)
+
+    IOUtils.showInfo("Analyse finished")
 
 def mergeCachedResults():
     comingResultFolder = f"{config.cacheFolder}/resultsFromServer"

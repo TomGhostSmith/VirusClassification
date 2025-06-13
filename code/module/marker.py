@@ -38,7 +38,7 @@ class Marker(Module):
         self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_marker.dmnd"
         self.markerDB = f"{config.cacheResultFolder}/{self.reference}_marker.json"
 
-        self.LCAs = list()
+        self.LCAs = dict()
     
     def buildDB(self):
         # build diamond DB
@@ -95,9 +95,6 @@ class Marker(Module):
     def diamond(self, samples:list[Sample]):
         if (not os.path.exists(self.referenceDB)) or (not os.path.exists(self.markerDB)):
             self.buildDB()
-        else:
-            with open(self.markerDB) as fp:
-                self.LCAs = json.load(fp)
 
         queryFile = f"{config.cacheFolder}/blast.fasta"
         resultFile = f"{config.cacheFolder}/blast.tsv"
@@ -175,6 +172,9 @@ class Marker(Module):
             
             with open(self.cachedSampleNameFile, 'wt') as fp:
                 json.dump(list(self.cachedSampleNames), fp, indent=2)
+        
+        with open(self.markerDB) as fp:
+            self.LCAs = json.load(fp)
 
         cachedResultFP = open(self.cacheFile)
         results = [self.getResult(sample, cachedResultFP) for sample in samples]
