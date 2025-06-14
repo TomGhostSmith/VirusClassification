@@ -440,21 +440,46 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             plt.savefig(f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png")
             imgs[f"{modelDesc} vs {factor2}"] = f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png"
 
-            # another df, shows detailed statistics (correct, error, etc.) vs factor 2
+            # another df, shows detailed statistics (correct, error, etc.) vs factor 2 for each rank
             stackDFs = list()
             categories = ["correct", "wrong", "No_pred has_GT", "has_pred No_GT", "No_pred No_GT"]
             for r in config.evaluationRanks:
                 tmpDF = pandas.DataFrame({
                     "tmp": modelRankResults[modelDesc][r]
                 })
+                tmpDF["tmp"] = pandas.Categorical(tmpDF["tmp"], categories=categories, ordered=True)
                 tmpDF[factor2] = summaryDF[f"{factor2}_"]
                 stackDFs.append(pandas.DataFrame([[r, "", "", "", "", ""]], columns=[factor2] + categories))
                 stackDFs.append(pandas.DataFrame([[factor2] + categories], columns=[factor2] + categories))
                 cf = pandas.crosstab(tmpDF[factor2], tmpDF["tmp"], dropna=False)
-                cf[factor2] = tmpDF[factor2].cat.categories
-                stackDFs.append()
+                cf[factor2] = summaryDF[f"{factor2}_"].cat.categories
+                stackDFs.append(cf)
             stackDF = pandas.concat(stackDFs)
-            DFs[f"{modelDesc} vs {factor2} confusion matrics"] = stackDF
+            DFs[f"{modelDesc} vs {factor2} per rank confusion matrics"] = stackDF
+
+            # 3rd df, shows detailed statistics vs rank for each bin in factor 2
+            tmpDF = pandas.DataFrame({
+                factor2: numpy.tile(summaryDF[f"{factor2}_"], len(config.evaluationRanks)),
+                "rank": numpy.concatenate([numpy.tile(x, len(samples)) for x in config.evaluationRanks]),
+                "res": numpy.concatenate([modelRankResults[modelDesc][r] for r in config.evaluationRanks])
+            })
+
+            groups = tmpDF.groupby(factor2)
+            stackDFs = list()
+            for group, gdf in groups:
+                gdf["rank"] = pandas.Categorical(gdf["rank"], categories=config.evaluationRanks, ordered=True)
+                gdf["res"] = pandas.Categorical(gdf["res"], categories=categories, ordered=True)
+                stackDFs.append(pandas.DataFrame([[group, "", "", "", "", ""]], columns=["rank"] + categories))
+                stackDFs.append(pandas.DataFrame([["rank"] + categories], columns=["rank"] + categories))
+                cf = pandas.crosstab(gdf["rank"], gdf["res"], dropna=False)
+                cf["rank"] = config.evaluationRanks
+                stackDFs.append(cf)
+            stackDF = pandas.concat(stackDFs)
+            DFs[f"{modelDesc} vs {factor2} per bin confusion matrics"] = stackDF
+
+            # for c in summaryDF[f"{factor2}_"].cat.categories:
+
+
 
         elif (isinstance(factor2, list) and len(factor2) > 1):
             # one model compared to multi model, confusion matrix only
