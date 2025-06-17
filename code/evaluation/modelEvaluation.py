@@ -403,23 +403,39 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
 
     # sheet 2: performance related analysis
     for factor1, factor2 in tqdm(analyseList, desc="sample wise analysis"):
-        if (factor2 in ["length", "protein_count", "protein_length"]):
+        if (factor2[0] in ["length", "protein_count", "protein_length"]):
+            if (len(factor2) > 1):
+                bins = factor2[1]
+            else:
+                bins = None
+            factor2 = factor2[0]
+            if (f"{modelDesc} vs {factor2}" in DFs):
+                dfIdx = 1
+                dfName = f"{modelDesc} vs {factor2} {dfIdx}"
+                while (dfName in DFs):
+                    dfIdx += 1
+                    dfName = f"{modelDesc} vs {factor2} {dfIdx}"
+            else:
+                dfIdx = 0
+                dfName = f"{modelDesc} vs {factor2}"
             modelDesc = factor1
             # need to manually bin the factor 2
             if (factor2 in ["length", "protein_length"]):
-                bins = [-1] + list(range(0, 10000, 1000)) + list(range(10000, 100000, 10000)) + [numpy.inf]
+                if (bins is None):
+                    bins = [-1] + list(range(0, 10000, 1000)) + list(range(10000, 100000, 10000)) + [numpy.inf]
                 bin2 = [-1] + list(range(0, 100000, 100))
                 gap = 50
                 # bins = numpy.linspace(summaryDF[factor2].min(), summaryDF[factor2].max(), 21)
             else:
-                bins = [-1, 0, 5] + list(range(10, 210, 10)) + [numpy.inf]
+                if (bins is None):
+                    bins = [-1, 0] + list(range(10, 210, 10)) + [numpy.inf]
                 bin2 = list(range(-1, 200))
                 gap = 10
             summaryDF[f"{factor2}_"] = pandas.cut(summaryDF[factor2], bins=bins, include_lowest=True)
             summaryDF['A_bin2'] = pandas.cut(summaryDF[factor2], bins=bin2, include_lowest=True)
             summaryDF["tmp"] = pandas.Categorical(summaryDF[f"{modelDesc}_LCA_rank"], categories=["N/A"] + config.evaluationRanks, ordered=True)
             analyseDF = pandas.crosstab(summaryDF[f"{factor2}_"], summaryDF["tmp"], dropna=False)
-            DFs[f'{modelDesc} vs {factor2}'] = analyseDF
+            DFs[dfName] = analyseDF
 
             ct = pandas.crosstab(summaryDF['A_bin2'], summaryDF["tmp"], dropna=False)
             ct_percent = ct.div(ct.sum(axis=1), axis=0).fillna(0)
@@ -429,16 +445,17 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             cmap = get_cmap('plasma')
             colors = [cmap(i / n_cate) for i in range(n_cate)]
 
-            plt.figure(figsize=(20, 6))
-            plt.stackplot(x, ys, labels=["N/A"] + config.evaluationRanks, colors=colors)
-            plt.xticks(ticks = range(0, len(x), gap), labels=[x[i] for i in range(0, len(x), gap)], rotation=90)
-            plt.legend(loc='upper right')
-            plt.title(f'{modelDesc} vs {factor2}')
-            plt.xlabel(factor2)
-            plt.ylabel("Proportion")
-            plt.tight_layout()
-            plt.savefig(f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png")
-            imgs[f"{modelDesc} vs {factor2}"] = f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png"
+            if (dfIdx > 0):  # only draw the image for the first analyse DF, if there are multiple
+                plt.figure(figsize=(20, 6))
+                plt.stackplot(x, ys, labels=["N/A"] + config.evaluationRanks, colors=colors)
+                plt.xticks(ticks = range(0, len(x), gap), labels=[x[i] for i in range(0, len(x), gap)], rotation=90)
+                plt.legend(loc='upper right')
+                plt.title(f'{modelDesc} vs {factor2}')
+                plt.xlabel(factor2)
+                plt.ylabel("Proportion")
+                plt.tight_layout()
+                plt.savefig(f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png")
+                imgs[dfName] = f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png"
 
             # another df, shows detailed statistics (correct, error, etc.) vs factor 2 for each rank
             stackDFs = list()
@@ -455,7 +472,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
                 cf[factor2] = summaryDF[f"{factor2}_"].cat.categories
                 stackDFs.append(cf)
             stackDF = pandas.concat(stackDFs)
-            DFs[f"{modelDesc} vs {factor2} per rank confusion matrics"] = stackDF
+            DFs[f"{dfName} per rank confusion matrics"] = stackDF
 
             # 3rd df, shows detailed statistics vs rank for each bin in factor 2
             tmpDF = pandas.DataFrame({
@@ -475,7 +492,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
                 cf["rank"] = config.evaluationRanks
                 stackDFs.append(cf)
             stackDF = pandas.concat(stackDFs)
-            DFs[f"{modelDesc} vs {factor2} per bin confusion matrics"] = stackDF
+            DFs[f"{dfName} vs {factor2} per bin confusion matrics"] = stackDF
 
             # for c in summaryDF[f"{factor2}_"].cat.categories:
 
