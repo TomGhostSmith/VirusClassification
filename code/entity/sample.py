@@ -16,6 +16,7 @@ class Sample():
         self.results:dict[str, Result] = dict()
         self.info = dict()
         self.proteins:list[ProteinSample] = None
+        self.cDNAs:list[ProteinSample] = None
 
     def addResult(self, name:str, result:Result):
         if result is not None:

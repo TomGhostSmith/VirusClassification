@@ -32,6 +32,13 @@ def writeSampleProteinFasta(samples:list[Sample], targetFile:str, append=False):
             for protein in sample.proteins:
                 SeqIO.write(protein.seq, fp, 'fasta')
 
+def writeSampleCDNAFasta(samples:list[Sample], targetFile:str, append=False):
+    mode = 'at' if append else 'wt'
+    with open(targetFile, mode) as fp:
+        for sample in samples:
+            for protein in sample.cDNAs:
+                SeqIO.write(protein.seq, fp, 'fasta')
+
 # note: here we only consider the scenario that there is only one subset file
 def loadSamples(fastaFile:str, subsetFile:str=None, subset:list=None)->list[Sample]:
     interestedSampleIDs = None

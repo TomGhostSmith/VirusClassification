@@ -9,7 +9,7 @@ import multiprocessing
 from config import config
 from prototype.module import Module
 from moduleResult.plainResult import PlainResult
-from moduleResult.diamondAlignment import DiamondAlignment
+from moduleResult.cDNAAlignment import CDNAAlignment
 from entity.sample import Sample
 from entity.proteinSample import ProteinSample
 from entity.taxoTree import taxoTree
@@ -17,16 +17,18 @@ from entity.taxoTree import taxoTree
 from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
-class Diamond(Module):
-    def __init__(self, reference, method, threads=multiprocessing.cpu_count(), threshRank='species'):
+class MinimapCDNA(Module):
+    def __init__(self, reference, method,  mode='simple', threads=multiprocessing.cpu_count(), threshRank='species', skipComments=True):
         if (method not in ["sum", "vote", "coverage"] and not method.startswith("top")):
             raise ValueError("Unsupported pooling method")
+        self.skipComments = skipComments
         self.method = method
+        self.mode = mode
         self.reference=reference
         self.threshRank = threshRank
         self.threads = threads
-        super().__init__(f'diamond-ref={self.reference};method={self.method};thresh={self.threshRank}')
-        self.baseName = f'diamond-ref={self.reference}'  # do not use 'self.moduleName' in code directly, in case of subClass!
+        super().__init__(f'cDNAminimap-ref={self.reference};method={self.method};thresh={self.threshRank}')
+        self.baseName = f'cDNAminimap-ref={self.reference}'  # do not use 'self.moduleName' in code directly, in case of subClass!
 
         self.cacheFile = f"{config.cacheResultFolder}/{self.baseName}.tmp"
         self.cacheIndex = f"{config.cacheResultFolder}/{self.baseName}.json"
@@ -35,34 +37,31 @@ class Diamond(Module):
         self.cachedSampleNameFile = f"{config.cacheResultFolder}/{self.baseName}.names"
         self.cachedSampleNames = set()
 
-        self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_diamonddb.dmnd"
-    
+        self.db = f"{config.cacheResultFolder}/{self.baseName}.db.fasta"
+
     def buildDB(self):
-        IOUtils.showInfo(f"Making diamond database for {self.reference}")
+        IOUtils.showInfo(f"Making cDNA minimap database for {self.reference}")
         referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
-        referenceProteinFasta = f"{config.cacheResultFolder}/{self.reference}.faa"
         refSamples = IOUtils.loadSamples(referenceFasta)
         NucleotideUtils.extractProtein(refSamples)
-        IOUtils.writeSampleProteinFasta(refSamples, referenceProteinFasta)
-        subprocess.run(f"diamond makedb --in {referenceProteinFasta} -d {self.referenceDB}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
+        IOUtils.writeSampleCDNAFasta(refSamples, self.db)
 
 
-    def diamond(self, samples:list[Sample]):
-        if not os.path.exists(self.referenceDB):
+    def minimap(self, samples:list[Sample]):
+        if (not os.path.exists(self.db)):
             self.buildDB()
+        queryFile = f"{config.cacheFolder}/minimap.fasta"
+        resultFile = f"{config.cacheFolder}/alignment.sam"
 
-        queryFile = f"{config.cacheFolder}/blast.fasta"
-        resultFile = f"{config.cacheFolder}/blast.tsv"
+        IOUtils.showInfo(f"Begin cDNA minimap on {len(samples)} samples")
 
-        IOUtils.showInfo(f"Begin diamond on {len(samples)} samples")
+        IOUtils.writeSampleCDNAFasta(samples, queryFile)
 
-        IOUtils.writeSampleProteinFasta(samples, queryFile)
-
-        command = self.getBlastCommand(queryFile, resultFile)
-        subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
+        command = self.getMinimapCommand(queryFile)
+        with open(resultFile, 'wt') as fp:
+            subprocess.run(command, shell=True, stdout=fp, stderr=subprocess.DEVNULL)
         targetFP = open(self.cacheFile, 'at')
+
 
         thisName = None
         thisOffset = self.cachedSamples["nextOffset"] if "nextOffset" in self.cachedSamples else 0
@@ -72,7 +71,14 @@ class Diamond(Module):
 
         with open(resultFile) as fp:
             for line in fp:
+                if (line.startswith("[")):
+                    continue
                 terms = line.strip().split('\t')
+                if (len(terms) < 10):
+                    IOUtils.showInfo(f"The output of the minimap is not standard. Expect at least 10 columns, got {len(terms)}", "ERROR")
+                    IOUtils.showInfo(f"The error line is '{line}'")
+                    exit(-1)
+                terms[9] = '*'
                 sampleName = terms[0]
                 if (sampleName != thisName and thisName is not None):
                     # update last sample
@@ -80,10 +86,11 @@ class Diamond(Module):
                     thisOffset = nextOffset
                     alignmentCount = 0
 
+                content = "\t".join(terms) + "\n"
                 thisName = sampleName
-                nextOffset += len(line)
+                nextOffset += len(content)
                 alignmentCount += 1
-                targetFP.write(line)
+                targetFP.write(content)
 
             
             if (thisName is not None):
@@ -93,7 +100,7 @@ class Diamond(Module):
         
         # if there is no alignment, then the query won't show up in the output file
         for sample in samples:
-            for protein in sample.proteins:
+            for protein in sample.cDNAs:
                 if protein.id not in self.cachedSamples:
                     self.cachedSamples[protein.id] = [0, 0]
 
@@ -122,7 +129,7 @@ class Diamond(Module):
             samplesToRun = samples
         
         if (len(samplesToRun) > 0):
-            self.diamond(samplesToRun)
+            self.minimap(samplesToRun)
                     
             with open(self.cacheIndex, 'wt') as fp:
                 json.dump(self.cachedSamples, fp, indent=2)
@@ -151,13 +158,14 @@ class Diamond(Module):
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments:list[CDNAAlignment] = [CDNAAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments = [a for a in alignments if a.ref is not None]
                 if (len(alignments) > 0):
                     bestAlignment = alignments[0]
                     for alignment in alignments[1:]:
                         if alignment.betterThan(bestAlignment):
                             bestAlignment = alignment
-                    ICTVID = taxoTree.ICTVTree.accession2ID[bestAlignment.refContig]
+                    ICTVID = taxoTree.ICTVTree.accession2ID[bestAlignment.ref]
                     if ICTVID in votes:
                         votes[ICTVID] += 1
                     else:
@@ -167,9 +175,10 @@ class Diamond(Module):
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments:list[CDNAAlignment] = [CDNAAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments = [a for a in alignments if a.ref is not None]
                 for alignment in alignments:
-                    accession = alignment.refContig
+                    accession = alignment.ref
                     if (accession in accessionVotes):
                         accessionVotes[accession] += 1/len(self.c2p[accession])
                     else:
@@ -184,26 +193,30 @@ class Diamond(Module):
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments:list[CDNAAlignment] = [CDNAAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments = [a for a in alignments if a.ref is not None]
                 for alignment in alignments:
-                    ICTVID = taxoTree.ICTVTree.accession2ID[alignment.refContig]
+                    ICTVID = taxoTree.ICTVTree.accession2ID[alignment.ref]
                     if ICTVID in votes:
-                        votes[ICTVID] += alignment.similarity
+                        votes[ICTVID] += alignment.quality/60
                     else:
-                        votes[ICTVID] = alignment.similarity
+                        votes[ICTVID] = alignment.quality/60
         elif (self.method.startswith("top")):
             thresh = int(self.method[3:])
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments:list[CDNAAlignment] = [CDNAAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments = [a for a in alignments if a.ref is not None]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
                 for alignment in alignments[:thresh]:
-                    ICTVID = taxoTree.ICTVTree.accession2ID[alignment.refContig]
+                    if (alignment.ref is None):
+                        continue
+                    ICTVID = taxoTree.ICTVTree.accession2ID[alignment.ref]
                     if ICTVID in votes:
-                        votes[ICTVID] += alignment.similarity
+                        votes[ICTVID] += alignment.quality/60
                     else:
-                        votes[ICTVID] = alignment.similarity
+                        votes[ICTVID] = alignment.quality/60
         if len(votes) > 0:
             totalVotes = sum(votes.values())
             winner, maxVotes = max(votes.items(), key=lambda x: x[1])
@@ -218,10 +231,16 @@ class Diamond(Module):
         
         return result
     
-    def getBlastCommand(self, queryFile, resultFile):
-        # first check if the reference fasta is made a database
-
-        # cline = NcbiblastnCommandline(query=queryFile, db=referenceDB, evalue=1e-3, outfmt=5, out=resultFile)
-        # stdout, stderr = cline()
-        command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20"
+    def getMinimapCommand(self, queryFile):
+        minimapBase = "minimap2"   # if you cannot call minimap2 directly, use its path here
+        if self.mode == 'ont':
+            mode = "-ax map-ont"
+        else:
+            mode = "-a"
+        thread = f"-t {self.threads}"
+        if self.skipComments:
+            postProcess = ' | grep -v "^@"'
+        else:
+            postProcess = ""
+        command = f"{minimapBase} {mode} {self.db} {queryFile} {thread} {postProcess}"
         return command

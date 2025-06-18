@@ -26,10 +26,10 @@ from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as XLImage
 
 
-def testModel(models:dict[str, Module], dataset, evaluationMethod, subset=None, missingLabel="Unknown"):
+def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all', missingLabel="Unknown"):
     IOUtils.showInfo(f"Test {len(models)} models on {dataset}")
     queryFilePath = f"{datasetRoot}/{dataset}/{dataset}.fasta"
-    if (subset is not None):
+    if (subset != 'all'):
         querySubsetFilePath = f"{datasetRoot}/{dataset}/{subset}.txt"
     else:
         querySubsetFilePath = None
@@ -44,9 +44,9 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset=None, 
         IOUtils.showInfo(f'getting {model.moduleName} results')
         model.getResults(samples)
     
-    if (subset is not None):
-        IOUtils.showInfo(f"dataset {dataset} subset {subset} finished. Skip the evaluation")
-        return # currently we cannot evaluate a subset, because the answer is not complete
+    # if (subset is not 'all'):
+    #     IOUtils.showInfo(f"dataset {dataset} subset {subset} finished. Skip the evaluation")
+    #     return # currently we cannot evaluate a subset, because the answer is not complete
     IOUtils.showInfo('calculating statistics')
     # with open("/Data/VirusClassification/dataset/refseq_2024_test/answer.json") as fp:
     with open(f"{datasetRoot}/{dataset}/answer_{evaluationMethod}.json") as fp:
@@ -58,8 +58,11 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset=None, 
         else:
             stdResults[id] = taxoTree.getTaxoNodeFromICTV(ICTVName=std)
 
+    GTs = dict()
     for sample in samples:
         sample.info["stdResult"] = stdResults.get(sample.id)
+        GTs[sample.id] = stdResults.get(sample.id)
+
     
 
     summaryDict = dict()
@@ -77,10 +80,10 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset=None, 
 
     # check and get a valid name
     analysisIndex = 0
-    fileName = f"{config.analysisFolder}/table/{dataset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
+    fileName = f"{config.analysisFolder}/table/{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
     while (os.path.exists(fileName)):
         analysisIndex += 1
-        fileName = f"{config.analysisFolder}/table/{dataset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
+        fileName = f"{config.analysisFolder}/table/{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
 
 
     withSubRank = False
@@ -110,7 +113,7 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset=None, 
                     preds[sample.id] = res.node
                 else:
                     preds[sample.id] = None
-            df, _ = analyseStatistics(preds, stdResults, missingLabel)
+            df, _ = analyseStatistics(preds, GTs, missingLabel)
             # df.to_csv(f"{config.analysisFolder}/kraken-refseq-performance.csv")
             # df.to_csv(f"{config.analysisFolder}/model-{idx}-{dataset}-performance_{evaluationMethod}.csv")
             df.to_excel(writer, sheet_name=f"model-{idx}", index=False)
@@ -310,7 +313,7 @@ def testModelVirusIdentity(models:dict[str, Module], dataset):
 
     IOUtils.showInfo('Done')
 
-def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subset=None, missingLabel="Unknown", analyseList:list[tuple[str, str]]=list()):
+def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subset='all', missingLabel="Unknown", analyseList:list[tuple[str, str]]=list()):
     samples = testModel(models, dataset, evaluationMethod, subset, missingLabel)
     if (analyseList is None):
         IOUtils.showInfo("Nothing to analyse. Exit")
@@ -403,12 +406,37 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
 
     # sheet 2: performance related analysis
     for factor1, factor2 in tqdm(analyseList, desc="sample wise analysis"):
-        if (factor2[0] in ["length", "protein_count", "protein_length"]):
+        if (factor1[0] in ["length", "protein_count", "protein_length"]): # perform analyse between length/protein_count/protein_length
+            if (len(factor1) > 1):
+                bins = factor1[1]
+            else:
+                if (factor1[0] in ["length", "protein_length"]):
+                    bins = [-1] + list(range(0, 10000, 1000)) + list(range(10000, 100000, 10000)) + [numpy.inf]
+                else:
+                    bins = [-1, 0] + list(range(10, 210, 10)) + [numpy.inf]
+            factor1 = factor1[0]
+            cellText = f"{factor1} \ {factor2[0]}"
+            summaryDF[cellText] = pandas.cut(summaryDF[factor1], bins=bins, include_lowest=True)
+
+            if (len(factor2) > 1):
+                bins = factor2[1]
+            else:
+                if (factor2[0] in ["length", "protein_length"]):
+                    bins = [-1] + list(range(0, 10000, 1000)) + list(range(10000, 100000, 10000)) + [numpy.inf]
+                else:
+                    bins = [-1, 0] + list(range(10, 210, 10)) + [numpy.inf]
+            factor2 = factor2[0]
+            summaryDF[f"{factor2}_"] = pandas.cut(summaryDF[factor2], bins=bins, include_lowest=True)
+            analyseDF = pandas.crosstab(summaryDF[cellText], summaryDF[f"{factor2}_"], dropna=False)
+            DFs[f"{factor1} vs {factor2}"] = analyseDF
+
+        elif (factor2[0] in ["length", "protein_count", "protein_length"]):
             if (len(factor2) > 1):
                 bins = factor2[1]
             else:
                 bins = None
             factor2 = factor2[0]
+            modelDesc = factor1
             if (f"{modelDesc} vs {factor2}" in DFs):
                 dfIdx = 1
                 dfName = f"{modelDesc} vs {factor2} {dfIdx}"
@@ -418,7 +446,6 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             else:
                 dfIdx = 0
                 dfName = f"{modelDesc} vs {factor2}"
-            modelDesc = factor1
             # need to manually bin the factor 2
             if (factor2 in ["length", "protein_length"]):
                 if (bins is None):
@@ -492,7 +519,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
                 cf["rank"] = config.evaluationRanks
                 stackDFs.append(cf)
             stackDF = pandas.concat(stackDFs)
-            DFs[f"{dfName} vs {factor2} per bin confusion matrics"] = stackDF
+            DFs[f"{dfName} per bin confusion matrics"] = stackDF
 
             # for c in summaryDF[f"{factor2}_"].cat.categories:
 
@@ -608,10 +635,10 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             DFs[f'{modelDesc1} vs {modelDesc2}: confusion matrics'] = stackDF
     
     analysisIndex = 0
-    fileName = f"{config.analysisFolder}/samplewise/sampleAnalysis_{dataset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
+    fileName = f"{config.analysisFolder}/samplewise/sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
     while (os.path.exists(fileName)):
         analysisIndex += 1
-        fileName = f"{config.analysisFolder}/samplewise/sampleAnalysis_{dataset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
+        fileName = f"{config.analysisFolder}/samplewise/sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
     
     with pandas.ExcelWriter(fileName) as writer:
         sheetNames = dict()
