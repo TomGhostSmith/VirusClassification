@@ -1,6 +1,7 @@
 import os
 # import sys
 import json
+import math
 import numpy
 import pandas
 import matplotlib.pyplot as plt
@@ -212,7 +213,8 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
     else:
         fileName = f"{config.analysisFolder}/figure/performance_{dataset}_{missingLabel}_scatter.png"
 
-    markers = [m for m in mmarkers.MarkerStyle.markers.keys() if isinstance(m, str) and m not in (".", ",", " ", "")]
+    markers = [m for m in mmarkers.MarkerStyle.markers.keys() if isinstance(m, str) and m not in (".", ",", " ", "")][:20]
+    markers = markers * (math.ceil(len(models)/ len(markers)))
     fig, axs = plt.subplots(2, 2, figsize=(12, 12))
     for idx, (modelDesc, recall, precision) in enumerate(zip(list(models.keys()), modelRecalls["order"], modelPrecisions["order"])):
         axs[0, 0].scatter(recall, precision, color=availableColors[idx], marker=markers[idx], s=100, label=modelDesc)
