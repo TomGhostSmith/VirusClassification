@@ -93,9 +93,9 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
     for r in config.resultRanks:
         if (withSubRank or not r.startswith('sub')):
             rankLevels.append(r)
-    fig, ax = plt.subplots(figsize=(1.5*(1 + len(rankLevels)), 6))
+    fig, ax = plt.subplots(figsize=(2*(1 + len(rankLevels)), 6))
     x = numpy.arange(len(rankLevels))
-    width = 1.5 / (len(models) + 2)
+    width = 2 / (len(models) + 2)
 
     modelRecalls = {r: list() for r in rankLevels}
     modelPrecisions = {r: list() for r in rankLevels}
@@ -166,11 +166,11 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
 
             # bars = ax.bar(x + idx*width, recallList, width, label=f"model {idx} recall", alpha=0.7)
             # bars = ax.bar(x*1.5 + idx*width, recallList, width, alpha=0.3, color=availableColors[idx])
-            ax.bar(x*1.5 + idx*width, recallList, width, color='white', hatch='/', edgecolor=availableColors[idx])
+            ax.bar(x*2 + idx*width, recallList, width, color='white', hatch='/', edgecolor=availableColors[idx])
             # ax.bar(x + idx*width, accuracyList, width, color=bars[0].get_facecolor(), label=f"model {idx} accuracy", hatch='//')
             # ax.bar(x*1.5 + idx*width, accuracyList, width, color='white', hatch='/', edgecolor=bars[0].get_facecolor(), label=f"{modelDesc}")
             # ax.bar(x*1.5 + idx*width, accuracyList, width, color=bars[0].get_facecolor(), alpha=0.9, label=f"{modelDesc}")
-            ax.bar(x*1.5 + idx*width, accuracyList, width, color=availableColors[idx], alpha=1, label=f"{modelDesc}")
+            ax.bar(x*2 + idx*width, accuracyList, width, color=availableColors[idx], alpha=1, label=f"{modelDesc}")
 
             # modelRecalls.append(totalRecall / totalRecallCount if totalRecallCount > 0 else 0)
             # modelPrecisions.append(totalPrecision / totalPrecisionCount if totalPrecisionCount > 0 else 0)
@@ -213,7 +213,7 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
     else:
         fileName = f"{config.analysisFolder}/figure/performance_{dataset}_{missingLabel}_scatter.png"
 
-    markers = [m for m in mmarkers.MarkerStyle.markers.keys() if isinstance(m, str) and m not in (".", ",", " ", "")][:20]
+    markers = [m for m in mmarkers.MarkerStyle.markers.keys() if isinstance(m, str) and m not in (".", ",", " ", "")][:22]
     markers = markers * (math.ceil(len(models)/ len(markers)))
     fig, axs = plt.subplots(2, 2, figsize=(12, 12))
     for idx, (modelDesc, recall, precision) in enumerate(zip(list(models.keys()), modelRecalls["order"], modelPrecisions["order"])):
@@ -417,7 +417,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
                 else:
                     bins = [-1, 0] + list(range(10, 210, 10)) + [numpy.inf]
             factor1 = factor1[0]
-            cellText = f"{factor1} \ {factor2[0]}"
+            cellText = f"{factor1} \\ {factor2[0]}"
             summaryDF[cellText] = pandas.cut(summaryDF[factor1], bins=bins, include_lowest=True)
 
             if (len(factor2) > 1):

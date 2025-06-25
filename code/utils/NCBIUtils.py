@@ -51,10 +51,10 @@ def downloadAccessions(accessions, version):
     params = list()
     fnaFolder = f"{config.modelRoot}/NCBI/Nucleotide/{version}/fna"
     for accession in accessions:
-            name = accession[:accession.index(".")]
-            chunks = [name[i:i+3] for i in range(0, len(name), 3)]
-            folderPath = os.path.join(fnaFolder, *chunks)
-            params.append((accession, f"{folderPath}.fasta"))
+        name = accession[:accession.index(".")]
+        chunks = [name[i:i+3] for i in range(0, len(name), 3)]
+        folderPath = os.path.join(fnaFolder, *chunks)
+        params.append((accession, f"{folderPath}.fasta"))
     
     with open(f"{config.modelRoot}/NCBI/Nucleotide/{version}/failDownload.txt", 'wt') as fp:
         bar = tqdm(total=len(params))

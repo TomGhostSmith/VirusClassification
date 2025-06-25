@@ -211,9 +211,9 @@ class Marker(Module):
                 for alignment in alignments:
                     ICTVName = self.LCAs[alignment.ref]
                     if ICTVName in votes:
-                        votes[ICTVName] += alignment.similarity
+                        votes[ICTVName] += alignment.similarity/100
                     else:
-                        votes[ICTVName] = alignment.similarity
+                        votes[ICTVName] = alignment.similarity/100
         elif (self.method.startswith("top")):
             thresh = int(self.method[3:])
             for protein in sample.proteins:
@@ -224,19 +224,54 @@ class Marker(Module):
                 for alignment in alignments[:thresh]:
                     ICTVName = self.LCAs[alignment.ref]
                     if ICTVName in votes:
-                        votes[ICTVName] += alignment.similarity
+                        votes[ICTVName] += alignment.similarity/100
                     else:
-                        votes[ICTVName] = alignment.similarity
+                        votes[ICTVName] = alignment.similarity/100
         if len(votes) > 0:
-            totalVotes = sum(votes.values())
-            winner, maxVotes = max(votes.items(), key=lambda x: x[1])
-            winnerNode = taxoTree.ICTVTree.nodes[winner]
-            for n in reversed(winnerNode.path):
-                if (config.rankLevels[n.rank] <= config.rankLevels[self.threshRank] ):
-                    result = PlainResult(n.name, score=maxVotes/totalVotes)
-                    break
-            if result is None:
-                result = PlainResult(taxoTree.ICTVTree.ID2name[winner], score=maxVotes/totalVotes)
+            if (self.threshRank == 'vitax'):
+                threshold = 0.6
+                scores = {taxoTree.ICTVTree.nodes[k]: v for k, v in votes.items()}
+                highestScore = 0
+                highestNode = None
+                for th in reversed(range(config.rankLevels["superkingdom"], config.rankLevels["species"] + 1)):
+                    for node, s in scores.items():
+                        totalScore = 0
+                        for n in node.path:  # include itself
+                            if (n in scores):
+                                totalScore += scores[n]
+                        thisScore = totalScore / len(sample.proteins)
+                        if (thisScore >= threshold and thisScore > highestScore):
+                            highestScore = thisScore
+                            highestNode = node
+                            
+                    if (highestNode is not None):  # if there is already some node above thresh, then return
+                        result = PlainResult(highestNode.name, score=highestScore)
+                        return result
+
+
+                    originScores = scores
+                    scores = dict()
+                    for node, s in originScores.items():
+                        if (config.rankLevels[node.rank] > th):  # merge current score to its parent
+                            target = node.parent
+                        else:
+                            target = node
+                        if (target in scores):
+                            scores[target] += s
+                        else:
+                            scores[target] = s
+
+
+            else:
+                totalVotes = sum(votes.values())
+                winner, maxVotes = max(votes.items(), key=lambda x: x[1])
+                winnerNode = taxoTree.ICTVTree.nodes[winner]
+                for n in reversed(winnerNode.path):
+                    if (config.rankLevels[n.rank] <= config.rankLevels[self.threshRank] ):
+                        result = PlainResult(n.name, score=maxVotes/totalVotes)
+                        break
+                if result is None:
+                    result = PlainResult(taxoTree.ICTVTree.ID2name[winner], score=maxVotes/totalVotes)
 
         
         return result
