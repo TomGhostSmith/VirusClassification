@@ -28,20 +28,17 @@ class VISTA(Module):
 
         IOUtils.showInfo(f"Begin VISTA on {len(samples)} samples")
 
-        input_fasta = f"{config.cacheFolder}/vitax.fasta"
-        output_txt = f"{config.cacheFolder}/vitax.txt"
+        input_fasta = f"{config.cacheFolder}/vista.fasta"
+        output_txt = f"{config.cacheFolder}/vista.tsv"
         IOUtils.writeSampleFasta(samples, input_fasta)
-        cwd = "/Software/ViTax"
-        command = f"conda run -n vista Scripts/VISTA.sh -i {input_fasta} -o {output_txt}"
+        cwd = "/Software/VISTA"
+        command = f"conda run -n vista --no-capture-output python Scripts/base.py {input_fasta} {output_txt}"
         subprocess.run(command, shell=True, cwd=cwd)
 
         with open(output_txt) as fp:
             for line in fp:
                 terms = line.split('\t')
-                if (terms[1] != 'unclassified'):
-                    self.cachedSamples[terms[0]] = line.strip()
-                else:
-                    self.cachedSamples[terms[0]] = "N/A"
+                self.cachedSamples[terms[1]] = line.strip()
         
         os.remove(input_fasta)
         os.remove(output_txt)
@@ -78,9 +75,14 @@ class VISTA(Module):
         res = self.cachedSamples[sample.id]
         if (res != "N/A"):
             terms = res.split("\t")
-            ans = terms[1].split("_")[0]
-            score = float(terms[2])
-            result = PlainResult(ans, score)
+            confidence = terms[7]
+            if (confidence == "Known Species"):
+                ans = terms[5]
+            elif (confidence == "Novel Species"):  # use genus
+                ans = terms[4]
+            else:  # use family
+                ans = terms[8]
+            result = PlainResult(ans)
         else:
             result = None
 

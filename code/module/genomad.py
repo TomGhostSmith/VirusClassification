@@ -30,7 +30,7 @@ class Genomad(Module):
         IOUtils.writeSampleFasta(samples, queryFile)
         IOUtils.showInfo(f"Begin genomad on {len(samples)} samples")
 
-        command = f"conda run -n genomad genomad end-to-end --splits {self.threads} {queryFile} {outputFolder} {self.database}"
+        command = f"conda run -n genomad --no-capture-output genomad end-to-end --splits {self.threads} {queryFile} {outputFolder} {self.database}"
         # subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(command, shell=True)
 

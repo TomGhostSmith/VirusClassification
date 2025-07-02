@@ -32,7 +32,7 @@ class ViTax(Module):
         output_txt = f"{config.cacheFolder}/vitax.txt"
         IOUtils.writeSampleFasta(samples, input_fasta)
         cwd = "/Software/ViTax"
-        command = f"conda run -n vitax python ViTax.py --contigs {input_fasta} --out {output_txt}"
+        command = f"conda run -n vitax --no-capture-output python ViTax.py --contigs {input_fasta} --out {output_txt}"
         subprocess.run(command, shell=True, cwd=cwd)
 
         with open(output_txt) as fp:

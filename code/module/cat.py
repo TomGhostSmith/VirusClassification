@@ -33,7 +33,7 @@ class CAT(Module):
         
         cwd = "/Software/CAT_pack"
         inputFile = f"{outputFolder}/query.fasta"
-        command = f"conda run -n CAT CAT_pack/CAT_pack contigs -c {inputFile} -d /Software/CAT_pack/model/20241212_CAT_nr_website/db -t /Software/CAT_pack/model/20241212_CAT_nr_website/tax --path_to_diamond /Software/CAT_pack/model/20241212_CAT_nr_website/diamond -o {outputFolder}/CAT --block_size {blockSize:.1f}"
+        command = f"conda run -n CAT --no-capture-output CAT_pack/CAT_pack contigs -c {inputFile} -d /Software/CAT_pack/model/20241212_CAT_nr_website/db -t /Software/CAT_pack/model/20241212_CAT_nr_website/tax --path_to_diamond /Software/CAT_pack/model/20241212_CAT_nr_website/diamond -o {outputFolder}/CAT --block_size {blockSize:.1f}"
         # python run_Speed_up.py --len {self.lenThresh} --outpath {outputFolder}"
         # subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd, env=env)
         process = subprocess.Popen(command, shell=True, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stderr)
@@ -45,6 +45,7 @@ class CAT(Module):
         diamondPID = None
         diamondProcess = None
         mem_thresh = 60
+        # mem_thresh = 248
         # step 1: find diamond
         while monitored_time < wait_diamond_timeout:
             for child in cat_process.children(recursive=True):
@@ -142,9 +143,8 @@ class CAT(Module):
         
         indexes = list()
 
-        downGrades = [
-50, 40, 30, 20, 10
-        ]
+        downGrades = [50, 40, 30, 20, 10]
+        downGrades = [240, 200]
         # downGrades = [
         #     2400,
         #     1800,
@@ -159,6 +159,7 @@ class CAT(Module):
 
         # maxSamplePerThread = 1800
         # maxSamplePerThread = 60
+        # maxSamplePerThread = 280
         maxSamplePerThread = 45
         # if (len(basicSamples) > 2 * maxSamplePerThread):
         #     processes = math.ceil(len(basicSamples) / maxSamplePerThread / 2) * 2   # we want to avoid an "odd" number of threads
@@ -181,6 +182,7 @@ class CAT(Module):
                 # IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
                 IOUtils.writeSampleFasta(thisCollection, queryFile)
                 params.append([outputFolder, str(thisIdx), 10, totalBP/1024/1024])
+                # params.append([outputFolder, str(thisIdx), 24, totalBP/1024/1024])
                 indexes.append(str(thisIdx))
                 thisCollection = list()
                 totalBP = 0
@@ -193,6 +195,7 @@ class CAT(Module):
             # IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
             IOUtils.writeSampleFasta(thisCollection, queryFile)
             params.append([outputFolder, str(thisIdx), 10, totalBP/1024/1024])
+            # params.append([outputFolder, str(thisIdx), 24, totalBP/1024/1024])
             indexes.append(str(thisIdx))
             thisCollection = list()
             totalBP = 0
@@ -223,6 +226,7 @@ class CAT(Module):
 
 
                             nextSampleSize = 50
+                            # nextSampleSize = 280
                             for k in downGrades:
                                 if (k < querySize):
                                     nextSampleSize = k

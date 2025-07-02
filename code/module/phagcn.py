@@ -39,11 +39,11 @@ class PhaGCN(Module):
         
         if (self.version == "2"):
             cwd = "/Software/PhaGCN2.0"
-            command = f"conda run -n phagcn python run_Speed_up.py --len {self.lenThresh} --outpath {outputFolder}"
+            command = f"conda run -n phagcn --no-capture-output python run_Speed_up.py --len {self.lenThresh} --outpath {outputFolder}"
 
         elif (self.version.startswith("3")):
             cwd = "/Software/PhaGCN3"
-            command = f"conda run -n PhaGCN3 python run_Speed_up.py --len {self.lenThresh} --outpath {outputFolder}"
+            command = f"conda run -n PhaGCN3 --no-capture-output python run_Speed_up.py --len {self.lenThresh} --outpath {outputFolder}"
         # subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd, env=env)
         subprocess.run(command, shell=True, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stderr)
         

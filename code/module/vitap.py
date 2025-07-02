@@ -33,7 +33,7 @@ class VITAP(Module):
         cwd = "/Software/VITAP"
         inputFasta = f"{outputFolder}/query.fasta"
         databasePath = "DB_MSL"
-        command = f"conda run -n vitap bash scripts/VITAP assignment -i {inputFasta} -d {databasePath} -o {outputFolder}"
+        command = f"conda run -n vitap --no-capture-output bash scripts/VITAP assignment -i {inputFasta} -d {databasePath} -o {outputFolder}"
         # subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd, env=env)
         subprocess.run(command, shell=True, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stderr)
 

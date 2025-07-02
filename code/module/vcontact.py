@@ -29,7 +29,7 @@ class Vcontact(Module):
     
     def runOneVcontact(self, outputFolder, idx, threads):
         cwd = "/Software/vcontact2"
-        command = f"conda run -n vContact2 python main.py --input {outputFolder}/dna.fasta --output {outputFolder} --db {self.db} --threads {threads}"
+        command = f"conda run -n vContact2 --no-capture-output python main.py --input {outputFolder}/dna.fasta --output {outputFolder} --db {self.db} --threads {threads}"
         IOUtils.showInfo(f"Working on fragment {idx}")
         # subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd, env=env)
         subprocess.run(command, shell=True, cwd=cwd, stdout=sys.stdout, stderr=sys.stderr)
