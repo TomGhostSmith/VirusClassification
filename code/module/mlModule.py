@@ -18,29 +18,31 @@ class MLModule(Module):
         self.resultDict:dict[str, MLResult] = dict()
 
         realmParams = [
-            (256, f"{config.modelRoot}/realm/esm2_t33_256"),
-            (512, f"{config.modelRoot}/realm/esm2_t33_512")
+            ("esm2_t33_256", 256, f"{config.modelRoot}/realm/esm2_t33_256"),
+            ("esm2_t33_512", 512, f"{config.modelRoot}/realm/esm2_t33_512")
         ]
         kingdomParams = [
-            (256, f"{config.modelRoot}/kingdom/esm2_t33_256"),
-            (512, f"{config.modelRoot}/kingdom/esm2_t33_512")
+            ("esm2_t33_256", 256, f"{config.modelRoot}/kingdom/esm2_t33_256"),
+            ("esm2_t33_512", 512, f"{config.modelRoot}/kingdom/esm2_t33_512")
         ]
         phylumParams = [
-            (256, f"{config.modelRoot}/phylum/esm2_t33_256"),
-            (512, f"{config.modelRoot}/phylum/esm2_t33_512")
+            ("esm2_t33_256", 256, f"{config.modelRoot}/phylum/esm2_t33_256"),
+            ("esm2_t33_512", 512, f"{config.modelRoot}/phylum/esm2_t33_512")
         ]
         classParams = [
-            (256, f"{config.modelRoot}/class/esm2_t33_256"),
-            (512, f"{config.modelRoot}/class/esm2_t33_512")
+            ("esm2_t33_256", 256, f"{config.modelRoot}/class/esm2_t33_256"),
+            ("esm2_t33_512", 512, f"{config.modelRoot}/class/esm2_t33_512")
         ]
         orderParams = [
-            (512, f"{config.modelRoot}/order/esm2_t33_512")
+            ("esm2_t33_512", 512, f"{config.modelRoot}/order/esm2_t33_512")
         ]
         familyParams = [
-            (512, f"{config.modelRoot}/family/esm2_t33_512")
+            ("esm2_t33_512", 512, f"{config.modelRoot}/family/esm2_t33_512"),
+            ("esm2_t33_512_enlarge", 512, f"{config.modelRoot}/family/esm2_t33_512_enlarge")
         ]
         genusParams = [
-            (256, f"{config.modelRoot}/genus/esm2_t33_256"),
+            ("esm2_t33_256_enlarge", 256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus"),
+            ("esm2_t33_256", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
         ]
 
         realmParam = realmParams[int(gen[0])]
@@ -65,18 +67,18 @@ class MLModule(Module):
     def run(self, samples:list[Sample]):
         unterminatedSamples = samples
         if (self.strategy.startswith('topdown')):
-            for rank in list(self.modelParams.keys()):
-                unterminatedSamples = self.runModel(unterminatedSamples, rank)
+            for rank, param in self.modelParams.items():
+                unterminatedSamples = self.runModel(unterminatedSamples, rank, param[0])
                 if (len(unterminatedSamples) == 0):
                     break
         elif (self.strategy.startswith('bottomup')):
-            for rank in reversed(list(self.modelParams.keys())):
-                unterminatedSamples = self.runModel(unterminatedSamples, rank)
+            for rank, param in reversed(list(self.modelParams.items())):
+                unterminatedSamples = self.runModel(unterminatedSamples, rank, param[0])
                 if (len(unterminatedSamples) == 0):
                     break
         else:  # highest, we need to run all the rank
-            for rank in list(self.modelParams.keys()):
-                self.runModel(samples, rank)
+            for rank, param in self.modelParams.items():
+                self.runModel(samples, rank, param[0])
 
         results = list()
         for sample in samples:
@@ -88,11 +90,11 @@ class MLModule(Module):
         return results
 
 
-    def runModel(self, samples:list[Sample], rank:str)->list[Sample]:
+    def runModel(self, samples:list[Sample], rank:str, modelName:str)->list[Sample]:
 
         # abbr = self.modelParams[rank][1].split('/')[-1]
 
-        cachedFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}.json"
+        cachedFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}.json"
         if (os.path.exists(cachedFile)):
             with open(cachedFile) as fp:
                 thisRes = json.load(fp)
@@ -106,7 +108,7 @@ class MLModule(Module):
 
 
         if (len(samplesToRun) > 0):
-            model = ESMRunner(*self.modelParams[rank])
+            model = ESMRunner(*self.modelParams[rank][1:])
             model.run(samplesToRun)
 
             
