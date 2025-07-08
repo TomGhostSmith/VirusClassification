@@ -46,7 +46,7 @@ class ESMRunner():
         self.tempDNAFasta = f"{config.cacheFolder}/DNAs.fasta"
         self.tempProFasta = f"{config.cacheFolder}/proteins.fasta"
         self.tempProCSV = f"{config.cacheFolder}/proteins.csv"
-        self.tempResCSV = f"{config.cacheFolder}/res.csv"
+        self.tempResTSV = f"{config.cacheFolder}/res.tsv"
 
         self.maxLen = maxLen
         self.modleFolder = modelFolder
@@ -57,7 +57,7 @@ class ESMRunner():
         self.useCache = cachedResult is not None
 
         if (self.useCache):
-            self.tempResCSV = cachedResult
+            self.tempResTSV = cachedResult
 
     def loadModel(self):
         self.model = transformers.AutoModelForSequenceClassification.from_pretrained(self.baseModelFolder,
@@ -89,7 +89,6 @@ class ESMRunner():
         # 1. store samples to a fasta file
         # 2. convert DNA.fasta to protein.fasta
         # 3. preprocee protein.fasta to a csv file
-        NucleotideUtils.extractProtein(samples)
         with open(self.tempProCSV, "w") as f:
             f.write(f'sequence,accession\n')
             for sample in samples:
@@ -97,7 +96,7 @@ class ESMRunner():
                     f.write(f'{str(protein.seq.seq).upper()},{protein.id}\n')
 
         # 4. load model, run and save result
-        self.runModel()
+        return self.runModel()
 
     def runModel(self):
         def tokenize_function(examples):
@@ -137,22 +136,39 @@ class ESMRunner():
 
                     seq_name = labels[i]
 
-                    if seq_name not in result:
-                        result[seq_name] = []
+                    result[seq_name] = probabilities
 
-                    result[seq_name].append(probabilities)
+                    # if seq_name not in result:
+                    #     result[seq_name] = []
 
+                    # result[seq_name].append(probabilities)
 
-        fieldnames = ['seq_name'] + [f'class_{i}' for i in range(self.n_class)]
-
-        with open(self.tempResCSV, mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=fieldnames)
-            writer.writeheader()
-
+        lines = dict()
+        with open(self.tempResTSV, 'wt') as fp:
+            # write head 
+            line = "seq_name\t" + "\t".join([f'class_{i}' for i in range(self.n_class)]) + "\n"
+            lines["title"] = line
+            fp.write(line)
             for seq_name, probabilities in result.items():
-                row = {'seq_name': seq_name}
+                probabilities = [str(p) for p in probabilities]
+                line = f"{seq_name}\t" + "\t".join(probabilities) + "\n"
+                fp.write(line)
+                lines[seq_name] = line
+        
+        return lines
+        
 
-                for idx, prob in enumerate(probabilities[0]):
-                    row[f'class_{idx}'] = prob
 
-                writer.writerow(row)
+        # fieldnames = ['seq_name'] + [f'class_{i}' for i in range(self.n_class)]
+
+        # with open(self.tempResTSV, mode='w', newline='') as file:
+        #     writer = csv.DictWriter(file, fieldnames=fieldnames)
+        #     writer.writeheader()
+
+        #     for seq_name, probabilities in result.items():
+        #         row = {'seq_name': seq_name}
+
+        #         for idx, prob in enumerate(probabilities):
+        #             row[f'class_{idx}'] = prob
+
+        #         writer.writerow(row)

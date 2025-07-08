@@ -7,13 +7,20 @@ from prototype.module import Module
 from moduleResult.mlResult import MLResult
 from entity.sample import Sample
 from module.esmRunner import ESMRunner
+from tqdm import tqdm
+
+from utils import IOUtils
+from utils.NucleotideUtils import NucleotideUtils
 
 class MLModule(Module):
-    def __init__(self, strategy="topdown", thresh=0.45, gen='1111000'):
+    def __init__(self, strategy="topdown", thresh=0.45, gen='1111000', pooling='sum'):
         self.strategy = strategy
         self.thresh = thresh
         self.gen = gen
-        super().__init__(f'ML-stratgy={strategy};th={thresh}, gen={gen}')
+        self.pooling = pooling
+        if (pooling not in ["sum"] and not pooling.startswith("top")):
+            raise ValueError("Unsupported pooling method")
+        super().__init__(f'ML-stratgy={strategy};th={thresh}, gen={gen}, pooling={pooling}')
         # self.baseName = self.moduleName
         self.resultDict:dict[str, MLResult] = dict()
 
@@ -65,6 +72,10 @@ class MLModule(Module):
 
         
     def run(self, samples:list[Sample]):
+        NucleotideUtils.extractProtein(samples)
+        for sample in samples:
+            self.resultDict[sample.id] = MLResult(self.strategy, self.thresh)
+
         unterminatedSamples = samples
         if (self.strategy.startswith('topdown')):
             for rank, param in self.modelParams.items():
@@ -82,7 +93,7 @@ class MLModule(Module):
 
         results = list()
         for sample in samples:
-            if (sample.id in self.resultDict):
+            if (self.resultDict[sample.id].res is not None):
                 results.append(self.resultDict[sample.id])
             else:
                 results.append(None)
@@ -93,84 +104,117 @@ class MLModule(Module):
     def runModel(self, samples:list[Sample], rank:str, modelName:str)->list[Sample]:
 
         # abbr = self.modelParams[rank][1].split('/')[-1]
-
-        cachedFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}.json"
-        if (os.path.exists(cachedFile)):
-            with open(cachedFile) as fp:
-                thisRes = json.load(fp)
+        cachedSamples:dict[str, int] = dict()
+        cacheFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}.tmp"
+        cacheIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}.json"
+        if (os.path.exists(cacheFile) and os.path.exists(cacheIndex)):
+            with open(cacheIndex) as fp:
+                cachedSamples = json.load(fp)
+                nextOffset = cachedSamples["nextOffset"]
         else:
-            thisRes = dict()
+            nextOffset = 0
+            cachedSamples["nextOffset"] = 0
+
+        cachedMapping = f"{config.cacheResultFolder}/ESM_mapping_{rank}_{modelName}.json"
+        if (os.path.exists(cachedMapping)):
+            with open(cachedMapping) as fp:
+                id2Name = json.load(fp)
+        else:
+            level = rank.capitalize()
+            taxamap_file = f'{config.modelRoot}/mapping/VMR_MSL39_v4.json.processed_data.json.nosub_addunknown.json{level}_mapping.csv'
+            taxamap_df = pandas.read_csv(taxamap_file)
+            id2Name = {}
+            for _, row in taxamap_df.iterrows():
+                index = row[f"{rank.capitalize()} ID"]
+                name = row[rank.capitalize()]
+                if (index not in id2Name):
+                    id2Name[index] = name
+                elif (id2Name[index] != name):
+                    IOUtils.showInfo(f"{rank} ID {index} corresponds to multiple names", "ERROR")
+            with open(cachedMapping, 'wt') as fp:
+                json.dump(id2Name, fp, indent=2)
+        
+        # convert dict to list for better performance
+        names = [None] * len(id2Name)
+        for idx, name in id2Name.items():
+            names[int(idx)] = name
 
         samplesToRun:list[Sample] = list()
         for sample in samples:
-            if (sample.id not in thisRes):
+            if (sample.id not in cachedSamples):
                 samplesToRun.append(sample)
 
 
         if (len(samplesToRun) > 0):
             model = ESMRunner(*self.modelParams[rank][1:])
-            model.run(samplesToRun)
+            lines = model.run(samplesToRun)
 
-            
-            level = rank.capitalize()
-            predictions_df = pandas.read_csv(model.tempResCSV)
-
-            taxamap_file = f'{config.modelRoot}/mapping/VMR_MSL39_v4.json.processed_data.json.nosub_addunknown.json{level}_mapping.csv'
-
-            taxamap_df = pandas.read_csv(taxamap_file)
-
-            taxamap_dict = {row[f'{level} ID']: row[f'{level}'] for _, row in taxamap_df.iterrows()}
-
-
-            predictions_df['seq_name'] = predictions_df['seq_name'].apply(lambda x: x.rsplit('_', 1)[0])
-
-            mean_values_df = predictions_df.groupby('seq_name').mean()
-
-            class_columns = [col for col in mean_values_df.columns if col.startswith("class_")]
-            mean_values_df["prediction_score"] = mean_values_df[class_columns].max(axis=1)
-            mean_values_df["prediction"] = mean_values_df[class_columns].idxmax(axis=1).str.extract(r'class_(\d+)')[0]
-            mean_values_df = mean_values_df.reset_index()
-
-            mean_values_df['prediction'] = mean_values_df['prediction'].astype(str)
-
-            taxamap_dict = {str(key): value for key, value in taxamap_dict.items()}
-
-            mean_values_df['taxa_prediction'] = mean_values_df['prediction'].map(taxamap_dict)
-
-            new_order = ['seq_name','prediction','prediction_score','taxa_prediction']
-
-            df = mean_values_df[new_order]
-
-            df_filtered = df[~df['taxa_prediction'].str.contains('Unknown')]
+            with open(cacheFile, 'at') as fp:
+                if (nextOffset == 0):
+                    line = "seq_name\t" + "\t".join(names) + "\n"
+                    fp.write(line)
+                    nextOffset += len(line)
+                for seq_name, line in lines.items():
+                    if (seq_name == "title"):
+                        continue
+                    cachedSamples[seq_name] = nextOffset
+                    fp.write(line)
+                    nextOffset += len(line)
+                cachedSamples["nextOffset"] = nextOffset
 
             del model
-
-
-            for row in df_filtered.itertuples():
-                id = row.seq_name
-                score = float(row.prediction_score)
-                res = row.taxa_prediction
-                thisRes[id] = [res, score]
             
             for sample in samplesToRun:
-                if (sample.id not in thisRes):
-                    thisRes[sample.id] = 'N/A'
-
-
-            with open(cachedFile, 'wt') as fp:
-                json.dump(thisRes, fp, indent=2)
-
-            # if (id not in self.resultDict):
-            #     self.resultDict[id] = MLResult(self.strategy, self.thresh)
-            # self.resultDict[id].addResult(res, score)
+                if (sample.id not in cachedSamples):
+                    cachedSamples[sample.id] = -1
+            
+            with open(cacheIndex, 'wt') as fp:
+                json.dump(cachedSamples, fp, indent=2)
+        
 
         unTerminatedSamples:list[Sample] = list()
-        for sample in samples:
-            if sample.id not in self.resultDict:
-                self.resultDict[sample.id] = MLResult(self.strategy, self.thresh)
-            if (thisRes[sample.id] != 'N/A'):
-                self.resultDict[sample.id].addResult(*thisRes[sample.id])
+
+        cachedResultFP = open(cacheFile)
+        for sample in tqdm(samples, desc="pooling"):
+            if (self.pooling == "sum"):
+                votes = {n: 0 for n in names if "Unknown" not in n}
+                for protein in sample.proteins:
+                    offset = cachedSamples[protein.id]
+                    if (offset == -1):
+                        continue
+                    cachedResultFP.seek(offset)
+                    terms = cachedResultFP.readline().strip().split('\t')
+                    scores = [float(t) for t in terms[1:]]
+                    for taxo, score in zip(names, scores):
+                        if ("Unknown" not in taxo):
+                            votes[taxo] += score
+            elif (self.pooling.startswith("top")):
+                thresh = int(self.pooling[3:])
+                votes = {}
+                for protein in sample.proteins:
+                    offset = cachedSamples[protein.id]
+                    if (offset == -1):
+                        continue
+                    cachedResultFP.seek(offset)
+                    terms = cachedResultFP.readline().strip().split('\t')
+                    scores = [float(t) for t in terms[1:]]
+                    rawScores = {taxo: score for taxo, score in zip(names, scores)}
+                    tops = sorted(list(rawScores.items()), key=lambda x:x[1], reverse=True)
+                    for taxo, score in tops[:thresh]:
+                        if ("Unknown" not in taxo):
+                            if (taxo in votes):
+                                votes[taxo] += score
+                            else:
+                                votes[taxo] = score
+
+            totalVotes = sum(votes.values())    # If pooling method == "sum", the totalVotes will be 1 * len(proteins) (not considering "Unknown" labels)
+            if (len(votes) > 0 and totalVotes > 0):
+                winner, maxVotes = max(votes.items(), key=lambda x:x[1])
+                self.resultDict[sample.id].addResult(winner, maxVotes/totalVotes)
+            
             if not (self.resultDict[sample.id].terminate):
                 unTerminatedSamples.append(sample)
+
+        cachedResultFP.close()
         
         return unTerminatedSamples

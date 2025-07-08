@@ -42,6 +42,7 @@ class ESM(Module):
                 samplesToRun.append(sample)
         
         if (len(samplesToRun) > 0):
+            raise NotImplementedError("ESM module is waiting for reconstruction")
             viruses = set()
 
             self.model = ESMRunner(512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)

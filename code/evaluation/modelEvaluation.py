@@ -194,7 +194,7 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
     ax.set_xlabel("rank")
     ax.set_ylabel("Proportion")
     ax.set_title(f"Performance of {len(models)} models on {dataset}. Missing label are set as {missingLabel}")
-    ax.set_xticks(x*1.5 + width * (len(models) - 1)/2)
+    ax.set_xticks(x*2 + width * (len(models) - 1)/2)
     ax.set_xticklabels(rankLevels)
     ax.legend(loc="upper left", bbox_to_anchor=(1, 1))
 
