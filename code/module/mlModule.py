@@ -6,6 +6,7 @@ from config import config
 from prototype.module import Module
 from moduleResult.mlResult import MLResult
 from entity.sample import Sample
+from entity.proteinSample import ProteinSample
 from module.esmRunner import ESMRunner
 from tqdm import tqdm
 
@@ -139,15 +140,16 @@ class MLModule(Module):
         for idx, name in id2Name.items():
             names[int(idx)] = name
 
-        samplesToRun:list[Sample] = list()
+        proteinsToRun:list[ProteinSample] = list()
         for sample in samples:
-            if (sample.id not in cachedSamples):
-                samplesToRun.append(sample)
+            for protein in sample.proteins:
+                if (protein.id not in cachedSamples):
+                    proteinsToRun.append(protein)
 
 
-        if (len(samplesToRun) > 0):
+        if (len(proteinsToRun) > 0):
             model = ESMRunner(*self.modelParams[rank][1:])
-            lines = model.run(samplesToRun)
+            lines = model.run(proteinsToRun)
 
             with open(cacheFile, 'at') as fp:
                 if (nextOffset == 0):
@@ -164,9 +166,9 @@ class MLModule(Module):
 
             del model
             
-            for sample in samplesToRun:
-                if (sample.id not in cachedSamples):
-                    cachedSamples[sample.id] = -1
+            for protein in proteinsToRun:
+                if (protein.id not in cachedSamples):
+                    cachedSamples[protein.id] = -1
             
             with open(cacheIndex, 'wt') as fp:
                 json.dump(cachedSamples, fp, indent=2)

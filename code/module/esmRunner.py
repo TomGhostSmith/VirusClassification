@@ -17,7 +17,7 @@ import math
 import csv
 import os
 
-from entity.sample import Sample
+from entity.proteinSample import ProteinSample
 from config import config
 from Bio import SeqIO
 from utils import IOUtils
@@ -82,7 +82,7 @@ class ESMRunner():
         self.model.to(self.device)
         self.model.eval()
 
-    def run(self, samples:list[Sample]):
+    def run(self, proteins:list[ProteinSample]):
         if (self.useCache):
             return
         
@@ -91,9 +91,8 @@ class ESMRunner():
         # 3. preprocee protein.fasta to a csv file
         with open(self.tempProCSV, "w") as f:
             f.write(f'sequence,accession\n')
-            for sample in samples:
-                for protein in sample.proteins:
-                    f.write(f'{str(protein.seq.seq).upper()},{protein.id}\n')
+            for protein in proteins:
+                f.write(f'{str(protein.seq.seq).upper()},{protein.id}\n')
 
         # 4. load model, run and save result
         return self.runModel()

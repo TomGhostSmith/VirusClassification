@@ -8,6 +8,7 @@ from prototype.module import Module
 from moduleResult.virusPredictionResult import VirusPredictionResult
 from module.esmRunner import ESMRunner
 from entity.sample import Sample
+from entity.proteinSample import ProteinSample
 
 class ESM(Module):
     def __init__(self):
@@ -30,59 +31,48 @@ class ESM(Module):
         results = list()
 
         cacheFile = f"{config.cacheResultFolder}/ESM_pred.json"
+        cachedSamples:dict[str, float] = {}  # the score of being a virus
         if (os.path.exists(cacheFile)):
             with open(cacheFile) as fp:
-                thisRes = json.load(fp)
-        else:
-            thisRes = dict()
+                cachedSamples = json.load(fp)
 
-        samplesToRun:list[Sample] = list()
+        proteinsToRun:list[ProteinSample] = list()
         for sample in samples:
-            if sample.id not in thisRes:
-                samplesToRun.append(sample)
+            for protein in sample.proteins:
+                if protein.id not in cachedSamples:
+                    proteinsToRun.append(sample)
         
-        if (len(samplesToRun) > 0):
-            raise NotImplementedError("ESM module is waiting for reconstruction")
-            viruses = set()
-
+        if (len(proteinsToRun) > 0):
             self.model = ESMRunner(512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)
-            self.model.run(samples)
+            lines = self.model.run(samples)
 
-            df = pandas.read_csv(self.model.tempResCSV)
-
-            df['seq_name'] = df['seq_name'].apply(lambda x: x.rsplit('_', 1)[0])
-
-
-            df['class_0'] = pandas.to_numeric(df['class_0'])
-            df['class_0_mean'] = df.groupby('seq_name')['class_0'].transform('mean')
-
-            df['class_1'] = pandas.to_numeric(df['class_1'])
-            df['class_1_mean'] = df.groupby('seq_name')['class_1'].transform('mean')
-
-            df['prediction'] = df.apply(lambda x: 'virus' if x['class_1_mean'] > x['class_0_mean'] else 'non-virus', axis=1)
-
-
-            df_result = df[['seq_name', 'prediction', 'class_0_mean','class_1_mean']].drop_duplicates()
-
-            for row in df_result.itertuples():
-                if row.prediction == 'virus':
-                    viruses.add(row.seq_name)
-
+            for seqName, line in lines.items():
+                terms = line.strip().split('\t')
+                cachedSamples[seqName] = float(terms[2])
+            
             del self.model
 
-            for sample in samplesToRun:
-                if sample.id in viruses:
-                    thisRes[sample.id] = "Virus"
-                else:
-                    thisRes[sample.id] = "NonVirus"
-            
+            for protein in proteinsToRun:
+                if (protein.id not in cachedSamples):
+                    cachedSamples[protein.id] = 'N/A'
+
+            with open(cacheFile, 'wt') as fp:
+                json.dump(cachedSamples, fp, indent=2)
+
         for sample in samples:
-            if thisRes[sample.id] == "Virus":
-                results.append(VirusPredictionResult())
+            totalScore = 0
+            validProteinCount = 0
+            for protein in sample.proteins:
+                if (cachedSamples[protein.id] != 'N/A'):
+                    totalScore += cachedSamples[protein.id]
+                    validProteinCount += 1
+            
+            if (validProteinCount > 0):
+                if (totalScore/validProteinCount > 0.5):
+                    results.append(VirusPredictionResult())
+                else:
+                    results.append(None)
             else:
                 results.append(None)
-        
-        with open(cacheFile, 'wt') as fp:
-            json.dump(thisRes, fp, indent=2)
         
         return results
