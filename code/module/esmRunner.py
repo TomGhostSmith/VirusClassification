@@ -16,6 +16,7 @@ import torch
 import math
 import csv
 import os
+import base64
 
 from entity.proteinSample import ProteinSample
 from config import config
@@ -127,47 +128,39 @@ class ESMRunner():
                 batch.pop('labels')
                 batch = {k: v.to(self.device) for k, v in batch.items()}
 
-                outputs = self.model(**batch)
+                outputs = self.model(**batch, output_hidden_states=True)
+                last_hidden_state = outputs.hidden_states[-1]
+                cls_embedding = last_hidden_state[:, 0, :]
+                # ave_embedding = torch.mean(last_hidden_state, dim=1)  # note: this won't work because there are padding
+                masks = batch['attention_mask'].unsqueeze(-1)
+                masked_hidden = last_hidden_state * masks
+                sum_hidden = masked_hidden.sum(dim=1)
+                lengths = masks.sum(dim=1)
+                ave_embedding = sum_hidden / lengths
+                cls_embeddings = cls_embedding.detach().cpu().contiguous().numpy()
+                ave_embeddings = ave_embedding.detach().cpu().contiguous().numpy()
+
                 logits = outputs.logits.cpu().numpy()
 
                 for i in torch.arange(len(labels)):
-                    probabilities = softmax(torch.tensor(logits[i])).tolist()
-
+                    probabilities = softmax(torch.tensor(logits[i])).numpy()
+                    # embedding_str = base64.b64encode(embedding.tobytes()).decode('ascii')
+                    # embedding = numpy.frombuffer(base64.b64decode(embedding_str), dtype=numpy.float16)  # note: we are using float16
                     seq_name = labels[i]
 
-                    result[seq_name] = probabilities
-
-                    # if seq_name not in result:
-                    #     result[seq_name] = []
-
-                    # result[seq_name].append(probabilities)
-
-        lines = dict()
-        with open(self.tempResTSV, 'wt') as fp:
-            # write head 
-            line = "seq_name\t" + "\t".join([f'class_{i}' for i in range(self.n_class)]) + "\n"
-            lines["title"] = line
-            fp.write(line)
-            for seq_name, probabilities in result.items():
-                probabilities = [str(p) for p in probabilities]
-                line = f"{seq_name}\t" + "\t".join(probabilities) + "\n"
-                fp.write(line)
-                lines[seq_name] = line
-        
-        return lines
-        
+                    result[seq_name] = (probabilities, cls_embeddings[i], ave_embeddings[i])
 
 
-        # fieldnames = ['seq_name'] + [f'class_{i}' for i in range(self.n_class)]
-
-        # with open(self.tempResTSV, mode='w', newline='') as file:
-        #     writer = csv.DictWriter(file, fieldnames=fieldnames)
-        #     writer.writeheader()
-
+        # lines = dict()
+        # with open(self.tempResTSV, 'wt') as fp:
+        #     # write head 
+        #     line = "seq_name\t" + "\t".join([f'class_{i}' for i in range(self.n_class)]) + "\n"
+        #     lines["title"] = line
+        #     fp.write(line)
         #     for seq_name, probabilities in result.items():
-        #         row = {'seq_name': seq_name}
-
-        #         for idx, prob in enumerate(probabilities):
-        #             row[f'class_{idx}'] = prob
-
-        #         writer.writerow(row)
+        #         probabilities = [str(p) for p in probabilities]
+        #         line = f"{seq_name}\t" + "\t".join(probabilities) + "\n"
+        #         fp.write(line)
+        #         lines[seq_name] = line
+        
+        return result

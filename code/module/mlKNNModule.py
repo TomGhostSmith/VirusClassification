@@ -15,7 +15,7 @@ import numpy
 from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
-class MLModule(Module):
+class MLKNNModule(Module):
     def __init__(self, strategy="topdown", thresh=0.45, gen='1111000', pooling='sum'):
         self.strategy = strategy
         self.thresh = thresh
@@ -108,14 +108,13 @@ class MLModule(Module):
 
         # abbr = self.modelParams[rank][1].split('/')[-1]
         cacheProbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_prob.tmp"
-        # cacheCLSEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_cls_emb.tmp"
-        # cacheAveEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_ave_emb.tmp"
+        cacheCLSEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_cls_emb.tmp"
+        cacheAveEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_ave_emb.tmp"
         cacheProbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_prob.json"
-        # cacheCLSEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_cls_emb.json"
-        # cacheAveEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_ave_emb.json"
+        cacheCLSEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_cls_emb.json"
+        cacheAveEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_ave_emb.json"
 
-        # essentialFiles = [cacheProbFile, cacheCLSEmbFile, cacheAveEmbFile, cacheProbIndex, cacheCLSEmbIndex, cacheAveEmbIndex]
-        essentialFiles = [cacheProbFile, cacheProbIndex]
+        essentialFiles = [cacheProbFile, cacheCLSEmbFile, cacheAveEmbFile, cacheProbIndex, cacheCLSEmbIndex, cacheAveEmbIndex]
         allExists = True
         for f in essentialFiles:
             if (not os.path.exists(f)):
@@ -125,19 +124,19 @@ class MLModule(Module):
             with open(cacheProbIndex) as fp:
                 cachedSamples_prob = json.load(fp)
                 nextOffset_prob = cachedSamples_prob["nextOffset"]
-            # with open(cacheCLSEmbIndex) as fp:
-            #     cachedSamples_cls = json.load(fp)
-            #     nextOffset_cls = cachedSamples_cls["nextOffset"]
-            # with open(cacheAveEmbIndex) as fp:
-            #     cachedSamples_ave = json.load(fp)
-            #     nextOffset_ave = cachedSamples_ave["nextOffset"]
+            with open(cacheCLSEmbIndex) as fp:
+                cachedSamples_cls = json.load(fp)
+                nextOffset_cls = cachedSamples_cls["nextOffset"]
+            with open(cacheAveEmbIndex) as fp:
+                cachedSamples_ave = json.load(fp)
+                nextOffset_ave = cachedSamples_ave["nextOffset"]
         else:
             cachedSamples_prob = {"nextOffset": 0}
             nextOffset_prob = 0
-            # cachedSamples_cls = {"nextOffset": 0}
-            # nextOffset_cls = 0
-            # cachedSamples_ave = {"nextOffset": 0}
-            # nextOffset_ave = 0
+            cachedSamples_cls = {"nextOffset": 0}
+            nextOffset_cls = 0
+            cachedSamples_ave = {"nextOffset": 0}
+            nextOffset_ave = 0
 
         cachedMapping = f"{config.cacheResultFolder}/ESM_mapping_{rank}_{modelName}.json"
         if (os.path.exists(cachedMapping)):
@@ -166,8 +165,7 @@ class MLModule(Module):
         proteinsToRun:list[ProteinSample] = list()
         for sample in samples:
             for protein in sample.proteins:
-                # if (protein.id not in cachedSamples_prob or protein.id not in cachedSamples_cls or protein.id not in cachedSamples_ave):
-                if (protein.id not in cachedSamples_prob):
+                if (protein.id not in cachedSamples_prob or protein.id not in cachedSamples_cls or protein.id not in cachedSamples_ave):
                     proteinsToRun.append(protein)
 
 
@@ -176,8 +174,8 @@ class MLModule(Module):
             lines = model.run(proteinsToRun)
 
             fp_prob = open(cacheProbFile, 'at')
-            # fp_cls = open(cacheCLSEmbFile, 'at')
-            # fp_ave = open(cacheAveEmbFile, 'at')
+            fp_cls = open(cacheCLSEmbFile, 'at')
+            fp_ave = open(cacheAveEmbFile, 'at')
             
 
             # if (nextOffset_prob == 0):
@@ -186,101 +184,89 @@ class MLModule(Module):
             #     nextOffset_prob += len(line)
             for seq_name, (prob, cls, ave) in lines.items():
                 cachedSamples_prob[seq_name] = nextOffset_prob
-                # cachedSamples_cls[seq_name] = nextOffset_cls
-                # cachedSamples_ave[seq_name] = nextOffset_ave
+                cachedSamples_cls[seq_name] = nextOffset_cls
+                cachedSamples_ave[seq_name] = nextOffset_ave
 
                 probText = base64.b64encode(prob.tobytes()).decode('ascii')
-                # clsText = base64.b64encode(cls.tobytes()).decode('ascii')
-                # aveText = base64.b64encode(ave.tobytes()).decode('ascii')
+                clsText = base64.b64encode(cls.tobytes()).decode('ascii')
+                aveText = base64.b64encode(ave.tobytes()).decode('ascii')
 
                 fp_prob.write(f"{seq_name}\t{probText}\n")
-                # fp_cls.write(f"{seq_name}\t{clsText}\n")
-                # fp_ave.write(f"{seq_name}\t{aveText}\n")
+                fp_cls.write(f"{seq_name}\t{clsText}\n")
+                fp_ave.write(f"{seq_name}\t{aveText}\n")
                 nextOffset_prob += len(probText)
-                # nextOffset_cls += len(clsText)
-                # nextOffset_ave += len(aveText)
+                nextOffset_cls += len(clsText)
+                nextOffset_ave += len(aveText)
 
             cachedSamples_prob["nextOffset"] = nextOffset_prob
-            # cachedSamples_cls["nextOffset"] = nextOffset_cls
-            # cachedSamples_ave["nextOffset"] = nextOffset_ave
+            cachedSamples_cls["nextOffset"] = nextOffset_cls
+            cachedSamples_ave["nextOffset"] = nextOffset_ave
 
             fp_prob.close()
-            # fp_cls.close()
-            # fp_ave.close()
+            fp_cls.close()
+            fp_ave.close()
 
             del model
             
             for protein in proteinsToRun:
                 if (protein.id not in cachedSamples_prob):
                     cachedSamples_prob[protein.id] = -1
-                # if (protein.id not in cachedSamples_cls):
-                #     cachedSamples_cls[protein.id] = -1
-                # if (protein.id not in cachedSamples_ave):
-                #     cachedSamples_ave[protein.id] = -1
+                if (protein.id not in cachedSamples_cls):
+                    cachedSamples_cls[protein.id] = -1
+                if (protein.id not in cachedSamples_ave):
+                    cachedSamples_ave[protein.id] = -1
             
             with open(cacheProbIndex, 'wt') as fp:
                 json.dump(cachedSamples_prob, fp, indent=2)
-            # with open(cacheCLSEmbIndex, 'wt') as fp:
-            #     json.dump(cachedSamples_cls, fp, indent=2)
-            # with open(cacheAveEmbIndex, 'wt') as fp:
-            #     json.dump(cachedSamples_ave, fp, indent=2)
+            with open(cacheCLSEmbIndex, 'wt') as fp:
+                json.dump(cachedSamples_cls, fp, indent=2)
+            with open(cacheAveEmbIndex, 'wt') as fp:
+                json.dump(cachedSamples_ave, fp, indent=2)
         
 
         unTerminatedSamples:list[Sample] = list()
 
-
-        if (self.strategy in ["highest", "topdown", "bottomup"]):
-            cachedResultFP_prob = open(cacheProbFile)
-            for sample in tqdm(samples, desc="pooling"):
-                if (self.pooling == "sum"):
-                    votes = {n: 0 for n in names if "Unknown" not in n}
-                    for protein in sample.proteins:
-                        offset = cachedSamples_prob[protein.id]
-                        if (offset == -1):
-                            continue
-                        cachedResultFP_prob.seek(offset)
-                        terms = cachedResultFP_prob.readline().strip().split('\t')
-                        scores = [float(t) for t in terms[1:]]
-                        for taxo, score in zip(names, scores):
-                            if ("Unknown" not in taxo):
+        cachedResultFP = open(cacheFile)
+        for sample in tqdm(samples, desc="pooling"):
+            if (self.pooling == "sum"):
+                votes = {n: 0 for n in names if "Unknown" not in n}
+                for protein in sample.proteins:
+                    offset = cachedSamples[protein.id]
+                    if (offset == -1):
+                        continue
+                    cachedResultFP.seek(offset)
+                    terms = cachedResultFP.readline().strip().split('\t')
+                    scores = [float(t) for t in terms[1:]]
+                    for taxo, score in zip(names, scores):
+                        if ("Unknown" not in taxo):
+                            votes[taxo] += score
+            elif (self.pooling.startswith("top")):
+                thresh = int(self.pooling[3:])
+                votes = {}
+                for protein in sample.proteins:
+                    offset = cachedSamples[protein.id]
+                    if (offset == -1):
+                        continue
+                    cachedResultFP.seek(offset)
+                    terms = cachedResultFP.readline().strip().split('\t')
+                    scores = [float(t) for t in terms[1:]]
+                    rawScores = {taxo: score for taxo, score in zip(names, scores)}
+                    tops = sorted(list(rawScores.items()), key=lambda x:x[1], reverse=True)
+                    for taxo, score in tops[:thresh]:
+                        if ("Unknown" not in taxo):
+                            if (taxo in votes):
                                 votes[taxo] += score
-                elif (self.pooling.startswith("top")):
-                    thresh = int(self.pooling[3:])
-                    votes = {}
-                    for protein in sample.proteins:
-                        offset = cachedSamples_prob[protein.id]
-                        if (offset == -1):
-                            continue
-                        cachedResultFP_prob.seek(offset)
-                        terms = cachedResultFP_prob.readline().strip().split('\t')
-                        scores = [float(t) for t in terms[1:]]
-                        rawScores = {taxo: score for taxo, score in zip(names, scores)}
-                        tops = sorted(list(rawScores.items()), key=lambda x:x[1], reverse=True)
-                        for taxo, score in tops[:thresh]:
-                            if ("Unknown" not in taxo):
-                                if (taxo in votes):
-                                    votes[taxo] += score
-                                else:
-                                    votes[taxo] = score
+                            else:
+                                votes[taxo] = score
 
-                totalVotes = sum(votes.values())    # If pooling method == "sum", the totalVotes will be 1 * len(proteins) (not considering "Unknown" labels)
-                if (len(votes) > 0 and totalVotes > 0):
-                    winner, maxVotes = max(votes.items(), key=lambda x:x[1])
-                    self.resultDict[sample.id].addResult(winner, maxVotes/totalVotes)
-                
-                if not (self.resultDict[sample.id].terminate):
-                    unTerminatedSamples.append(sample)
-            cachedResultFP_prob.close()
+            totalVotes = sum(votes.values())    # If pooling method == "sum", the totalVotes will be 1 * len(proteins) (not considering "Unknown" labels)
+            if (len(votes) > 0 and totalVotes > 0):
+                winner, maxVotes = max(votes.items(), key=lambda x:x[1])
+                self.resultDict[sample.id].addResult(winner, maxVotes/totalVotes)
+            
+            if not (self.resultDict[sample.id].terminate):
+                unTerminatedSamples.append(sample)
 
-        # TODO: KNN and load trainset embedding
-        elif (self.strategy == "ClsEmbKNN"):
-            # cachedResultFP_cls = open(cacheCLSEmbFile)
-            # cachedResultFP_cls.close()
-            pass
-        elif (self.strategy == "AveEmbKNN"):
-            # cachedResultFP_ave = open(cacheAveEmbFile)
-            # cachedResultFP_ave.close()
-            pass
-
+        cachedResultFP.close()
         
         return unTerminatedSamples
