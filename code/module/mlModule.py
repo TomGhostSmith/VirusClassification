@@ -9,8 +9,6 @@ from entity.sample import Sample
 from entity.proteinSample import ProteinSample
 from module.esmRunner import ESMRunner
 from tqdm import tqdm
-import base64
-import numpy
 
 from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
@@ -106,15 +104,9 @@ class MLModule(Module):
 
     def runModel(self, samples:list[Sample], rank:str, modelName:str)->list[Sample]:
 
-        # abbr = self.modelParams[rank][1].split('/')[-1]
         cacheProbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_prob.tmp"
-        # cacheCLSEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_cls_emb.tmp"
-        # cacheAveEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_ave_emb.tmp"
         cacheProbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_prob.json"
-        # cacheCLSEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_cls_emb.json"
-        # cacheAveEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_ave_emb.json"
 
-        # essentialFiles = [cacheProbFile, cacheCLSEmbFile, cacheAveEmbFile, cacheProbIndex, cacheCLSEmbIndex, cacheAveEmbIndex]
         essentialFiles = [cacheProbFile, cacheProbIndex]
         allExists = True
         for f in essentialFiles:
@@ -125,19 +117,9 @@ class MLModule(Module):
             with open(cacheProbIndex) as fp:
                 cachedSamples_prob = json.load(fp)
                 nextOffset_prob = cachedSamples_prob["nextOffset"]
-            # with open(cacheCLSEmbIndex) as fp:
-            #     cachedSamples_cls = json.load(fp)
-            #     nextOffset_cls = cachedSamples_cls["nextOffset"]
-            # with open(cacheAveEmbIndex) as fp:
-            #     cachedSamples_ave = json.load(fp)
-            #     nextOffset_ave = cachedSamples_ave["nextOffset"]
         else:
             cachedSamples_prob = {"nextOffset": 0}
             nextOffset_prob = 0
-            # cachedSamples_cls = {"nextOffset": 0}
-            # nextOffset_cls = 0
-            # cachedSamples_ave = {"nextOffset": 0}
-            # nextOffset_ave = 0
 
         cachedMapping = f"{config.cacheResultFolder}/ESM_mapping_{rank}_{modelName}.json"
         if (os.path.exists(cachedMapping)):
@@ -166,7 +148,6 @@ class MLModule(Module):
         proteinsToRun:list[ProteinSample] = list()
         for sample in samples:
             for protein in sample.proteins:
-                # if (protein.id not in cachedSamples_prob or protein.id not in cachedSamples_cls or protein.id not in cachedSamples_ave):
                 if (protein.id not in cachedSamples_prob):
                     proteinsToRun.append(protein)
 
@@ -176,54 +157,28 @@ class MLModule(Module):
             lines = model.run(proteinsToRun)
 
             fp_prob = open(cacheProbFile, 'at')
-            # fp_cls = open(cacheCLSEmbFile, 'at')
-            # fp_ave = open(cacheAveEmbFile, 'at')
             
 
-            # if (nextOffset_prob == 0):
-            #     line = "seq_name\t" + "\t".join(names) + "\n"
-            #     fp_prob.write(line)
-            #     nextOffset_prob += len(line)
             for seq_name, (prob, cls, ave) in lines.items():
                 cachedSamples_prob[seq_name] = nextOffset_prob
-                # cachedSamples_cls[seq_name] = nextOffset_cls
-                # cachedSamples_ave[seq_name] = nextOffset_ave
 
-                probText = base64.b64encode(prob.tobytes()).decode('ascii')
-                # clsText = base64.b64encode(cls.tobytes()).decode('ascii')
-                # aveText = base64.b64encode(ave.tobytes()).decode('ascii')
+                probText = f"{seq_name}\t{IOUtils.encodeBase64(prob)}\n"
 
-                fp_prob.write(f"{seq_name}\t{probText}\n")
-                # fp_cls.write(f"{seq_name}\t{clsText}\n")
-                # fp_ave.write(f"{seq_name}\t{aveText}\n")
+                fp_prob.write()
                 nextOffset_prob += len(probText)
-                # nextOffset_cls += len(clsText)
-                # nextOffset_ave += len(aveText)
 
             cachedSamples_prob["nextOffset"] = nextOffset_prob
-            # cachedSamples_cls["nextOffset"] = nextOffset_cls
-            # cachedSamples_ave["nextOffset"] = nextOffset_ave
 
             fp_prob.close()
-            # fp_cls.close()
-            # fp_ave.close()
 
             del model
             
             for protein in proteinsToRun:
                 if (protein.id not in cachedSamples_prob):
                     cachedSamples_prob[protein.id] = -1
-                # if (protein.id not in cachedSamples_cls):
-                #     cachedSamples_cls[protein.id] = -1
-                # if (protein.id not in cachedSamples_ave):
-                #     cachedSamples_ave[protein.id] = -1
             
             with open(cacheProbIndex, 'wt') as fp:
                 json.dump(cachedSamples_prob, fp, indent=2)
-            # with open(cacheCLSEmbIndex, 'wt') as fp:
-            #     json.dump(cachedSamples_cls, fp, indent=2)
-            # with open(cacheAveEmbIndex, 'wt') as fp:
-            #     json.dump(cachedSamples_ave, fp, indent=2)
         
 
         unTerminatedSamples:list[Sample] = list()
@@ -239,8 +194,8 @@ class MLModule(Module):
                         if (offset == -1):
                             continue
                         cachedResultFP_prob.seek(offset)
-                        terms = cachedResultFP_prob.readline().strip().split('\t')
-                        scores = [float(t) for t in terms[1:]]
+                        line = cachedResultFP_prob.readline().strip()
+                        scores = IOUtils.decodeBase64(line[line.find('\t')+1:])
                         for taxo, score in zip(names, scores):
                             if ("Unknown" not in taxo):
                                 votes[taxo] += score
@@ -252,8 +207,8 @@ class MLModule(Module):
                         if (offset == -1):
                             continue
                         cachedResultFP_prob.seek(offset)
-                        terms = cachedResultFP_prob.readline().strip().split('\t')
-                        scores = [float(t) for t in terms[1:]]
+                        line = cachedResultFP_prob.readline().strip()
+                        scores = IOUtils.decodeBase64(line[line.find('\t')+1:])
                         rawScores = {taxo: score for taxo, score in zip(names, scores)}
                         tops = sorted(list(rawScores.items()), key=lambda x:x[1], reverse=True)
                         for taxo, score in tops[:thresh]:

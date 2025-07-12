@@ -4,10 +4,12 @@ import json
 import pandas
 from config import config
 from prototype.module import Module
-from moduleResult.mlResult import MLResult
+from moduleResult.plainResult import PlainResult
 from entity.sample import Sample
 from entity.proteinSample import ProteinSample
 from module.esmRunner import ESMRunner
+from module.marker import Marker
+from entity.taxoTree import taxoTree
 from tqdm import tqdm
 import base64
 import numpy
@@ -16,257 +18,278 @@ from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
 class MLKNNModule(Module):
-    def __init__(self, strategy="topdown", thresh=0.45, gen='1111000', pooling='sum'):
+    def __init__(self, reference="VMRv4", marker=False, embedding="CLS", strategy="nearest", model="esm2_t33_256", pooling='sum'):
         self.strategy = strategy
-        self.thresh = thresh
-        self.gen = gen
+        self.model = model
         self.pooling = pooling
-        if (pooling not in ["sum"] and not pooling.startswith("top")):
-            raise ValueError("Unsupported pooling method")
-        super().__init__(f'ML-stratgy={strategy};th={thresh}, gen={gen}, pooling={pooling}')
+        self.embedding = embedding
+        self.reference = reference
+        if (pooling not in ["mean", "sum"] and not pooling.startswith("top")):
+            raise ValueError("Unknown pooling method")
+        if (strategy not in ["nearest", "nearest_bound"]):
+            raise ValueError("Unknown strategy")
+        super().__init__(f'MLKNN-model={model},embedding={embedding},stratgy={strategy},pooling={pooling},marker={marker}')
         # self.baseName = self.moduleName
         self.resultDict:dict[str, MLResult] = dict()
 
-        realmParams = [
-            ("esm2_t33_256", 256, f"{config.modelRoot}/realm/esm2_t33_256"),
-            ("esm2_t33_512", 512, f"{config.modelRoot}/realm/esm2_t33_512")
-        ]
-        kingdomParams = [
-            ("esm2_t33_256", 256, f"{config.modelRoot}/kingdom/esm2_t33_256"),
-            ("esm2_t33_512", 512, f"{config.modelRoot}/kingdom/esm2_t33_512")
-        ]
-        phylumParams = [
-            ("esm2_t33_256", 256, f"{config.modelRoot}/phylum/esm2_t33_256"),
-            ("esm2_t33_512", 512, f"{config.modelRoot}/phylum/esm2_t33_512")
-        ]
-        classParams = [
-            ("esm2_t33_256", 256, f"{config.modelRoot}/class/esm2_t33_256"),
-            ("esm2_t33_512", 512, f"{config.modelRoot}/class/esm2_t33_512")
-        ]
-        orderParams = [
-            ("esm2_t33_512", 512, f"{config.modelRoot}/order/esm2_t33_512")
-        ]
-        familyParams = [
-            ("esm2_t33_512", 512, f"{config.modelRoot}/family/esm2_t33_512"),
-            ("esm2_t33_512_enlarge", 512, f"{config.modelRoot}/family/esm2_t33_512_enlarge")
-        ]
-        genusParams = [
-            ("esm2_t33_256_enlarge", 256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus"),
-            ("esm2_t33_256", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
-        ]
 
-        realmParam = realmParams[int(gen[0])]
-        kingdomParam = kingdomParams[int(gen[1])]
-        phylumParam = phylumParams[int(gen[2])]
-        classParam = classParams[int(gen[3])]
-        orderParam = orderParams[int(gen[4])]
-        familyParam = familyParams[int(gen[5])]
-        genusParam = genusParams[int(gen[6])]
-
-        self.modelParams = {
-            "realm": (*realmParam, "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
-            "kingdom": (*kingdomParam, "facebook/esm2_t33_650M_UR50D", 40, config.mlBatchSize),
-            "phylum": (*phylumParam, "facebook/esm2_t33_650M_UR50D", 51, config.mlBatchSize),
-            "class": (*classParam, "facebook/esm2_t33_650M_UR50D", 76, config.mlBatchSize),
-            "order": (*orderParam, "facebook/esm2_t33_650M_UR50D", 981, config.mlBatchSize),
-            "family": (*familyParam, "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize),
-            "genus": (*genusParam, "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize),
+        modelParams = {
+            "esm2_t33_256": (256, f"{config.modelRoot}/realm/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
+            "esm2_t33_512": (512, f"{config.modelRoot}/realm/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
+            "esm2_t33_256_enlarge": (256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize),
+            "esm2_t33_512_enlarge": (512, f"{config.modelRoot}/family/esm2_t33_512_enlarge", "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize)
         }
+
+        if (model not in modelParams):
+            raise ValueError("Unknown model")
+        self.modelParam = modelParams[model]
+
+        # cacheProbFile = f"{config.cacheResultFolder}/ESM_taxo_{model}_prob.tmp"
+        self.cacheCLSEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{model}_cls_emb.tmp"
+        self.cacheAveEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{model}_ave_emb.tmp"
+        # cacheProbIndex = f"{config.cacheResultFolder}/ESM_taxo_{model}_prob.json"
+        self.cacheCLSEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{model}_cls_emb.json"
+        self.cacheAveEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{model}_ave_emb.json"
+
+        useMarkerGene = "marker" if marker else "full"
+        self.cacheClusterFile = f"{config.modelRoot}/{self.reference}/{embedding}_{strategy}_{useMarkerGene}.tsv"
+
+        self.cachedSamples_cls = {"nextOffset": 0}
+        self.nextOffset_cls = 0
+        self.cachedSamples_ave = {"nextOffset": 0}
+        self.nextOffset_ave = 0
+
+        self.marker = marker  # only use marker gene or use all protein
+
+    def train(self):
+        referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
+        samples = IOUtils.loadSamples(referenceFasta)
+        self.getEmbedding(samples)
+
+        clusters:dict[str, list[numpy.ndarray]] = {}   # key: taxa node name in ICTV   value: a list of embeddings
+
+        if (self.marker):
+            markerModule = Marker(self.reference, "sum")
+            if (not os.path.exists(markerModule.markerDB)):
+                markerModule.buildDB()
+            with open(markerModule.markerDB) as fp:
+                markerMapping = json.load(fp)
+
+        if (self.marker):
+            if (self.strategy == "CLS"):
+                for sample in samples:
+                    for protein in sample.proteins:
+                        node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
+                        for n in node.path:
+                            if (n.name not in clusters):
+                                clusters[n.name] = []
+                            clusters[n.name].append(protein.info[f"{self.model}_CLSemb"])
+            elif (self.strategy == 'ave'):
+                for sample in samples:
+                    for protein in sample.proteins:
+                        node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
+                        for n in node.path:
+                            if (n.name not in clusters):
+                                clusters[n.name] = []
+                            clusters[n.name].append(protein.info[f"{self.model}_aveemb"])
+                                    
+        else:
+            for sample in samples:
+                ICTVID = taxoTree.ICTVTree.accession2ID[sample.id]
+                node = taxoTree.ICTVTree.species[ICTVID]
+                names = set()
+                for n in node.path:
+                    names.add(n.name)
+                    if (n.name not in clusters):
+                        clusters[n.name] = []
+                if (self.strategy == 'CLS'):
+                    for protein in sample.proteins:
+                        for n in names:
+                            clusters[n].append(protein.info[f"{self.model}_CLSemb"])
+                elif (self.strategy == 'ave'):
+                    for protein in sample.proteins:
+                        for n in names:
+                            clusters[n].append(protein.info[f"{self.model}_aveemb"])
+
+        with open(self.cacheClusterFile, 'wt') as fp:
+            for name, embeddings in tqdm(list(clusters.items()), desc="saving cluster"):
+                # calculate centroid and cov
+                X = numpy.array(embeddings)
+                mu = X.mean(axis=0).astype(numpy.float32)
+                # note: be aware that inv_cov is 1280*1280 matrix. So we use diagonal-approximaetd Ma's distance
+                # cov = numpy.cov(X, rowvar=False)
+                # inv_cov = numpy.linalg.inv(cov + 1e-6 * numpy.eye(cov.shape[0]))
+                var = X.var(axis=0).astype(numpy.float32)
+                distances = numpy.sqrt(numpy.sum((X - mu) ** 2 / var, axis=1)).astype(numpy.float32)
+                distances = numpy.sort(distances)
+                fp.write(f"{name}\t{IOUtils.encodeBase64(mu)}\t{IOUtils.encodeBase64(var)}\t{IOUtils.encodeBase64(distances)}\n")
+
+    def applyStrategy(self, distances, confidenceScores):
+        if (self.strategy == 'nearest_bound'):
+            distances = distances + numpy.where(confidenceScores == 0, numpy.inf, 0)
+
+        return distances
 
         
     def run(self, samples:list[Sample]):
-        NucleotideUtils.extractProtein(samples)
-        for sample in samples:
-            self.resultDict[sample.id] = MLResult(self.strategy, self.thresh)
+        if (not os.path.exists(self.cacheClusterFile)):
+            self.train()
 
-        unterminatedSamples = samples
-        if (self.strategy.startswith('topdown')):
-            for rank, param in self.modelParams.items():
-                unterminatedSamples = self.runModel(unterminatedSamples, rank, param[0])
-                if (len(unterminatedSamples) == 0):
-                    break
-        elif (self.strategy.startswith('bottomup')):
-            for rank, param in reversed(list(self.modelParams.items())):
-                unterminatedSamples = self.runModel(unterminatedSamples, rank, param[0])
-                if (len(unterminatedSamples) == 0):
-                    break
-        else:  # highest, we need to run all the rank
-            for rank, param in self.modelParams.items():
-                self.runModel(samples, rank, param[0])
+        self.getEmbedding(samples)
+
+        clusters = []
+        with open(self.cacheClusterFile) as fp:
+            for line in fp:
+                name, mu, var, dis_threshes = line.strip().split('\t')
+                mu = IOUtils.decodeBase64(mu)
+                var = IOUtils.decodeBase64(var)
+                dis_threshes = IOUtils.decodeBase64(dis_threshes)
+                clusters.append((name, mu, var, dis_threshes))
+
 
         results = list()
-        for sample in samples:
-            if (self.resultDict[sample.id].res is not None):
-                results.append(self.resultDict[sample.id])
+        
+        
+        for sample in tqdm(samples, desc="KNN"):
+
+            if (self.embedding == 'CLS'):
+                embeddings = numpy.array([protein.info[f"{self.model}_CLSemb"] for protein in sample.proteins])
+            elif (self.embedding == 'ave'):
+                embeddings = numpy.array([protein.info[f"{self.model}_aveemb"] for protein in sample.proteins])
+
+            if (self.pooling == "mean"):
+                aveEmbedding = numpy.mean(embeddings, axis=0)
+                distances = numpy.zeros((len(clusters)), dtype=numpy.float32)
+                confidenceScores = numpy.zeros((len(clusters)), dtype=numpy.float16)
+                for idx, (name, mu, var, dis_threshes) in enumerate(clusters):
+                    dis = numpy.sqrt(numpy.sum((aveEmbedding - mu) ** 2 / var, axis=1))
+                    ranks = numpy.searchsorted(dis_threshes, dis, side='left')   # ideally, we should calculate average between left and right. But here, we think the identical number is almost impossible
+                    scores = 1 - ranks / len(dis_threshes)
+
+                    distances[idx] = dis
+                    confidenceScores[idx] = scores
+
+                distances = self.applyStrategy(distances, confidenceScores)
+
+                selection = numpy.argmin(distances, axis=0).item()
+
+                score = confidenceScores[selection, numpy.arange(confidenceScores.shape[1])].item()
+                results.append(PlainResult(clusters[selection][0].name, score))
+
+
             else:
-                results.append(None)
+                distances = numpy.zeros((len(clusters), len(sample.proteins)), dtype=numpy.float32)
+                confidenceScores = numpy.zeros((len(clusters), len(sample.proteins)), dtype=numpy.float16)
+                for idx, (name, mu, var, dis_threshes) in enumerate(clusters):
+                    dis = numpy.sqrt(numpy.sum((embeddings - mu) ** 2 / var, axis=1))
+                    ranks = numpy.searchsorted(dis_threshes, dis, side='left')   # ideally, we should calculate average between left and right. But here, we think the identical number is almost impossible
+                    scores = 1 - ranks / len(dis_threshes)
+
+                    distances[idx] = dis
+                    confidenceScores[idx] = scores
+
+                distances = self.applyStrategy(distances, confidenceScores)
+                
+                
+                selections, scores = self.applyStrategy(distances, confidenceScores)
+
+                votes = numpy.zeros(len(clusters), dtype=numpy.float16)
+                # TODO: haven't decide what is the weight of the vote. Distance? confidence?
+                # perhaps vote with top 3 closest with confidence as weight?
+                if (self.pooling == 'sum'):
+                    pass
+                elif (self.pooling.startswith('top')):
+                    pass
+
+            
+
+
+        
         
         return results
 
 
-    def runModel(self, samples:list[Sample], rank:str, modelName:str)->list[Sample]:
+    def getEmbedding(self, samples:list[Sample])->None:  # The embedding will be stored in the ProteinSample's info dict
+        uncachedSamples = []
+        for sample in samples:
+            for protein in sample.proteins:
+                if (f"{self.model}_CLEemb" not in sample.info or f"{self.model}_Aveemb" not in sample.info):
+                    uncachedSamples.append(sample)
+        
+        if (len(uncachedSamples) == 0):
+            return
+        NucleotideUtils.extractProtein(uncachedSamples)
 
-        # abbr = self.modelParams[rank][1].split('/')[-1]
-        cacheProbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_prob.tmp"
-        cacheCLSEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_cls_emb.tmp"
-        cacheAveEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_ave_emb.tmp"
-        cacheProbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_prob.json"
-        cacheCLSEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_cls_emb.json"
-        cacheAveEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_ave_emb.json"
-
-        essentialFiles = [cacheProbFile, cacheCLSEmbFile, cacheAveEmbFile, cacheProbIndex, cacheCLSEmbIndex, cacheAveEmbIndex]
+        essentialFiles = [self. cacheCLSEmbFile, self.cacheAveEmbFile, self.cacheCLSEmbIndex, self.cacheAveEmbIndex]
         allExists = True
         for f in essentialFiles:
             if (not os.path.exists(f)):
                 allExists = False
         
         if (allExists):
-            with open(cacheProbIndex) as fp:
-                cachedSamples_prob = json.load(fp)
-                nextOffset_prob = cachedSamples_prob["nextOffset"]
-            with open(cacheCLSEmbIndex) as fp:
-                cachedSamples_cls = json.load(fp)
-                nextOffset_cls = cachedSamples_cls["nextOffset"]
-            with open(cacheAveEmbIndex) as fp:
-                cachedSamples_ave = json.load(fp)
-                nextOffset_ave = cachedSamples_ave["nextOffset"]
-        else:
-            cachedSamples_prob = {"nextOffset": 0}
-            nextOffset_prob = 0
-            cachedSamples_cls = {"nextOffset": 0}
-            nextOffset_cls = 0
-            cachedSamples_ave = {"nextOffset": 0}
-            nextOffset_ave = 0
-
-        cachedMapping = f"{config.cacheResultFolder}/ESM_mapping_{rank}_{modelName}.json"
-        if (os.path.exists(cachedMapping)):
-            with open(cachedMapping) as fp:
-                id2Name = json.load(fp)
-        else:
-            level = rank.capitalize()
-            taxamap_file = f'{config.modelRoot}/mapping/VMR_MSL39_v4.json.processed_data.json.nosub_addunknown.json{level}_mapping.csv'
-            taxamap_df = pandas.read_csv(taxamap_file)
-            id2Name = {}
-            for _, row in taxamap_df.iterrows():
-                index = row[f"{rank.capitalize()} ID"]
-                name = row[rank.capitalize()]
-                if (index not in id2Name):
-                    id2Name[index] = name
-                elif (id2Name[index] != name):
-                    IOUtils.showInfo(f"{rank} ID {index} corresponds to multiple names", "ERROR")
-            with open(cachedMapping, 'wt') as fp:
-                json.dump(id2Name, fp, indent=2)
-        
-        # convert dict to list for better performance
-        names = [None] * len(id2Name)
-        for idx, name in id2Name.items():
-            names[int(idx)] = name
+            with open(self.cacheCLSEmbIndex) as fp:
+                self.cachedSamples_cls = json.load(fp)
+                self.nextOffset_cls = self.cachedSamples_cls["nextOffset"]
+            with open(self.cacheAveEmbIndex) as fp:
+                self.cachedSamples_ave = json.load(fp)
+                self.nextOffset_ave = self.cachedSamples_ave["nextOffset"]
 
         proteinsToRun:list[ProteinSample] = list()
-        for sample in samples:
-            for protein in sample.proteins:
-                if (protein.id not in cachedSamples_prob or protein.id not in cachedSamples_cls or protein.id not in cachedSamples_ave):
-                    proteinsToRun.append(protein)
-
+        for protein in uncachedSamples:
+            if (protein.id not in self.cachedSamples_cls or protein.id not in self.cachedSamples_ave):
+                proteinsToRun.append(protein)
 
         if (len(proteinsToRun) > 0):
-            model = ESMRunner(*self.modelParams[rank][1:])
-            lines = model.run(proteinsToRun)
+            self.runESM(proteinsToRun)
 
-            fp_prob = open(cacheProbFile, 'at')
-            fp_cls = open(cacheCLSEmbFile, 'at')
-            fp_ave = open(cacheAveEmbFile, 'at')
-            
-
-            # if (nextOffset_prob == 0):
-            #     line = "seq_name\t" + "\t".join(names) + "\n"
-            #     fp_prob.write(line)
-            #     nextOffset_prob += len(line)
-            for seq_name, (prob, cls, ave) in lines.items():
-                cachedSamples_prob[seq_name] = nextOffset_prob
-                cachedSamples_cls[seq_name] = nextOffset_cls
-                cachedSamples_ave[seq_name] = nextOffset_ave
-
-                probText = base64.b64encode(prob.tobytes()).decode('ascii')
-                clsText = base64.b64encode(cls.tobytes()).decode('ascii')
-                aveText = base64.b64encode(ave.tobytes()).decode('ascii')
-
-                fp_prob.write(f"{seq_name}\t{probText}\n")
-                fp_cls.write(f"{seq_name}\t{clsText}\n")
-                fp_ave.write(f"{seq_name}\t{aveText}\n")
-                nextOffset_prob += len(probText)
-                nextOffset_cls += len(clsText)
-                nextOffset_ave += len(aveText)
-
-            cachedSamples_prob["nextOffset"] = nextOffset_prob
-            cachedSamples_cls["nextOffset"] = nextOffset_cls
-            cachedSamples_ave["nextOffset"] = nextOffset_ave
-
-            fp_prob.close()
-            fp_cls.close()
-            fp_ave.close()
-
-            del model
-            
-            for protein in proteinsToRun:
-                if (protein.id not in cachedSamples_prob):
-                    cachedSamples_prob[protein.id] = -1
-                if (protein.id not in cachedSamples_cls):
-                    cachedSamples_cls[protein.id] = -1
-                if (protein.id not in cachedSamples_ave):
-                    cachedSamples_ave[protein.id] = -1
-            
-            with open(cacheProbIndex, 'wt') as fp:
-                json.dump(cachedSamples_prob, fp, indent=2)
-            with open(cacheCLSEmbIndex, 'wt') as fp:
-                json.dump(cachedSamples_cls, fp, indent=2)
-            with open(cacheAveEmbIndex, 'wt') as fp:
-                json.dump(cachedSamples_ave, fp, indent=2)
-        
-
-        unTerminatedSamples:list[Sample] = list()
-
-        cachedResultFP = open(cacheFile)
+        cachedResultFP_cls = open(self.cacheCLSEmbFile)
+        cachedResultFP_ave = open(self.cacheAveEmbFile)
         for sample in tqdm(samples, desc="pooling"):
-            if (self.pooling == "sum"):
-                votes = {n: 0 for n in names if "Unknown" not in n}
-                for protein in sample.proteins:
-                    offset = cachedSamples[protein.id]
-                    if (offset == -1):
-                        continue
-                    cachedResultFP.seek(offset)
-                    terms = cachedResultFP.readline().strip().split('\t')
-                    scores = [float(t) for t in terms[1:]]
-                    for taxo, score in zip(names, scores):
-                        if ("Unknown" not in taxo):
-                            votes[taxo] += score
-            elif (self.pooling.startswith("top")):
-                thresh = int(self.pooling[3:])
-                votes = {}
-                for protein in sample.proteins:
-                    offset = cachedSamples[protein.id]
-                    if (offset == -1):
-                        continue
-                    cachedResultFP.seek(offset)
-                    terms = cachedResultFP.readline().strip().split('\t')
-                    scores = [float(t) for t in terms[1:]]
-                    rawScores = {taxo: score for taxo, score in zip(names, scores)}
-                    tops = sorted(list(rawScores.items()), key=lambda x:x[1], reverse=True)
-                    for taxo, score in tops[:thresh]:
-                        if ("Unknown" not in taxo):
-                            if (taxo in votes):
-                                votes[taxo] += score
-                            else:
-                                votes[taxo] = score
+            cachedResultFP_cls.seek(self.cachedSamples_cls[sample.id])
+            line = cachedResultFP_cls.readline().strip()
+            text = line[line.find('\t')+1:]
+            sample.info[f"{self.model}_CLSemb"] = IOUtils.decodeBase64(text)
 
-            totalVotes = sum(votes.values())    # If pooling method == "sum", the totalVotes will be 1 * len(proteins) (not considering "Unknown" labels)
-            if (len(votes) > 0 and totalVotes > 0):
-                winner, maxVotes = max(votes.items(), key=lambda x:x[1])
-                self.resultDict[sample.id].addResult(winner, maxVotes/totalVotes)
-            
-            if not (self.resultDict[sample.id].terminate):
-                unTerminatedSamples.append(sample)
+            cachedResultFP_ave.seek(self.cachedSamples_ave[sample.id])
+            line = cachedResultFP_ave.readline().strip()
+            text = line[line.find('\t')+1:]
+            sample.info[f"{self.model}_Aveemb"] = IOUtils.decodeBase64(text)
 
-        cachedResultFP.close()
+    
+    def runESM(self, samples:list[ProteinSample])->None:
+        model = ESMRunner(*self.modelParam)
+        lines = model.run(samples)
+
+        fp_cls = open(self.cacheCLSEmbFile, 'at')
+        fp_ave = open(self.cacheAveEmbFile, 'at')
         
-        return unTerminatedSamples
+        for seq_name, (prob, cls, ave) in lines.items():
+            self.cachedSamples_cls[seq_name] = nextOffset_cls
+            self.cachedSamples_ave[seq_name] = nextOffset_ave
+
+            clsText = f"{seq_name}\t{IOUtils.encodeBase64(cls)}\n"
+            aveText = f"{seq_name}\t{IOUtils.encodeBase64(ave)}\n"
+
+            fp_cls.write(clsText)
+            fp_ave.write(aveText)
+            nextOffset_cls += len(clsText)
+            nextOffset_ave += len(aveText)
+
+        self.cachedSamples_cls["nextOffset"] = nextOffset_cls
+        self.cachedSamples_ave["nextOffset"] = nextOffset_ave
+
+        fp_cls.close()
+        fp_ave.close()
+
+        del model
+
+        for protein in samples:
+            if (protein.id not in self.cachedSamples_cls):
+                self.cachedSamples_cls[protein.id] = -1
+            if (protein.id not in self.cachedSamples_ave):
+                self.cachedSamples_ave[protein.id] = -1
+        
+        with open(self.cacheCLSEmbIndex, 'wt') as fp:
+            json.dump(self.cachedSamples_cls, fp, indent=2)
+        with open(self.cacheAveEmbIndex, 'wt') as fp:
+            json.dump(self.cachedSamples_ave, fp, indent=2)

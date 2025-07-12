@@ -46,9 +46,8 @@ class ESM(Module):
             self.model = ESMRunner(512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)
             lines = self.model.run(samples)
 
-            for seqName, line in lines.items():
-                terms = line.strip().split('\t')
-                cachedSamples[seqName] = float(terms[2])
+            for seqName, (prob, cls, ave) in lines.items():
+                cachedSamples[seqName] = prob[1]
             
             del self.model
 

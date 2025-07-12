@@ -2,6 +2,8 @@ import os
 import sys
 import math
 import gzip
+import numpy
+import base64
 import shutil
 import datetime
 import subprocess
@@ -103,3 +105,9 @@ def compress_to_gz(input_path, output_path=None):
             shutil.copyfileobj(f_in, f_out)
     
     return output_path
+
+def encodeBase64(array):
+    return base64.b64encode(array.tobytes()).decode('ascii')
+
+def decodeBase64(text, dtype=numpy.float16):
+    return numpy.frombuffer(base64.b64decode(text), dtype=dtype)
