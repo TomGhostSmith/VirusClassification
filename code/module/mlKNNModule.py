@@ -17,7 +17,7 @@ import numpy
 from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
-class MLKNNModule(Module):
+class MLKNN(Module):
     def __init__(self, reference="VMRv4", marker=False, embedding="CLS", strategy="nearest", model="esm2_t33_256", pooling='sum'):
         self.strategy = strategy
         self.model = model
@@ -26,18 +26,19 @@ class MLKNNModule(Module):
         self.reference = reference
         if (pooling not in ["mean", "sum"] and not pooling.startswith("top")):
             raise ValueError("Unknown pooling method")
-        if (strategy not in ["nearest", "nearest_bound"]):
+        if (strategy not in ["nearest", "nearest_bound", "confidence", "product"] and not strategy.startswith('nearest_conf')):
             raise ValueError("Unknown strategy")
+        if (embedding not in ["CLS", "ave"]):
+            raise ValueError("Unknown embedding type")
         super().__init__(f'MLKNN-model={model},embedding={embedding},stratgy={strategy},pooling={pooling},marker={marker}')
         # self.baseName = self.moduleName
-        self.resultDict:dict[str, MLResult] = dict()
 
 
         modelParams = {
             "esm2_t33_256": (256, f"{config.modelRoot}/realm/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
             "esm2_t33_512": (512, f"{config.modelRoot}/realm/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
             "esm2_t33_256_enlarge": (256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize),
-            "esm2_t33_512_enlarge": (512, f"{config.modelRoot}/family/esm2_t33_512_enlarge", "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize)
+            "esm2_t33_512_enlarge": (512, f"{config.modelRoot}/family/esm2_t33_512_enlarge", "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize)
         }
 
         if (model not in modelParams):
@@ -102,11 +103,11 @@ class MLKNNModule(Module):
                     names.add(n.name)
                     if (n.name not in clusters):
                         clusters[n.name] = []
-                if (self.strategy == 'CLS'):
+                if (self.embedding == 'CLS'):
                     for protein in sample.proteins:
                         for n in names:
                             clusters[n].append(protein.info[f"{self.model}_CLSemb"])
-                elif (self.strategy == 'ave'):
+                elif (self.embedding == 'ave'):
                     for protein in sample.proteins:
                         for n in names:
                             clusters[n].append(protein.info[f"{self.model}_aveemb"])
@@ -114,21 +115,44 @@ class MLKNNModule(Module):
         with open(self.cacheClusterFile, 'wt') as fp:
             for name, embeddings in tqdm(list(clusters.items()), desc="saving cluster"):
                 # calculate centroid and cov
+                if (len(embeddings) <= 1):
+                    continue
                 X = numpy.array(embeddings)
                 mu = X.mean(axis=0).astype(numpy.float32)
                 # note: be aware that inv_cov is 1280*1280 matrix. So we use diagonal-approximaetd Ma's distance
                 # cov = numpy.cov(X, rowvar=False)
                 # inv_cov = numpy.linalg.inv(cov + 1e-6 * numpy.eye(cov.shape[0]))
                 var = X.var(axis=0).astype(numpy.float32)
+                if (numpy.min(var) == 0):  # in case some dimension has no var
+                    continue
                 distances = numpy.sqrt(numpy.sum((X - mu) ** 2 / var, axis=1)).astype(numpy.float32)
                 distances = numpy.sort(distances)
                 fp.write(f"{name}\t{IOUtils.encodeBase64(mu)}\t{IOUtils.encodeBase64(var)}\t{IOUtils.encodeBase64(distances)}\n")
 
     def applyStrategy(self, distances, confidenceScores):
+        # here we use softmin weighted distance
+        # size of [cluster,  sample]
+        if (self.strategy == 'nearest'):
+            w = numpy.exp(-distances)
+            w /= numpy.sum(w, axis=0)
+            return w
         if (self.strategy == 'nearest_bound'):
             distances = distances + numpy.where(confidenceScores == 0, numpy.inf, 0)
-
-        return distances
+            w = numpy.exp(-distances)
+            w /= numpy.sum(w, axis=0)
+            return w
+        if (self.strategy == 'confidence'):
+            return confidenceScores
+        if (self.strategy == 'product'):
+            w = numpy.exp(-distances)
+            w /= numpy.sum(w, axis=0)
+            return w * confidenceScores
+        if (self.strategy.startswith('nearest_conf')):
+            thresh = float(self.strategy[12:])
+            distances = distances + numpy.where(confidenceScores < thresh, numpy.inf, 0)
+            w = numpy.exp(-distances)
+            w /= numpy.sum(w, axis=0)
+            return w
 
         
     def run(self, samples:list[Sample]):
@@ -141,9 +165,9 @@ class MLKNNModule(Module):
         with open(self.cacheClusterFile) as fp:
             for line in fp:
                 name, mu, var, dis_threshes = line.strip().split('\t')
-                mu = IOUtils.decodeBase64(mu)
-                var = IOUtils.decodeBase64(var)
-                dis_threshes = IOUtils.decodeBase64(dis_threshes)
+                mu = IOUtils.decodeBase64(mu, dtype=numpy.float32)
+                var = IOUtils.decodeBase64(var, dtype=numpy.float32)
+                dis_threshes = IOUtils.decodeBase64(dis_threshes, dtype=numpy.float32)
                 clusters.append((name, mu, var, dis_threshes))
 
 
@@ -162,19 +186,19 @@ class MLKNNModule(Module):
                 distances = numpy.zeros((len(clusters)), dtype=numpy.float32)
                 confidenceScores = numpy.zeros((len(clusters)), dtype=numpy.float16)
                 for idx, (name, mu, var, dis_threshes) in enumerate(clusters):
-                    dis = numpy.sqrt(numpy.sum((aveEmbedding - mu) ** 2 / var, axis=1))
+                    dis = numpy.sqrt(numpy.sum((aveEmbedding - mu) ** 2 / var))
                     ranks = numpy.searchsorted(dis_threshes, dis, side='left')   # ideally, we should calculate average between left and right. But here, we think the identical number is almost impossible
                     scores = 1 - ranks / len(dis_threshes)
 
                     distances[idx] = dis
                     confidenceScores[idx] = scores
 
-                distances = self.applyStrategy(distances, confidenceScores)
+                weights = self.applyStrategy(distances, confidenceScores)
 
-                selection = numpy.argmin(distances, axis=0).item()
+                selection = numpy.argmax(weights, axis=0).item()
 
-                score = confidenceScores[selection, numpy.arange(confidenceScores.shape[1])].item()
-                results.append(PlainResult(clusters[selection][0].name, score))
+                score = confidenceScores[selection].item()
+                results.append(PlainResult(clusters[selection][0], score))
 
 
             else:
@@ -188,37 +212,35 @@ class MLKNNModule(Module):
                     distances[idx] = dis
                     confidenceScores[idx] = scores
 
-                distances = self.applyStrategy(distances, confidenceScores)
+                weights = self.applyStrategy(distances, confidenceScores)
                 
-                
-                selections, scores = self.applyStrategy(distances, confidenceScores)
-
-                votes = numpy.zeros(len(clusters), dtype=numpy.float16)
-                # TODO: haven't decide what is the weight of the vote. Distance? confidence?
-                # perhaps vote with top 3 closest with confidence as weight?
                 if (self.pooling == 'sum'):
-                    pass
+                    votes = numpy.sum(weights, axis=1)
                 elif (self.pooling.startswith('top')):
-                    pass
+                    thresh = int(self.pooling[3:])
+                    nonTopWeightsIdx = numpy.argpartition(-weights, thresh, axis=0)[thresh:]
+                    weights[nonTopWeightsIdx, numpy.arange(weights.shape[1])] = 0
+                    votes = numpy.sum(weights, axis=1)
 
-            
+                selection = numpy.argmax(votes, axis=0).item()
+                score = numpy.mean(confidenceScores[selection, :]).item()
+                results.append(PlainResult(clusters[selection][0], score))
 
 
-        
-        
         return results
 
 
     def getEmbedding(self, samples:list[Sample])->None:  # The embedding will be stored in the ProteinSample's info dict
+        NucleotideUtils.extractProtein(samples)
         uncachedSamples = []
         for sample in samples:
             for protein in sample.proteins:
-                if (f"{self.model}_CLEemb" not in sample.info or f"{self.model}_Aveemb" not in sample.info):
-                    uncachedSamples.append(sample)
+                if (f"{self.model}_CLSemb" not in protein.info or f"{self.model}_aveemb" not in protein.info):
+                    uncachedSamples.append(protein)
         
         if (len(uncachedSamples) == 0):
             return
-        NucleotideUtils.extractProtein(uncachedSamples)
+        
 
         essentialFiles = [self. cacheCLSEmbFile, self.cacheAveEmbFile, self.cacheCLSEmbIndex, self.cacheAveEmbIndex]
         allExists = True
@@ -244,7 +266,7 @@ class MLKNNModule(Module):
 
         cachedResultFP_cls = open(self.cacheCLSEmbFile)
         cachedResultFP_ave = open(self.cacheAveEmbFile)
-        for sample in tqdm(samples, desc="pooling"):
+        for sample in tqdm(uncachedSamples, desc="pooling"):
             cachedResultFP_cls.seek(self.cachedSamples_cls[sample.id])
             line = cachedResultFP_cls.readline().strip()
             text = line[line.find('\t')+1:]
@@ -253,7 +275,7 @@ class MLKNNModule(Module):
             cachedResultFP_ave.seek(self.cachedSamples_ave[sample.id])
             line = cachedResultFP_ave.readline().strip()
             text = line[line.find('\t')+1:]
-            sample.info[f"{self.model}_Aveemb"] = IOUtils.decodeBase64(text)
+            sample.info[f"{self.model}_aveemb"] = IOUtils.decodeBase64(text)
 
     
     def runESM(self, samples:list[ProteinSample])->None:
@@ -264,19 +286,19 @@ class MLKNNModule(Module):
         fp_ave = open(self.cacheAveEmbFile, 'at')
         
         for seq_name, (prob, cls, ave) in lines.items():
-            self.cachedSamples_cls[seq_name] = nextOffset_cls
-            self.cachedSamples_ave[seq_name] = nextOffset_ave
+            self.cachedSamples_cls[seq_name] = self.nextOffset_cls
+            self.cachedSamples_ave[seq_name] = self.nextOffset_ave
 
             clsText = f"{seq_name}\t{IOUtils.encodeBase64(cls)}\n"
             aveText = f"{seq_name}\t{IOUtils.encodeBase64(ave)}\n"
 
             fp_cls.write(clsText)
             fp_ave.write(aveText)
-            nextOffset_cls += len(clsText)
-            nextOffset_ave += len(aveText)
+            self.nextOffset_cls += len(clsText)
+            self.nextOffset_ave += len(aveText)
 
-        self.cachedSamples_cls["nextOffset"] = nextOffset_cls
-        self.cachedSamples_ave["nextOffset"] = nextOffset_ave
+        self.cachedSamples_cls["nextOffset"] = self.nextOffset_cls
+        self.cachedSamples_ave["nextOffset"] = self.nextOffset_ave
 
         fp_cls.close()
         fp_ave.close()
