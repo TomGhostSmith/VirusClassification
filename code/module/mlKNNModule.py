@@ -13,17 +13,22 @@ from entity.taxoTree import taxoTree
 from tqdm import tqdm
 import base64
 import numpy
+import math
+import multiprocessing
 
 from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
 class MLKNN(Module):
-    def __init__(self, reference="VMRv4", marker=False, embedding="CLS", strategy="nearest", model="esm2_t33_256", pooling='sum'):
+    # we recommend at most 40 threads. Otherwise, the thread allocation could be expensive
+    def __init__(self, reference="VMRv4", marker=False, embedding="CLS", strategy="nearest", model="esm2_t33_256", pooling='sum', threads=min(multiprocessing.cpu_count(), 40)):
         self.strategy = strategy
         self.model = model
         self.pooling = pooling
         self.embedding = embedding
         self.reference = reference
+        self.threads = threads
+        self.marker = marker  # only use marker gene or use all protein
         if (pooling not in ["mean", "sum"] and not pooling.startswith("top")):
             raise ValueError("Unknown pooling method")
         if (strategy not in ["nearest", "nearest_bound", "confidence", "product"] and not strategy.startswith('nearest_conf')):
@@ -53,16 +58,16 @@ class MLKNN(Module):
         self.cacheAveEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{model}_ave_emb.json"
 
         useMarkerGene = "marker" if marker else "full"
-        self.cacheClusterFile = f"{config.modelRoot}/{self.reference}/{embedding}_{strategy}_{useMarkerGene}.tsv"
+        self.cacheClusterFile = f"{config.modelRoot}/{self.reference}/{model}_{embedding}_{useMarkerGene}.tsv"
 
         self.cachedSamples_cls = {"nextOffset": 0}
         self.nextOffset_cls = 0
         self.cachedSamples_ave = {"nextOffset": 0}
         self.nextOffset_ave = 0
 
-        self.marker = marker  # only use marker gene or use all protein
-
     def train(self):
+        useMarkerGene = "marker" if self.marker else "full"
+        IOUtils.showInfo(f"Train {self.reference} {self.model} {self.embedding} {useMarkerGene} KNN")
         referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
         samples = IOUtils.loadSamples(referenceFasta)
         self.getEmbedding(samples)
@@ -154,28 +159,12 @@ class MLKNN(Module):
             w /= numpy.sum(w, axis=0)
             return w
 
-        
-    def run(self, samples:list[Sample]):
-        if (not os.path.exists(self.cacheClusterFile)):
-            self.train()
-
-        self.getEmbedding(samples)
-
-        clusters = []
-        with open(self.cacheClusterFile) as fp:
-            for line in fp:
-                name, mu, var, dis_threshes = line.strip().split('\t')
-                mu = IOUtils.decodeBase64(mu, dtype=numpy.float32)
-                var = IOUtils.decodeBase64(var, dtype=numpy.float32)
-                dis_threshes = IOUtils.decodeBase64(dis_threshes, dtype=numpy.float32)
-                clusters.append((name, mu, var, dis_threshes))
-
-
-        results = list()
-        
-        
-        for sample in tqdm(samples, desc="KNN"):
-
+    def runSingle(self, clusters, samples:list[Sample], indexs):
+        res = []
+        for index, sample in zip(indexs, samples):
+            if (len(sample.proteins) == 0):
+                res.append((None, index))
+                continue
             if (self.embedding == 'CLS'):
                 embeddings = numpy.array([protein.info[f"{self.model}_CLSemb"] for protein in sample.proteins])
             elif (self.embedding == 'ave'):
@@ -198,7 +187,7 @@ class MLKNN(Module):
                 selection = numpy.argmax(weights, axis=0).item()
 
                 score = confidenceScores[selection].item()
-                results.append(PlainResult(clusters[selection][0], score))
+                res.append((PlainResult(clusters[selection][0], score), index))
 
 
             else:
@@ -224,8 +213,43 @@ class MLKNN(Module):
 
                 selection = numpy.argmax(votes, axis=0).item()
                 score = numpy.mean(confidenceScores[selection, :]).item()
-                results.append(PlainResult(clusters[selection][0], score))
+                res.append((PlainResult(clusters[selection][0], score), index))
+        return res
 
+
+        
+    def run(self, samples:list[Sample]):
+        if (not os.path.exists(self.cacheClusterFile)):
+            self.train()
+
+        self.getEmbedding(samples)
+
+        clusters = []
+        with open(self.cacheClusterFile) as fp:
+            for line in fp:
+                name, mu, var, dis_threshes = line.strip().split('\t')
+                mu = IOUtils.decodeBase64(mu, dtype=numpy.float32)
+                var = IOUtils.decodeBase64(var, dtype=numpy.float32)
+                dis_threshes = IOUtils.decodeBase64(dis_threshes, dtype=numpy.float32)
+                clusters.append((name, mu, var, dis_threshes))
+
+
+        results = [None]*len(samples)
+        
+        
+        bar = tqdm(total=len(samples), desc="KNN")
+        samplePerThread = math.ceil(len(samples)/self.threads)
+        with multiprocessing.Pool(processes=self.threads) as pool:
+            asyncResults = [pool.apply_async(self.runSingle, [clusters, samples[t*samplePerThread : (t+1)*samplePerThread], list(range(t*samplePerThread, min((t+1)*samplePerThread, len(samples))))]) for t in range(self.threads)]
+            pool.close()
+            while asyncResults:
+                for asyncResult in asyncResults[:]:
+                    if asyncResult.ready():
+                        res = asyncResult.get()
+                        for r, idx in res:
+                            results[idx] = r
+                        asyncResults.remove(asyncResult)
+                        bar.update(len(res))
 
         return results
 
@@ -266,7 +290,7 @@ class MLKNN(Module):
 
         cachedResultFP_cls = open(self.cacheCLSEmbFile)
         cachedResultFP_ave = open(self.cacheAveEmbFile)
-        for sample in tqdm(uncachedSamples, desc="pooling"):
+        for sample in tqdm(uncachedSamples, desc="embedding"):
             cachedResultFP_cls.seek(self.cachedSamples_cls[sample.id])
             line = cachedResultFP_cls.readline().strip()
             text = line[line.find('\t')+1:]

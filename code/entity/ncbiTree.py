@@ -36,6 +36,9 @@ class NCBITree():
         self.accession2ID = dict()  # key: accession  value: id
         self.ID2accession = dict()  # key: ID  value: a list of accessions
 
+        self.version = "20241225"
+        IOUtils.showInfo("set NCBI genbank version to 20241225", "WARN")
+
 
     def loadNodes(self):
         with open(self.nodesFile) as fp:
@@ -122,7 +125,7 @@ class NCBITree():
             with open(accession2IDFile) as fp:
                 self.accession2ID = json.load(fp)
         else:
-            with open(f"{config.modelRoot}/NCBI/Nucleotide/genbank.accession") as fp:
+            with open(f"{config.modelRoot}/NCBI/Nucleotide/{self.version}/genbank.accession") as fp:
                 fp.readline()
                 lines = fp.readlines()
             for line in tqdm(lines, desc="loading Accession"):

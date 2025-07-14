@@ -144,7 +144,7 @@ class CAT(Module):
         indexes = list()
 
         downGrades = [50, 40, 30, 20, 10]
-        downGrades = [240, 200]
+        # downGrades = [240, 200]
         # downGrades = [
         #     2400,
         #     1800,
@@ -159,7 +159,7 @@ class CAT(Module):
 
         # maxSamplePerThread = 1800
         # maxSamplePerThread = 60
-        # maxSamplePerThread = 280
+        # maxSamplePerThread = 220
         maxSamplePerThread = 45
         # if (len(basicSamples) > 2 * maxSamplePerThread):
         #     processes = math.ceil(len(basicSamples) / maxSamplePerThread / 2) * 2   # we want to avoid an "odd" number of threads

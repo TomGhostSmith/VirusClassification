@@ -17,7 +17,10 @@ class Alignment():
             # for extra flags:
             flags = dict()
             for t in terms[11:]:
-                key, dtype, value = t.split(':')  # format: key:datatype:value. e.g. de:f:0.00
+                ts = t.split(':')  # format: key:datatype:value. e.g. de:f:0.00
+                if (len(ts) != 3):
+                    raise ValueError(f"unsupported data: expect key:datatype:value, got {ts}")
+                key, dtype, value = ts
                 if dtype == 'i':
                     value = int(value)
                 elif dtype == 'f':
