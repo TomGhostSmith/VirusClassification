@@ -21,7 +21,7 @@ from utils.NucleotideUtils import NucleotideUtils
 
 class MLKNN(Module):
     # we recommend at most 40 threads. Otherwise, the thread allocation could be expensive
-    def __init__(self, reference="VMRv4", marker=False, embedding="CLS", strategy="nearest", model="esm2_t33_256", pooling='sum', threads=min(multiprocessing.cpu_count(), 40)):
+    def __init__(self, reference="VMRv4", marker=False, embedding="CLS", strategy="nearest", model="genus_esm2_t33_256_enlarge", pooling='sum', threads=min(multiprocessing.cpu_count(), 40)):
         self.strategy = strategy
         self.model = model
         self.pooling = pooling
@@ -40,10 +40,19 @@ class MLKNN(Module):
 
 
         modelParams = {
-            "esm2_t33_256": (256, f"{config.modelRoot}/realm/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
-            "esm2_t33_512": (512, f"{config.modelRoot}/realm/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
-            "esm2_t33_256_enlarge": (256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize),
-            "esm2_t33_512_enlarge": (512, f"{config.modelRoot}/family/esm2_t33_512_enlarge", "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize)
+            "realm_esm2_t33_256": (256, f"{config.modelRoot}/realm/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
+            "realm_esm2_t33_512": (512, f"{config.modelRoot}/realm/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
+            "kingdom_esm2_t33_256": (256, f"{config.modelRoot}/kingdom/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 40, config.mlBatchSize),
+            "kingdom_esm2_t33_512": (512, f"{config.modelRoot}/kingdom/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 40, config.mlBatchSize),
+            "phylum_esm2_t33_256": (256, f"{config.modelRoot}/phylum/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 51, config.mlBatchSize),
+            "phylum_esm2_t33_512": (512, f"{config.modelRoot}/phylum/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 51, config.mlBatchSize),
+            "class_esm2_t33_256": (256, f"{config.modelRoot}/class/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 76, config.mlBatchSize),
+            "class_esm2_t33_512": (512, f"{config.modelRoot}/class/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 76, config.mlBatchSize),
+            "order_esm2_t33_512": (512, f"{config.modelRoot}/order/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 981, config.mlBatchSize),
+            "family_esm2_t33_512": (512, f"{config.modelRoot}/family/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize),
+            "family_esm2_t33_512_enlarge": (512, f"{config.modelRoot}/family/esm2_t33_512_enlarge", "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize),
+            "genus_esm2_t33_256": (256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune", "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize),
+            "genus_esm2_t33_256_enlarge": (256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize),
         }
 
         if (model not in modelParams):
@@ -82,7 +91,7 @@ class MLKNN(Module):
                 markerMapping = json.load(fp)
 
         if (self.marker):
-            if (self.strategy == "CLS"):
+            if (self.embedding == "CLS"):
                 for sample in samples:
                     for protein in sample.proteins:
                         node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
@@ -90,7 +99,7 @@ class MLKNN(Module):
                             if (n.name not in clusters):
                                 clusters[n.name] = []
                             clusters[n.name].append(protein.info[f"{self.model}_CLSemb"])
-            elif (self.strategy == 'ave'):
+            elif (self.embedding == 'ave'):
                 for sample in samples:
                     for protein in sample.proteins:
                         node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
@@ -122,16 +131,18 @@ class MLKNN(Module):
                 # calculate centroid and cov
                 if (len(embeddings) <= 1):
                     continue
-                X = numpy.array(embeddings)
-                mu = X.mean(axis=0).astype(numpy.float32)
+                X = numpy.array(embeddings).astype(numpy.float64)
+                mu = X.mean(axis=0)
                 # note: be aware that inv_cov is 1280*1280 matrix. So we use diagonal-approximaetd Ma's distance
                 # cov = numpy.cov(X, rowvar=False)
                 # inv_cov = numpy.linalg.inv(cov + 1e-6 * numpy.eye(cov.shape[0]))
-                var = X.var(axis=0).astype(numpy.float32)
+                var = X.var(axis=0)
                 if (numpy.min(var) == 0):  # in case some dimension has no var
                     continue
-                distances = numpy.sqrt(numpy.sum((X - mu) ** 2 / var, axis=1)).astype(numpy.float32)
+                distances = numpy.sqrt(numpy.sum((X - mu) ** 2 / var, axis=1)).astype(numpy.float32)  # this calculation should be down within float64 to prevent overflow
                 distances = numpy.sort(distances)
+                mu = mu.astype(numpy.float32)
+                var = var.astype(numpy.float32)
                 fp.write(f"{name}\t{IOUtils.encodeBase64(mu)}\t{IOUtils.encodeBase64(var)}\t{IOUtils.encodeBase64(distances)}\n")
 
     def applyStrategy(self, distances, confidenceScores):
@@ -139,24 +150,32 @@ class MLKNN(Module):
         # size of [cluster,  sample]
         if (self.strategy == 'nearest'):
             w = numpy.exp(-distances)
-            w /= numpy.sum(w, axis=0)
+            s = numpy.sum(w, axis=0)
+            msk = s != 0
+            w[:, msk] /= s[msk]
             return w
         if (self.strategy == 'nearest_bound'):
             distances = distances + numpy.where(confidenceScores == 0, numpy.inf, 0)
             w = numpy.exp(-distances)
-            w /= numpy.sum(w, axis=0)
+            s = numpy.sum(w, axis=0)
+            msk = s != 0
+            w[:, msk] /= s[msk]
             return w
         if (self.strategy == 'confidence'):
             return confidenceScores
         if (self.strategy == 'product'):
             w = numpy.exp(-distances)
-            w /= numpy.sum(w, axis=0)
+            s = numpy.sum(w, axis=0)
+            msk = s != 0
+            w[:, msk] /= s[msk]
             return w * confidenceScores
         if (self.strategy.startswith('nearest_conf')):
             thresh = float(self.strategy[12:])
             distances = distances + numpy.where(confidenceScores < thresh, numpy.inf, 0)
             w = numpy.exp(-distances)
-            w /= numpy.sum(w, axis=0)
+            s = numpy.sum(w, axis=0)
+            msk = s != 0
+            w[:, msk] /= s[msk]
             return w
 
     def runSingle(self, clusters, samples:list[Sample], indexs):
@@ -170,12 +189,15 @@ class MLKNN(Module):
             elif (self.embedding == 'ave'):
                 embeddings = numpy.array([protein.info[f"{self.model}_aveemb"] for protein in sample.proteins])
 
+            embeddings = embeddings.astype(numpy.float64)
             if (self.pooling == "mean"):
                 aveEmbedding = numpy.mean(embeddings, axis=0)
                 distances = numpy.zeros((len(clusters)), dtype=numpy.float32)
                 confidenceScores = numpy.zeros((len(clusters)), dtype=numpy.float16)
                 for idx, (name, mu, var, dis_threshes) in enumerate(clusters):
-                    dis = numpy.sqrt(numpy.sum((aveEmbedding - mu) ** 2 / var))
+                    mu = mu.astype(numpy.float64)
+                    var = var.astype(numpy.float64)
+                    dis = numpy.sqrt(numpy.sum((aveEmbedding - mu) ** 2 / var)).astype(numpy.float32)
                     ranks = numpy.searchsorted(dis_threshes, dis, side='left')   # ideally, we should calculate average between left and right. But here, we think the identical number is almost impossible
                     scores = 1 - ranks / len(dis_threshes)
 
@@ -194,7 +216,9 @@ class MLKNN(Module):
                 distances = numpy.zeros((len(clusters), len(sample.proteins)), dtype=numpy.float32)
                 confidenceScores = numpy.zeros((len(clusters), len(sample.proteins)), dtype=numpy.float16)
                 for idx, (name, mu, var, dis_threshes) in enumerate(clusters):
-                    dis = numpy.sqrt(numpy.sum((embeddings - mu) ** 2 / var, axis=1))
+                    mu = mu.astype(numpy.float64)
+                    var = var.astype(numpy.float64)
+                    dis = numpy.sqrt(numpy.sum((embeddings - mu) ** 2 / var, axis=1)).astype(numpy.float32)
                     ranks = numpy.searchsorted(dis_threshes, dis, side='left')   # ideally, we should calculate average between left and right. But here, we think the identical number is almost impossible
                     scores = 1 - ranks / len(dis_threshes)
 
