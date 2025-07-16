@@ -32,7 +32,7 @@ class Blast(Module):
         IOUtils.showInfo(f"Begin blast on {len(samples)} samples")
 
         command = self.getBlastCommand(queryFile, resultFile)
-        subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(command, shell=True)
 
         targetFP = open(self.cacheFile, 'at')
 
@@ -115,6 +115,9 @@ class Blast(Module):
 
         if (result.bestAlignment is None):
             result = None
+            sample.info["blast"] = 0
+        else:
+            sample.info["blast"] = result.bestAlignment.similarity
         sample.results[self.baseName] = result
         return result
     

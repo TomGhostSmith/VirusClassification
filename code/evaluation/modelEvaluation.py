@@ -182,8 +182,6 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
             analysisDict["statistics"].append("precision")
             analysisDict["statistics"].append("coverage-precision F1")
             for stat in [recalls, precisions, F1s]:
-                if len(stat) != 4:
-                    print("?")
                 for r, s in zip(focusRanks, stat):
                     analysisDict[r].append(s)
 
@@ -199,19 +197,21 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
     ax.legend(loc="upper left", bbox_to_anchor=(1, 1))
 
     if (withSubRank):
-        fileName = f"{config.analysisFolder}/figure/performance_withSub_{dataset}_{missingLabel}.png"
+        fileNamePrefix = f"{config.analysisFolder}/figure/performance_withSub_{dataset}_{missingLabel}"
     else:
-        fileName = f"{config.analysisFolder}/figure/performance_{dataset}_{missingLabel}.png"
+        fileNamePrefix = f"{config.analysisFolder}/figure/performance_{dataset}_{missingLabel}"
+
+    i = 0
+    fileName = f"{fileNamePrefix}_{i}.png"
+    while (os.path.exists(fileName)):
+        i += 1
+        fileName = f"{fileNamePrefix}_{i}.png"
 
     plt.savefig(fileName, bbox_inches="tight")
     plt.close()
 
 
     # save scatter plot
-    if (withSubRank):
-        fileName = f"{config.analysisFolder}/figure/performance_withSub_{dataset}_{missingLabel}_scatter.png"
-    else:
-        fileName = f"{config.analysisFolder}/figure/performance_{dataset}_{missingLabel}_scatter.png"
 
     markers = [m for m in mmarkers.MarkerStyle.markers.keys() if isinstance(m, str) and m not in (".", ",", " ", "")][:22]
     markers = markers * (math.ceil(len(models)/ len(markers)))
@@ -247,6 +247,18 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
     fig.legend(loc="upper left", bbox_to_anchor=(1, 1))
     # plt.xlim((int(min(modelRecalls) * 10 - 1))/10, 1)
     # plt.ylim(0.5, 1)
+
+    if (withSubRank):
+        fileNamePrefix = f"{config.analysisFolder}/figure/performance_withSub_{dataset}_{missingLabel}_scatter"
+    else:
+        fileNamePrefix = f"{config.analysisFolder}/figure/performance_{dataset}_{missingLabel}_scatter"
+
+    i = 0
+    fileName = f"{fileNamePrefix}_{i}.png"
+    while (os.path.exists(fileName)):
+        i += 1
+        fileName = f"{fileNamePrefix}_{i}.png"
+
     fig.savefig(fileName, bbox_inches="tight")
     plt.close()
 
@@ -315,8 +327,25 @@ def testModelVirusIdentity(models:dict[str, Module], dataset):
 
     IOUtils.showInfo('Done')
 
-def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subset='all', missingLabel="Unknown", analyseList:list[tuple[str, str]]=list()):
+def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subset='all', missingLabel="Unknown", analyseList:list[tuple[str, str]]=[]):
+    additionalInfo = set()
+    for factor1, factor2 in analyseList:
+        if (isinstance(factor1, list) and factor1[0] not in ["protein_length", "length", "protein_count"]):
+            if (len(factor1) != 2):
+                raise ValueError(f"Missing bins for customized feature {factor1[0]}")
+            additionalInfo.add(factor1[0])
+        if (isinstance(factor2, list) and factor2[0] not in ["protein_length", "length", "protein_count"]):
+            if (len(factor2) != 2):
+                raise ValueError(f"Missing bins for customized feature {factor1[0]}")
+            additionalInfo.add(factor2[0])
+        
+        if (isinstance(factor1, str) and factor1 not in models):
+            raise ValueError(f"Unknown model name '{factor1}'")
+        if (isinstance(factor2, str) and factor1 not in models):
+            raise ValueError(f"Unknown model name '{factor2}'")
+        
     samples = testModel(models, dataset, evaluationMethod, subset, missingLabel)
+
     if (analyseList is None):
         IOUtils.showInfo("Nothing to analyse. Exit")
         return
@@ -336,12 +365,26 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
 
     modelRankResults:dict[str, dict[str, list[str]]] = {modelDesc: {r: list() for r in config.evaluationRanks} for modelDesc in models.keys()}
 
+
+    summaryDict = {
+        "id": [],
+        "length": [],
+        "protein_count": [],
+        "protein_length": [],
+        "ground_truth": [],
+        "ground_truth_rank": []
+    }
+    for k in additionalInfo:
+        summaryDict[k] = []
+
     for sample in tqdm(samples, desc="sample wise result"):
         sampleIDs.append(sample.id)
         sampleLengths.append(sample.length)
         sampleProteinCounts.append(len(sample.proteins))
         sampleProteinLengths.append(sum(p.length for p in sample.proteins))
         std = sample.info["stdResult"]
+        for k in additionalInfo:
+            summaryDict[k].append(sample.info.get(k))
 
         stdRanks = {r: None for r in config.evaluationRanks}
         if (std is not None and std.ICTVNode is not None):
@@ -384,14 +427,12 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
                     else:
                         modelRankResults[modelDesc][r].append("wrong")
 
-    summaryDict = {
-        "id": sampleIDs,
-        "length": sampleLengths,
-        "protein_count": sampleProteinCounts,
-        "protein_length": sampleProteinLengths,
-        "ground_truth": stdResults,
-        "ground_truth_rank": stdResultRank
-    }
+    summaryDict["id"] = sampleIDs
+    summaryDict["length"] = sampleLengths
+    summaryDict["protein_count"] = sampleProteinCounts
+    summaryDict["protein_length"] = sampleProteinLengths
+    summaryDict["ground_truth"] = stdResults
+    summaryDict["ground_truth_rank"] = stdResultRank
 
     for modelDesc, model in models.items():
         preds, predRanks, LCAs, LCARanks = zip(*modelResults[model.moduleName])
@@ -406,9 +447,13 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     summaryDF = pandas.DataFrame(summaryDict)
     DFs["raw results"] = summaryDF
 
+    for k in additionalInfo:
+        if (summaryDF[k].isna().all()):
+            raise ValueError(f"Analysis feature {k} are all None. Please check if the essential model is included")
+
     # sheet 2: performance related analysis
     for factor1, factor2 in tqdm(analyseList, desc="sample wise analysis"):
-        if (factor1[0] in ["length", "protein_count", "protein_length"]): # perform analyse between length/protein_count/protein_length
+        if (isinstance(factor1, list) and factor1[0] in ["length", "protein_count", "protein_length"] or factor1[0] in additionalInfo): # perform analyse between length/protein_count/protein_length
             if (len(factor1) > 1):
                 bins = factor1[1]
             else:
@@ -432,7 +477,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             analyseDF = pandas.crosstab(summaryDF[cellText], summaryDF[f"{factor2}_"], dropna=False)
             DFs[f"{factor1} vs {factor2}"] = analyseDF
 
-        elif (factor2[0] in ["length", "protein_count", "protein_length"]):
+        elif (isinstance(factor2, list) and factor2[0] in ["length", "protein_count", "protein_length"]  or factor2[0] in additionalInfo):
             if (len(factor2) > 1):
                 bins = factor2[1]
             else:

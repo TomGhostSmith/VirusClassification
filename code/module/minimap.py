@@ -120,6 +120,9 @@ class Minimap(Module):
 
         if (result.bestAlignment is None):
             result = None
+            sample.info["mapQ"] = -1
+        else:
+            sample.info["mapQ"] = result.bestAlignment.quality
         sample.results[self.baseName] = result
         return result
     

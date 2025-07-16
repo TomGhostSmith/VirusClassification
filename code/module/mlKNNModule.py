@@ -31,7 +31,7 @@ class MLKNN(Module):
         self.marker = marker  # only use marker gene or use all protein
         if (pooling not in ["mean", "sum"] and not pooling.startswith("top")):
             raise ValueError("Unknown pooling method")
-        if (strategy not in ["nearest", "nearest_bound", "confidence", "product"] and not strategy.startswith('nearest_conf')):
+        if (strategy not in ["nearest", "nearest_bound", "confidence", "product", "individual"] and not strategy.startswith('nearest_conf')):
             raise ValueError("Unknown strategy")
         if (embedding not in ["CLS", "ave"]):
             raise ValueError("Unknown embedding type")

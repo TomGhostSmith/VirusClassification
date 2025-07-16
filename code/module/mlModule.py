@@ -153,6 +153,7 @@ class MLModule(Module):
 
 
         if (len(proteinsToRun) > 0):
+            IOUtils.showInfo(f"run {len(proteinsToRun)} proteins on ESM for {rank}")
             model = ESMRunner(*self.modelParams[rank][1:])
             lines = model.run(proteinsToRun)
 
@@ -164,7 +165,7 @@ class MLModule(Module):
 
                 probText = f"{seq_name}\t{IOUtils.encodeBase64(prob)}\n"
 
-                fp_prob.write()
+                fp_prob.write(probText)
                 nextOffset_prob += len(probText)
 
             cachedSamples_prob["nextOffset"] = nextOffset_prob
@@ -186,7 +187,7 @@ class MLModule(Module):
 
         if (self.strategy in ["highest", "topdown", "bottomup"]):
             cachedResultFP_prob = open(cacheProbFile)
-            for sample in tqdm(samples, desc="pooling"):
+            for sample in tqdm(samples, desc=f"{rank} pooling"):
                 if (self.pooling == "sum"):
                     votes = {n: 0 for n in names if "Unknown" not in n}
                     for protein in sample.proteins:

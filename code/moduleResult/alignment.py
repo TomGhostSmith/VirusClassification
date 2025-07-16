@@ -8,6 +8,7 @@ class Alignment():
         terms = alignment.strip().split('\t')
         if (terms[2] == '*'):
             self.ref = None
+            self.quality = -1
         else:
             self.ref = taxoTree.ICTVTree.accession2ID[terms[2]] # the ref is accession, so we convert that to ICTV ID
             self.position = int(terms[3])
