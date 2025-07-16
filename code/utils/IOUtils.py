@@ -16,6 +16,8 @@ from entity.proteinSample import ProteinSample
 def showInfo(message, typ='INFO'):
     currentTime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     msg = f"{currentTime} ({os.getpid()}) [{typ}] {message}\n"
+    # with open("nohup.txt", 'at') as fp:
+    #     fp.write(msg)
     if (typ == 'WARN' or typ == 'PROC'):
         sys.stderr.write(msg)
     else:
@@ -111,3 +113,24 @@ def encodeBase64(array):
 
 def decodeBase64(text, dtype=numpy.float16):
     return numpy.frombuffer(base64.b64decode(text), dtype=dtype)
+
+def progressListener(queue, pbars):
+    while True:
+        msg = queue.get()
+        if msg == "Done":
+            for pbar in pbars:
+                pbar.close()
+            break
+        idx, increment = msg
+        pbars[idx].update(increment)
+
+def getProgressListener(pbars):
+    manager = multiprocessing.Manager()
+    queue = manager.Queue()
+    listener = multiprocessing.Process(target=progressListener, args=(queue, pbars))
+    listener.start()
+    return listener, queue
+
+def stopProgressListener(listener, queue):
+    queue.put("Done")
+    listener.join()

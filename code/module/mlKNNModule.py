@@ -14,6 +14,7 @@ from tqdm import tqdm
 import base64
 import numpy
 import math
+import time
 import multiprocessing
 
 from utils import IOUtils
@@ -74,14 +75,16 @@ class MLKNN(Module):
         self.cachedSamples_ave = {"nextOffset": 0}
         self.nextOffset_ave = 0
 
-    def train(self):
-        useMarkerGene = "marker" if self.marker else "full"
-        IOUtils.showInfo(f"Train {self.reference} {self.model} {self.embedding} {useMarkerGene} KNN")
+        self.invStdVar = None
+
+    def loadRefClusterEmbeddings(self, recursive=True):
         referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
         samples = IOUtils.loadSamples(referenceFasta)
         self.getEmbedding(samples)
 
         clusters:dict[str, list[numpy.ndarray]] = {}   # key: taxa node name in ICTV   value: a list of embeddings
+
+        variance = []
 
         if (self.marker):
             markerModule = Marker(self.reference, "sum")
@@ -94,37 +97,67 @@ class MLKNN(Module):
             if (self.embedding == "CLS"):
                 for sample in samples:
                     for protein in sample.proteins:
+                        variance.append(protein.info[f"{self.model}_CLSemb"])
                         node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
-                        for n in node.path:
+                        if (recursive):
+                            ns = node.paths
+                        else:
+                            ns = [node]
+                        for n in ns:
                             if (n.name not in clusters):
                                 clusters[n.name] = []
                             clusters[n.name].append(protein.info[f"{self.model}_CLSemb"])
             elif (self.embedding == 'ave'):
                 for sample in samples:
                     for protein in sample.proteins:
+                        variance.append(protein.info[f"{self.model}_aveemb"])
                         node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
-                        for n in node.path:
+                        if (recursive):
+                            ns = node.paths
+                        else:
+                            ns = [node]
+                        for n in ns:
                             if (n.name not in clusters):
                                 clusters[n.name] = []
                             clusters[n.name].append(protein.info[f"{self.model}_aveemb"])
                                     
         else:
             for sample in samples:
+                if (len(sample.proteins) == 0):
+                    continue
                 ICTVID = taxoTree.ICTVTree.accession2ID[sample.id]
                 node = taxoTree.ICTVTree.species[ICTVID]
                 names = set()
-                for n in node.path:
+                if (recursive):
+                    ns = node.paths
+                else:
+                    ns = [node]
+                for n in ns:
                     names.add(n.name)
                     if (n.name not in clusters):
                         clusters[n.name] = []
                 if (self.embedding == 'CLS'):
                     for protein in sample.proteins:
+                        variance.append(protein.info[f"{self.model}_CLSemb"])
                         for n in names:
                             clusters[n].append(protein.info[f"{self.model}_CLSemb"])
                 elif (self.embedding == 'ave'):
                     for protein in sample.proteins:
+                        variance.append(protein.info[f"{self.model}_aveemb"])
                         for n in names:
                             clusters[n].append(protein.info[f"{self.model}_aveemb"])
+        
+        if (not recursive):
+            var = numpy.array(variance).astype(numpy.float64).var(axis=0)
+            self.invStdVar = (1.0/numpy.sqrt(var + 1e-8)).astype(numpy.float32)
+
+
+        return clusters
+
+    def train(self):
+        useMarkerGene = "marker" if self.marker else "full"
+        IOUtils.showInfo(f"Train {self.reference} {self.model} {self.embedding} {useMarkerGene} KNN")
+        clusters = self.loadRefClusterEmbeddings()
 
         with open(self.cacheClusterFile, 'wt') as fp:
             for name, embeddings in tqdm(list(clusters.items()), desc="saving cluster"):
@@ -149,38 +182,57 @@ class MLKNN(Module):
         # here we use softmin weighted distance
         # size of [cluster,  sample]
         if (self.strategy == 'nearest'):
-            w = numpy.exp(-distances)
-            s = numpy.sum(w, axis=0)
-            msk = s != 0
-            w[:, msk] /= s[msk]
-            return w
+            return softmin(distances)
         if (self.strategy == 'nearest_bound'):
             distances = distances + numpy.where(confidenceScores == 0, numpy.inf, 0)
-            w = numpy.exp(-distances)
-            s = numpy.sum(w, axis=0)
-            msk = s != 0
-            w[:, msk] /= s[msk]
-            return w
+            return softmin(distances)
         if (self.strategy == 'confidence'):
             return confidenceScores
         if (self.strategy == 'product'):
-            w = numpy.exp(-distances)
-            s = numpy.sum(w, axis=0)
-            msk = s != 0
-            w[:, msk] /= s[msk]
+            w = softmin(distances)
             return w * confidenceScores
         if (self.strategy.startswith('nearest_conf')):
             thresh = float(self.strategy[12:])
             distances = distances + numpy.where(confidenceScores < thresh, numpy.inf, 0)
-            w = numpy.exp(-distances)
-            s = numpy.sum(w, axis=0)
-            msk = s != 0
-            w[:, msk] /= s[msk]
-            return w
+            return softmin(distances)
+        
+    def extractWeightMatrix(self, clusters:list[tuple[str, list[numpy.ndarray]]], embeddings):
+        distances = numpy.zeros((len(clusters), embeddings.shape[0]), dtype=numpy.float32)
+        if (self.strategy == "individual"):
+            emb = embeddings * self.invStdVar
+            emb_sq = numpy.sum(emb ** 2, axis=1, keepdims=True).T
+            for idx, (name, refEmbeddings, ref_sq) in enumerate(clusters):
+                re = refEmbeddings @ emb.T
+                sq = ref_sq - 2 * re + emb_sq
+                sq = numpy.maximum(sq, 0.0)
+                dis = numpy.sqrt(sq)
 
-    def runSingle(self, clusters, samples:list[Sample], indexs):
+                distances[idx] = numpy.min(dis, axis=0)
+
+            weights = softmin(distances)
+            return weights
+
+        else:
+            confidenceScores = numpy.zeros((len(clusters), embeddings.shape[0]), dtype=numpy.float16)
+            for idx, (name, mu, var, dis_threshes) in enumerate(clusters):
+                mu = mu.astype(numpy.float64)
+                var = var.astype(numpy.float64)
+                dis = numpy.sqrt(numpy.sum((embeddings - mu) ** 2 / var, axis=1)).astype(numpy.float32)
+                ranks = numpy.searchsorted(dis_threshes, dis, side='left')   # ideally, we should calculate average between left and right. But here, we think the identical number is almost impossible
+                scores = 1 - ranks / len(dis_threshes)
+
+                distances[idx] = dis
+                confidenceScores[idx] = scores
+
+            weights = self.applyStrategy(distances, confidenceScores)
+            return weights
+
+    def runSingle(self, clusters, samples:list[Sample], indexs, t=0, queue=None):
         res = []
+        if (queue is None):
+            bar = tqdm(total=len(samples))
         for index, sample in zip(indexs, samples):
+        # for index, sample in zip(indexs, samples):
             if (len(sample.proteins) == 0):
                 res.append((None, index))
                 continue
@@ -191,41 +243,17 @@ class MLKNN(Module):
 
             embeddings = embeddings.astype(numpy.float64)
             if (self.pooling == "mean"):
-                aveEmbedding = numpy.mean(embeddings, axis=0)
-                distances = numpy.zeros((len(clusters)), dtype=numpy.float32)
-                confidenceScores = numpy.zeros((len(clusters)), dtype=numpy.float16)
-                for idx, (name, mu, var, dis_threshes) in enumerate(clusters):
-                    mu = mu.astype(numpy.float64)
-                    var = var.astype(numpy.float64)
-                    dis = numpy.sqrt(numpy.sum((aveEmbedding - mu) ** 2 / var)).astype(numpy.float32)
-                    ranks = numpy.searchsorted(dis_threshes, dis, side='left')   # ideally, we should calculate average between left and right. But here, we think the identical number is almost impossible
-                    scores = 1 - ranks / len(dis_threshes)
-
-                    distances[idx] = dis
-                    confidenceScores[idx] = scores
-
-                weights = self.applyStrategy(distances, confidenceScores)
+                aveEmbedding = numpy.mean(embeddings, axis=0, keepdims=True)
+                weights = self.extractWeightMatrix(clusters, aveEmbedding)
 
                 selection = numpy.argmax(weights, axis=0).item()
 
-                score = confidenceScores[selection].item()
+                score = weights[selection].item()
                 res.append((PlainResult(clusters[selection][0], score), index))
 
 
             else:
-                distances = numpy.zeros((len(clusters), len(sample.proteins)), dtype=numpy.float32)
-                confidenceScores = numpy.zeros((len(clusters), len(sample.proteins)), dtype=numpy.float16)
-                for idx, (name, mu, var, dis_threshes) in enumerate(clusters):
-                    mu = mu.astype(numpy.float64)
-                    var = var.astype(numpy.float64)
-                    dis = numpy.sqrt(numpy.sum((embeddings - mu) ** 2 / var, axis=1)).astype(numpy.float32)
-                    ranks = numpy.searchsorted(dis_threshes, dis, side='left')   # ideally, we should calculate average between left and right. But here, we think the identical number is almost impossible
-                    scores = 1 - ranks / len(dis_threshes)
-
-                    distances[idx] = dis
-                    confidenceScores[idx] = scores
-
-                weights = self.applyStrategy(distances, confidenceScores)
+                weights = self.extractWeightMatrix(clusters, embeddings)
                 
                 if (self.pooling == 'sum'):
                     votes = numpy.sum(weights, axis=1)
@@ -236,8 +264,14 @@ class MLKNN(Module):
                     votes = numpy.sum(weights, axis=1)
 
                 selection = numpy.argmax(votes, axis=0).item()
-                score = numpy.mean(confidenceScores[selection, :]).item()
+                score = numpy.mean(weights[selection, :]).item()
                 res.append((PlainResult(clusters[selection][0], score), index))
+            if (queue is None):
+                bar.update(1)
+            else:
+                queue.put((t, 1))
+        if (queue is None):
+            bar.close()
         return res
 
 
@@ -248,34 +282,62 @@ class MLKNN(Module):
 
         self.getEmbedding(samples)
 
-        clusters = []
-        with open(self.cacheClusterFile) as fp:
-            for line in fp:
-                name, mu, var, dis_threshes = line.strip().split('\t')
-                mu = IOUtils.decodeBase64(mu, dtype=numpy.float32)
-                var = IOUtils.decodeBase64(var, dtype=numpy.float32)
-                dis_threshes = IOUtils.decodeBase64(dis_threshes, dtype=numpy.float32)
-                clusters.append((name, mu, var, dis_threshes))
-
-
         results = [None]*len(samples)
-        
-        
-        bar = tqdm(total=len(samples), desc="KNN")
-        samplePerThread = math.ceil(len(samples)/self.threads)
-        with multiprocessing.Pool(processes=self.threads) as pool:
-            asyncResults = [pool.apply_async(self.runSingle, [clusters, samples[t*samplePerThread : (t+1)*samplePerThread], list(range(t*samplePerThread, min((t+1)*samplePerThread, len(samples))))]) for t in range(self.threads)]
-            pool.close()
-            while asyncResults:
-                for asyncResult in asyncResults[:]:
-                    if asyncResult.ready():
-                        res = asyncResult.get()
-                        for r, idx in res:
-                            results[idx] = r
-                        asyncResults.remove(asyncResult)
-                        bar.update(len(res))
+                
+        if (self.strategy == "individual"):
+            clusters = []
+            for k, v in self.loadRefClusterEmbeddings(False).items():
+                v = numpy.array(v) * self.invStdVar
+                vsq = numpy.sum(v ** 2, axis=1, keepdims=True)
+                clusters.append([k, v, vsq])
+        else:
+            clusters = []
+            with open(self.cacheClusterFile) as fp:
+                for line in fp:
+                    name, mu, var, dis_threshes = line.strip().split('\t')
+                    mu = IOUtils.decodeBase64(mu, dtype=numpy.float32)
+                    var = IOUtils.decodeBase64(var, dtype=numpy.float32)
+                    dis_threshes = IOUtils.decodeBase64(dis_threshes, dtype=numpy.float32)
+                    clusters.append((name, mu, var, dis_threshes))
 
-        return results
+
+        # for job in jobs:
+        #     self.runSingle(*job)
+
+        if (self.threads == 1):
+            res = self.runSingle(clusters, samples, list(range(len(samples))))
+            r, i = zip(*res)
+            return r
+
+        else:
+            samplePerThread = math.ceil(len(samples)/self.threads)
+            jobs = []
+            pbars = []
+            for t in range(self.threads):
+                start = t*samplePerThread
+                end = min((t+1)*samplePerThread, len(samples))
+                pbar = tqdm(total=(end-start), desc=f"Thread {t}")
+                pbars.append(pbar)
+                jobs.append([clusters, samples[start : end], list(range(start, end)), t])
+
+            listener, queue = IOUtils.getProgressListener(pbars)
+                    
+            with multiprocessing.Pool(processes=self.threads) as pool:
+                asyncResults = [pool.apply_async(self.runSingle, [*job, queue]) for job in jobs]
+                time.sleep(10)
+                pool.close()
+                while asyncResults:
+                    for asyncResult in asyncResults[:]:
+                        if asyncResult.ready():
+                            res = asyncResult.get()
+                            for r, idx in res:
+                                results[idx] = r
+                            asyncResults.remove(asyncResult)
+                    time.sleep(1)
+            
+            IOUtils.stopProgressListener(listener, queue)
+            return results
+            
 
 
     def getEmbedding(self, samples:list[Sample])->None:  # The embedding will be stored in the ProteinSample's info dict
@@ -363,3 +425,11 @@ class MLKNN(Module):
             json.dump(self.cachedSamples_cls, fp, indent=2)
         with open(self.cacheAveEmbIndex, 'wt') as fp:
             json.dump(self.cachedSamples_ave, fp, indent=2)
+
+
+def softmin(distances):
+    w = numpy.exp(-distances)
+    s = numpy.sum(w, axis=0)
+    msk = s != 0
+    w[:, msk] /= s[msk]
+    return w

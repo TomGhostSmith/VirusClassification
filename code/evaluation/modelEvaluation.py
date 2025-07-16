@@ -329,20 +329,21 @@ def testModelVirusIdentity(models:dict[str, Module], dataset):
 
 def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subset='all', missingLabel="Unknown", analyseList:list[tuple[str, str]]=[]):
     additionalInfo = set()
-    for factor1, factor2 in analyseList:
-        if (isinstance(factor1, list) and factor1[0] not in ["protein_length", "length", "protein_count"]):
-            if (len(factor1) != 2):
-                raise ValueError(f"Missing bins for customized feature {factor1[0]}")
-            additionalInfo.add(factor1[0])
-        if (isinstance(factor2, list) and factor2[0] not in ["protein_length", "length", "protein_count"]):
-            if (len(factor2) != 2):
-                raise ValueError(f"Missing bins for customized feature {factor1[0]}")
-            additionalInfo.add(factor2[0])
-        
-        if (isinstance(factor1, str) and factor1 not in models):
-            raise ValueError(f"Unknown model name '{factor1}'")
-        if (isinstance(factor2, str) and factor1 not in models):
-            raise ValueError(f"Unknown model name '{factor2}'")
+    if (analyseList is not None):
+        for factor1, factor2 in analyseList:
+            if (isinstance(factor1, list) and factor1[0] not in ["protein_length", "length", "protein_count"]):
+                if (len(factor1) != 2):
+                    raise ValueError(f"Missing bins for customized feature {factor1[0]}")
+                additionalInfo.add(factor1[0])
+            if (isinstance(factor2, list) and factor2[0] not in ["protein_length", "length", "protein_count"]):
+                if (len(factor2) != 2):
+                    raise ValueError(f"Missing bins for customized feature {factor1[0]}")
+                additionalInfo.add(factor2[0])
+            
+            if (isinstance(factor1, str) and factor1 not in models):
+                raise ValueError(f"Unknown model name '{factor1}'")
+            if (isinstance(factor2, str) and factor1 not in models):
+                raise ValueError(f"Unknown model name '{factor2}'")
         
     samples = testModel(models, dataset, evaluationMethod, subset, missingLabel)
 
