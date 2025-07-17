@@ -76,15 +76,18 @@ class MLKNN(Module):
         self.nextOffset_ave = 0
 
         self.invStdVar = None
+        self.refEmbeddings = None
+        self.ref_sq = None
+
+        self.uniqueNames = None
+        self.inverse_indicies = None
 
     def loadRefClusterEmbeddings(self, recursive=True):
         referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
         samples = IOUtils.loadSamples(referenceFasta)
         self.getEmbedding(samples)
 
-        clusters:dict[str, list[numpy.ndarray]] = {}   # key: taxa node name in ICTV   value: a list of embeddings
 
-        variance = []
 
         if (self.marker):
             markerModule = Marker(self.reference, "sum")
@@ -93,66 +96,84 @@ class MLKNN(Module):
             with open(markerModule.markerDB) as fp:
                 markerMapping = json.load(fp)
 
-        if (self.marker):
-            if (self.embedding == "CLS"):
-                for sample in samples:
-                    for protein in sample.proteins:
-                        variance.append(protein.info[f"{self.model}_CLSemb"])
-                        node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
-                        if (recursive):
-                            ns = node.paths
-                        else:
-                            ns = [node]
-                        for n in ns:
-                            if (n.name not in clusters):
-                                clusters[n.name] = []
-                            clusters[n.name].append(protein.info[f"{self.model}_CLSemb"])
-            elif (self.embedding == 'ave'):
-                for sample in samples:
-                    for protein in sample.proteins:
-                        variance.append(protein.info[f"{self.model}_aveemb"])
-                        node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
-                        if (recursive):
-                            ns = node.paths
-                        else:
-                            ns = [node]
-                        for n in ns:
-                            if (n.name not in clusters):
-                                clusters[n.name] = []
-                            clusters[n.name].append(protein.info[f"{self.model}_aveemb"])
-                                    
-        else:
-            for sample in samples:
-                if (len(sample.proteins) == 0):
-                    continue
-                ICTVID = taxoTree.ICTVTree.accession2ID[sample.id]
-                node = taxoTree.ICTVTree.species[ICTVID]
-                names = set()
-                if (recursive):
-                    ns = node.paths
-                else:
-                    ns = [node]
-                for n in ns:
-                    names.add(n.name)
-                    if (n.name not in clusters):
-                        clusters[n.name] = []
-                if (self.embedding == 'CLS'):
-                    for protein in sample.proteins:
-                        variance.append(protein.info[f"{self.model}_CLSemb"])
-                        for n in names:
-                            clusters[n].append(protein.info[f"{self.model}_CLSemb"])
+        if (recursive):
+            clusters:dict[str, list[numpy.ndarray]] = {}   # key: taxa node name in ICTV   value: a list of embeddings
+            if (self.marker):
+                if (self.embedding == "CLS"):
+                    for sample in samples:
+                        for protein in sample.proteins:
+                            node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
+                            for n in node.paths:
+                                if (n.name not in clusters):
+                                    clusters[n.name] = []
+                                clusters[n.name].append(protein.info[f"{self.model}_CLSemb"])
                 elif (self.embedding == 'ave'):
-                    for protein in sample.proteins:
-                        variance.append(protein.info[f"{self.model}_aveemb"])
-                        for n in names:
-                            clusters[n].append(protein.info[f"{self.model}_aveemb"])
-        
-        if (not recursive):
-            var = numpy.array(variance).astype(numpy.float64).var(axis=0)
+                    for sample in samples:
+                        for protein in sample.proteins:
+                            node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
+                            for n in node.paths:
+                                if (n.name not in clusters):
+                                    clusters[n.name] = []
+                                clusters[n.name].append(protein.info[f"{self.model}_aveemb"])
+                                        
+            else:
+                for sample in samples:
+                    if (len(sample.proteins) == 0):
+                        continue
+                    ICTVID = taxoTree.ICTVTree.accession2ID[sample.id]
+                    node = taxoTree.ICTVTree.species[ICTVID]
+                    names = set()
+                    for n in node.paths:
+                        names.add(n.name)
+                        if (n.name not in clusters):
+                            clusters[n.name] = []
+                    if (self.embedding == 'CLS'):
+                        for protein in sample.proteins:
+                            for n in names:
+                                clusters[n].append(protein.info[f"{self.model}_CLSemb"])
+                    elif (self.embedding == 'ave'):
+                        for protein in sample.proteins:
+                            for n in names:
+                                clusters[n].append(protein.info[f"{self.model}_aveemb"])
+            return clusters
+        else:
+            clusters:list[list[str]] = []
+            variance = []
+            if (self.marker):
+                if (self.embedding == "CLS"):
+                    for sample in samples:
+                        for protein in sample.proteins:
+                            node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
+                            clusters.append([node.name])
+                            variance.append(protein.info[f"{self.model}_CLSemb"])
+                elif (self.embedding == 'ave'):
+                    for sample in samples:
+                        for protein in sample.proteins:
+                            node = taxoTree.ICTVTree.nodes[markerMapping[protein.id]]
+                            clusters.append([node.name])
+                            variance.append(protein.info[f"{self.model}_aveemb"])
+                                        
+            else:
+                for sample in samples:
+                    if (len(sample.proteins) == 0):
+                        continue
+                    ICTVID = taxoTree.ICTVTree.accession2ID[sample.id]
+                    node = taxoTree.ICTVTree.species[ICTVID]
+                    if (self.embedding == 'CLS'):
+                        for protein in sample.proteins:
+                            clusters.append([node.name])
+                            variance.append(protein.info[f"{self.model}_CLSemb"])
+                    elif (self.embedding == 'ave'):
+                        for protein in sample.proteins:
+                            clusters.append([node.name])
+                            variance.append(protein.info[f"{self.model}_aveemb"])
+            embeddings = numpy.array(variance).astype(numpy.float64)
+            var = embeddings.var(axis=0)
             self.invStdVar = (1.0/numpy.sqrt(var + 1e-8)).astype(numpy.float32)
+            self.refEmbeddings = embeddings * self.invStdVar
+            self.ref_sq = numpy.sum(self.refEmbeddings ** 2, axis=1, keepdims=True)
+            return clusters
 
-
-        return clusters
 
     def train(self):
         useMarkerGene = "marker" if self.marker else "full"
@@ -201,13 +222,10 @@ class MLKNN(Module):
         if (self.strategy == "individual"):
             emb = embeddings * self.invStdVar
             emb_sq = numpy.sum(emb ** 2, axis=1, keepdims=True).T
-            for idx, (name, refEmbeddings, ref_sq) in enumerate(clusters):
-                re = refEmbeddings @ emb.T
-                sq = ref_sq - 2 * re + emb_sq
-                sq = numpy.maximum(sq, 0.0)
-                dis = numpy.sqrt(sq)
-
-                distances[idx] = numpy.min(dis, axis=0)
+            re = self.refEmbeddings @ emb.T
+            sq = self.ref_sq - 2 * re + emb_sq
+            sq = numpy.maximum(sq, 0.0)
+            distances = numpy.sqrt(sq)
 
             weights = softmin(distances)
             return weights
@@ -226,13 +244,20 @@ class MLKNN(Module):
 
             weights = self.applyStrategy(distances, confidenceScores)
             return weights
-
+        
+    def extractPrediction(self, scores):
+        votes = numpy.bincount(self.inverse_indicies, weights=scores)
+        total = sum(votes)
+        idx = numpy.argmax(votes)
+        return self.uniqueNames[idx], votes[idx]/total
+        
     def runSingle(self, clusters, samples:list[Sample], indexs, t=0, queue=None):
         res = []
+        incre = 0
         if (queue is None):
             bar = tqdm(total=len(samples))
+
         for index, sample in zip(indexs, samples):
-        # for index, sample in zip(indexs, samples):
             if (len(sample.proteins) == 0):
                 res.append((None, index))
                 continue
@@ -245,12 +270,11 @@ class MLKNN(Module):
             if (self.pooling == "mean"):
                 aveEmbedding = numpy.mean(embeddings, axis=0, keepdims=True)
                 weights = self.extractWeightMatrix(clusters, aveEmbedding)
+                weights = weights.squeeze(1)
 
-                selection = numpy.argmax(weights, axis=0).item()
+                pred, score = self.extractPrediction(weights)
 
-                score = weights[selection].item()
-                res.append((PlainResult(clusters[selection][0], score), index))
-
+                res.append((PlainResult(pred, score), index))
 
             else:
                 weights = self.extractWeightMatrix(clusters, embeddings)
@@ -263,13 +287,18 @@ class MLKNN(Module):
                     weights[nonTopWeightsIdx, numpy.arange(weights.shape[1])] = 0
                     votes = numpy.sum(weights, axis=1)
 
-                selection = numpy.argmax(votes, axis=0).item()
-                score = numpy.mean(weights[selection, :]).item()
-                res.append((PlainResult(clusters[selection][0], score), index))
+                pred, score = self.extractPrediction(votes)
+
+                res.append((PlainResult(pred, score), index))
+            
             if (queue is None):
                 bar.update(1)
             else:
-                queue.put((t, 1))
+                try:
+                    queue.put((t, 1 + incre), block=False)
+                    incre = 0
+                except queue.Full:
+                    incre += 1
         if (queue is None):
             bar.close()
         return res
@@ -285,11 +314,7 @@ class MLKNN(Module):
         results = [None]*len(samples)
                 
         if (self.strategy == "individual"):
-            clusters = []
-            for k, v in self.loadRefClusterEmbeddings(False).items():
-                v = numpy.array(v) * self.invStdVar
-                vsq = numpy.sum(v ** 2, axis=1, keepdims=True)
-                clusters.append([k, v, vsq])
+            clusters = self.loadRefClusterEmbeddings(False)
         else:
             clusters = []
             with open(self.cacheClusterFile) as fp:
@@ -304,11 +329,13 @@ class MLKNN(Module):
         # for job in jobs:
         #     self.runSingle(*job)
 
+        names = numpy.array([cluster[0] for cluster in clusters])
+        self.uniqueNames, self.inverse_indicies = numpy.unique(names, return_inverse=True)
+
         if (self.threads == 1):
             res = self.runSingle(clusters, samples, list(range(len(samples))))
             r, i = zip(*res)
-            return r
-
+            results = r
         else:
             samplePerThread = math.ceil(len(samples)/self.threads)
             jobs = []
@@ -321,10 +348,10 @@ class MLKNN(Module):
                 jobs.append([clusters, samples[start : end], list(range(start, end)), t])
 
             listener, queue = IOUtils.getProgressListener(pbars)
+            
                     
             with multiprocessing.Pool(processes=self.threads) as pool:
                 asyncResults = [pool.apply_async(self.runSingle, [*job, queue]) for job in jobs]
-                time.sleep(10)
                 pool.close()
                 while asyncResults:
                     for asyncResult in asyncResults[:]:
@@ -334,9 +361,18 @@ class MLKNN(Module):
                                 results[idx] = r
                             asyncResults.remove(asyncResult)
                     time.sleep(1)
+                pool.join()
             
             IOUtils.stopProgressListener(listener, queue)
-            return results
+
+        # clear the cached embedding, to prevent OOM
+        for sample in samples:
+            for protein in sample.proteins:
+                protein.info.pop(f"{self.model}_CLSemb", None)
+                protein.info.pop(f"{self.model}_aveemb", None)
+        
+        del self.refEmbeddings # this is huge
+        return results
             
 
 
