@@ -13,25 +13,25 @@ from entity.taxoNode import TaxoNode
 
 class TaxoTree():
     def __init__(self) -> None:
-
-        self.ICTVTree = ICTVTree()
-        self.viralNCBITree = NCBITree('Viruses')
-        # self.bacteriaNCBITree = NCBITree('Bacteria')
-        # self.archaeaNCBITree = NCBITree('Archaea')
-
         IOUtils.showInfo('Loading ICTV Tree')
+        self.ICTVTree = ICTVTree()
         self.ICTVTree.loadNodes()
 
         IOUtils.showInfo('Loading Viral NCBI Tree')
+        self.viralNCBITree = NCBITree('Viruses')
         self.viralNCBITree.loadNodes()
         self.viralNCBITree.loadAnnotations()
         self.viralNCBITree.loadSpecies()
         self.viralNCBITree.loadAccession()
+
         # IOUtils.showInfo('Loading Bacteria NCBI Tree')
+        # self.bacteriaNCBITree = NCBITree('Bacteria')
         # self.bacteriaNCBITree.loadNodes()
         # self.bacteriaNCBITree.loadAnnotations()
         # self.bacteriaNCBITree.loadSpecies()
+
         # IOUtils.showInfo('Loading Archaea NCBI Tree')
+        # self.archaeaNCBITree = NCBITree('Archaea')
         # self.archaeaNCBITree.loadNodes()
         # self.archaeaNCBITree.loadAnnotations()
         # self.archaeaNCBITree.loadSpecies()
@@ -61,7 +61,7 @@ class TaxoTree():
         #     self.viralNCBITree.hosts = json.load(fp)
 
         filtedHosts = dict()
-        with open(f"{config.ncbiNucleotideFolder}/rawHosts.json") as fp:
+        with open(f"{config.modelRoot}/NCBI/Nucleotide/{self.viralNCBITree.version}/rawHosts.json") as fp:
             hostDict = json.load(fp)
         for species, hosts in hostDict.items():
             if (species in self.viralNCBITree.name2ID):

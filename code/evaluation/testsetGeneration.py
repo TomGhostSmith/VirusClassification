@@ -78,7 +78,7 @@ def generateTestset(source, species, seed, addNonVirus=False, maxPerSpecies=floa
         for name, seq in seqs:
             selectedSequences.append(('Viruses', name, speciesID, seq))
 
-    # step 2: randomly add some bacteria and archaea from the host if wnated
+    # step 2: randomly add some bacteria and archaea from the host if wanted
     if (addNonVirus):
         nonVirusCount = round(len(selectedSequences) / 0.85 * 0.15)
         hosts = list()
