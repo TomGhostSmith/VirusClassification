@@ -1,6 +1,6 @@
 #This file is modified from https://github.com/ChengPENG-wolf/ViraLM/blob/main/viralm.py
 
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModel
 from torch.utils.data import DataLoader
 from datasets import load_dataset
 from typing import Dict, Sequence
@@ -19,35 +19,33 @@ import csv
 import os
 import base64
 
+from entity.sample import Sample
 from entity.proteinSample import ProteinSample
 from config import config
 from Bio import SeqIO
 from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
-class ESMRunner():
-    def __init__(self, maxLen, modelFolder, baseModelFolder, n_class, batchSize=64, cachedResult=None):
-        self.tempResTSV = f"{config.cacheFolder}/res.tsv"
 
-        self.maxLen = maxLen
-        self.modelFolder = modelFolder
-        self.baseModelFolder = baseModelFolder
-        self.n_class = n_class
+class DNALMRunner():
+    def __init__(self, modelName, batchSize=64, threads=multiprocessing.cpu_count()):
+        self.modelName = modelName
         self.batchSize = batchSize
-
-        self.useCache = cachedResult is not None
-
-        if (self.useCache):
-            self.tempResTSV = cachedResult
+        # self.manualLoadConfig = manualLoadConfig
+        self.threads = threads
 
     def loadModel(self):
-        self.model = transformers.AutoModelForSequenceClassification.from_pretrained(self.baseModelFolder,
-                                                                                num_labels=self.n_class,
-                                                                                trust_remote_code=True,
-                                                                                torch_dtype=torch.float16,
-                                                                                )
+        manualLoadConfig = None
+        if (manualLoadConfig):
+            self.model = AutoModel.from_pretrained(self.modelName,
+                                                   config = self.manualLoadConfig,
+                                                   trust_remote_code=True,
+                                                   torch_dtype=torch.float32)
 
-        self.model.load_state_dict(torch.load(f"{self.modelFolder}/pytorch_model.bin", map_location=torch.device('cpu')), strict=False)
+        else:
+            self.model = AutoModel.from_pretrained(self.modelName,
+                                                   trust_remote_code=True,
+                                                   torch_dtype=torch.float32)
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -75,39 +73,44 @@ class ESMRunner():
             attention_mask=input_ids.ne(self.tokenizer.pad_token_id),
         )
 
-    def run(self, proteins:list[ProteinSample]):
-        def tokenize_function(examples):  # do not padding in the tokenizer but in batch: prevent too many padding if one sequence is too long
-            return self.tokenizer(examples["sequence"], truncation=True)
-        if (self.useCache):
-            return
-        
 
+    def run(self, samples:list[Sample|ProteinSample]|list[tuple[str, str]]):  # can take both DNAs and cDNAs
+        def tokenize_function(dna):
+            dna["input_ids"] = self.tokenizer(dna["sequence"])["input_ids"]
+            return dna
+            return self.tokenizer(dna)  # do not use truncation because DNABert allows long sequence
+        
         labels = []
         sequences = []
-        for protein in proteins:
-            labels.append(protein.id)
-            sequences.append(str(protein.seq.seq).upper())
+        for sample in samples:
+            if (isinstance(sample, Sample) or isinstance(sample, ProteinSample)):
+                labels.append(sample.id)
+                sequences.append(str(sample.seq.seq).upper())
+            else:
+                labels.append(sample[0])
+                sequences.append(str(sample[1]).upper())
         
         testset = Dataset.from_dict({
             "accession": labels,
             "sequence": sequences
         })
-        
+
 
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.modelFolder,
-            model_max_length=self.maxLen,
-            padding_side="right",
-            use_fast=True,
+            self.modelName,
             trust_remote_code=True
         )
 
-
         tokenized_datasets = testset.map(tokenize_function, 
                                          batched=True, 
-                                         batch_size=self.batchSize,
+                                         batch_size=self.batchSize, 
                                          remove_columns=["sequence"], 
-                                         num_proc=multiprocessing.cpu_count()).with_format("torch")
+                                         num_proc=self.threads).with_format("torch")
+        # tokenized_datasets = testset.map(tokenize_function, 
+        #                                  batched=True, 
+        #                                  batch_size=self.batchSize, 
+        #                                  remove_columns=["sequence"])
+        # tokenized_datasets = tokenized_datasets.with_format("torch")
         test_loader = DataLoader(tokenized_datasets, batch_size=self.batchSize, collate_fn=self.collateData)
 
         softmax = Softmax(dim=0)
@@ -121,7 +124,7 @@ class ESMRunner():
                 batch = {k: v.to(self.device) for k, v in batch.items() if k != "labels"}
 
                 outputs = self.model(**batch, output_hidden_states=True)
-                last_hidden_state = outputs.hidden_states[-1]
+                last_hidden_state = outputs[0]
                 cls_embedding = last_hidden_state[:, 0, :]
                 # ave_embedding = torch.mean(last_hidden_state, dim=1)  # note: this won't work because there are padding
                 masks = batch['attention_mask'].unsqueeze(-1)
@@ -132,15 +135,15 @@ class ESMRunner():
                 cls_embeddings = cls_embedding.detach().cpu().contiguous().numpy()
                 ave_embeddings = ave_embedding.detach().cpu().contiguous().numpy()
 
-                logits = outputs.logits.cpu().numpy()
+                # logits = outputs.logits.cpu().numpy()
 
                 for i in torch.arange(len(labels)):
-                    probabilities = softmax(torch.tensor(logits[i])).numpy()
+                    # probabilities = softmax(torch.tensor(logits[i])).numpy()
                     # embedding_str = base64.b64encode(embedding.tobytes()).decode('ascii')
                     # embedding = numpy.frombuffer(base64.b64decode(embedding_str), dtype=numpy.float16)  # note: we are using float16
                     seq_name = labels[i]
 
-                    result[seq_name] = (probabilities, cls_embeddings[i], ave_embeddings[i])
+                    result[seq_name] = (cls_embeddings[i], ave_embeddings[i])
 
 
         # lines = dict()
