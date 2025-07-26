@@ -36,7 +36,7 @@ class MLKNN(Module):
             raise ValueError("Unknown strategy")
         if (embedding not in ["CLS", "ave"]):
             raise ValueError("Unknown embedding type")
-        super().__init__(f'MLKNN-model={model},embedding={embedding},stratgy={strategy},pooling={pooling},marker={marker}')
+        super().__init__(f'MLKNN-ref={reference},model={model},embedding={embedding},stratgy={strategy},pooling={pooling},marker={marker}')
         # self.baseName = self.moduleName
 
 
@@ -306,7 +306,7 @@ class MLKNN(Module):
 
         
     def run(self, samples:list[Sample]):
-        if (not os.path.exists(self.cacheClusterFile)):
+        if (not os.path.exists(self.cacheClusterFile) and self.strategy != "individual"):
             self.train()
 
         self.getEmbedding(samples)
