@@ -422,7 +422,8 @@ class MLKNN(Module):
             line = cachedResultFP_ave.readline().strip()
             text = line[line.find('\t')+1:]
             sample.info[f"{self.model}_aveemb"] = IOUtils.decodeBase64(text)
-
+        cachedResultFP_cls.close()
+        cachedResultFP_ave.close()
     
     def runESM(self, samples:list[ProteinSample])->None:
         model = ESMRunner(*self.modelParam)

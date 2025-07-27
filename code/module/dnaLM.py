@@ -26,11 +26,12 @@ class DNALM(Module):
         self.embedding = embedding
         self.marker = marker
         self.reference = reference
-        if (embedding not in ["CLS", "ave"]):
+        self.threads = threads
+        if (embedding not in ["ave"]):
             raise ValueError("Unsupported embedding type")
         if (pooling not in ["nosplit", "mean", "sum"] and not pooling.startswith("top")):
             raise ValueError("Unsupported pooling method")
-        super().__init__(f'DNALM-ref={reference},model={model},pooling={pooling}')
+        super().__init__(f'DNALM-ref={reference},model={model},embedding={embedding},strategy={strategy},pooling={pooling}')
 
         models = {
             "DNABert2": "zhihan1996/DNABERT-2-117M",
@@ -39,25 +40,24 @@ class DNALM(Module):
 
         if (model not in models):
             raise ValueError("Unsupported DNA language model")
-        batchSize = 1 if (self.pooling == "nosplit") else config.mlBatchSize
-        self.modelParam = [models[model], batchSize]
+        self.modelParam = [models[model], config.DNABatchSize]
         self.model = model
 
         self.strategy = strategy
         if (strategy not in ["individual", "nearest"]):
             raise ValueError("Unsupported strategy")
 
-        self.cacheCLSEmbFile = f"{config.cacheResultFolder}/DNA_taxo_{model}_cls_emb.tmp"
+        # self.cacheCLSEmbFile = f"{config.cacheResultFolder}/DNA_taxo_{model}_cls_emb.tmp"
         self.cacheAveEmbFile = f"{config.cacheResultFolder}/DNA_taxo_{model}_ave_emb.tmp"
-        self.cacheCLSEmbIndex = f"{config.cacheResultFolder}/DNA_taxo_{model}_cls_emb.json"
+        # self.cacheCLSEmbIndex = f"{config.cacheResultFolder}/DNA_taxo_{model}_cls_emb.json"
         self.cacheAveEmbIndex = f"{config.cacheResultFolder}/DNA_taxo_{model}_ave_emb.json"
 
         useMarkerGene = "marker" if marker else "full"
         useFullSequence = "wholeSeq" if pooling == "nosplit" else "genes"
         self.cacheClusterFile = f"{config.modelRoot}/{self.reference}/{model}_{embedding}_{useMarkerGene}_{useFullSequence}.tsv"
 
-        self.cachedSamples_cls = {"nextOffset": 0}
-        self.nextOffset_cls = 0
+        # self.cachedSamples_cls = {"nextOffset": 0}
+        # self.nextOffset_cls = 0
         self.cachedSamples_ave = {"nextOffset": 0}
         self.nextOffset_ave = 0
 
@@ -84,19 +84,19 @@ class DNALM(Module):
         if (recursive):
             clusters:dict[str, list[numpy.ndarray]] = {}   # key: taxa node name in ICTV   value: a list of embeddings
             if (self.marker):
-                if (self.embedding == "CLS"):
-                    for sample in samples:
-                        if (self.pooling == "nosplit"):
-                            DNAs:list[Sample|ProteinSample] = [sample]
-                        else:
-                            DNAs = sample.cDNAs
-                        for DNA in DNAs:
-                            node = taxoTree.ICTVTree.nodes[markerMapping[DNA.id]]
-                            for n in node.paths:
-                                if (n.name not in clusters):
-                                    clusters[n.name] = []
-                                clusters[n.name].append(DNA.info[f"{self.model}_CLSemb"])
-                elif (self.embedding == 'ave'):
+                # if (self.embedding == "CLS"):
+                #     for sample in samples:
+                #         if (self.pooling == "nosplit"):
+                #             DNAs:list[Sample|ProteinSample] = [sample]
+                #         else:
+                #             DNAs = sample.cDNAs
+                #         for DNA in DNAs:
+                #             node = taxoTree.ICTVTree.nodes[markerMapping[DNA.id]]
+                #             for n in node.paths:
+                #                 if (n.name not in clusters):
+                #                     clusters[n.name] = []
+                #                 clusters[n.name].append(DNA.info[f"{self.model}_CLSemb"])
+                if (self.embedding == 'ave'):
                     for sample in samples:
                         if (self.pooling == "nosplit"):
                             DNAs:list[Sample|ProteinSample] = [sample]
@@ -124,11 +124,11 @@ class DNALM(Module):
                         names.add(n.name)
                         if (n.name not in clusters):
                             clusters[n.name] = []
-                    if (self.embedding == 'CLS'):
-                        for DNA in DNAs:
-                            for n in names:
-                                clusters[n].append(DNA.info[f"{self.model}_CLSemb"])
-                    elif (self.embedding == 'ave'):
+                    # if (self.embedding == 'CLS'):
+                    #     for DNA in DNAs:
+                    #         for n in names:
+                    #             clusters[n].append(DNA.info[f"{self.model}_CLSemb"])
+                    if (self.embedding == 'ave'):
                         for DNA in DNAs:
                             for n in names:
                                 clusters[n].append(DNA.info[f"{self.model}_aveemb"])
@@ -137,17 +137,17 @@ class DNALM(Module):
             clusters:list[list[str]] = []
             variance = []
             if (self.marker):
-                if (self.embedding == "CLS"):
-                    for sample in samples:
-                        if (self.pooling == "nosplit"):
-                            DNAs:list[Sample|ProteinSample] = [sample]
-                        else:
-                            DNAs = sample.cDNAs
-                        for DNA in DNAs:
-                            node = taxoTree.ICTVTree.nodes[markerMapping[DNA.id]]
-                            clusters.append([node.name])
-                            variance.append(DNA.info[f"{self.model}_CLSemb"])
-                elif (self.embedding == 'ave'):
+                # if (self.embedding == "CLS"):
+                #     for sample in samples:
+                #         if (self.pooling == "nosplit"):
+                #             DNAs:list[Sample|ProteinSample] = [sample]
+                #         else:
+                #             DNAs = sample.cDNAs
+                #         for DNA in DNAs:
+                #             node = taxoTree.ICTVTree.nodes[markerMapping[DNA.id]]
+                #             clusters.append([node.name])
+                #             variance.append(DNA.info[f"{self.model}_CLSemb"])
+                if (self.embedding == 'ave'):
                     for sample in samples:
                         if (self.pooling == "nosplit"):
                             DNAs:list[Sample|ProteinSample] = [sample]
@@ -168,11 +168,11 @@ class DNALM(Module):
                         DNAs = sample.cDNAs
                     ICTVID = taxoTree.ICTVTree.accession2ID[sample.id]
                     node = taxoTree.ICTVTree.species[ICTVID]
-                    if (self.embedding == 'CLS'):
-                        for DNA in DNAs:
-                            clusters.append([node.name])
-                            variance.append(DNA.info[f"{self.model}_CLSemb"])
-                    elif (self.embedding == 'ave'):
+                    # if (self.embedding == 'CLS'):
+                    #     for DNA in DNAs:
+                    #         clusters.append([node.name])
+                    #         variance.append(DNA.info[f"{self.model}_CLSemb"])
+                    if (self.embedding == 'ave'):
                         for DNA in DNAs:
                             clusters.append([node.name])
                             variance.append(DNA.info[f"{self.model}_aveemb"])
@@ -259,7 +259,11 @@ class DNALM(Module):
         votes = numpy.bincount(self.inverse_indicies, weights=scores)
         total = sum(votes)
         idx = numpy.argmax(votes)
-        return self.uniqueNames[idx], votes[idx]/total
+        if (total == 0):
+            res = 0
+        else:
+            res = votes[idx]/total
+        return self.uniqueNames[idx], res
         
     
     def runSingle(self, clusters, samples:list[Sample], indexs, t=0, queue=None):
@@ -269,17 +273,13 @@ class DNALM(Module):
             bar = tqdm(total=len(samples))
 
         for index, sample in zip(indexs, samples):
-            if (len(sample.proteins) == 0):
-                res.append((None, index))
-                continue
-
             if (self.pooling == "nosplit"):
-                if (self.embedding == 'CLS'):
-                    embeddings = numpy.array([sample.info[f"{self.model}_CLSemb"]])
-                elif (self.embedding == 'ave'):
+                # if (self.embedding == 'CLS'):
+                #     embeddings = numpy.array([sample.info[f"{self.model}_CLSemb"]])
+                if (self.embedding == 'ave'):
                     embeddings = numpy.array([sample.info[f"{self.model}_aveemb"]])
 
-                weights = self.extractWeightMatrix(clusters, aveEmbedding)
+                weights = self.extractWeightMatrix(clusters, embeddings)
                 weights = weights.squeeze(1)
 
                 pred, score = self.extractPrediction(weights)
@@ -287,9 +287,12 @@ class DNALM(Module):
                 res.append((PlainResult(pred, score), index))
 
             else:
-                if (self.embedding == 'CLS'):
-                    embeddings = numpy.array([DNA.info[f"{self.model}_CLSemb"] for DNA in sample.cDNAs])
-                elif (self.embedding == 'ave'):
+                if (len(sample.cDNAs) == 0):
+                    res.append((None, index))
+                    continue
+                # if (self.embedding == 'CLS'):
+                #     embeddings = numpy.array([DNA.info[f"{self.model}_CLSemb"] for DNA in sample.cDNAs])
+                if (self.embedding == 'ave'):
                     embeddings = numpy.array([DNA.info[f"{self.model}_aveemb"] for DNA in sample.cDNAs])
 
                 embeddings = embeddings.astype(numpy.float64)
@@ -366,6 +369,8 @@ class DNALM(Module):
             for t in range(self.threads):
                 start = t*samplePerThread
                 end = min((t+1)*samplePerThread, len(samples))
+                if (end <= start):
+                    continue
                 pbar = tqdm(total=(end-start), desc=f"Thread {t}")
                 pbars.append(pbar)
                 jobs.append([clusters, samples[start : end], list(range(start, end)), t])
@@ -389,13 +394,16 @@ class DNALM(Module):
             IOUtils.stopProgressListener(listener, queue)
 
         # clear the cached embedding, to prevent OOM
-        for sample in samples:
-            sample.info.pop(f"{self.model}_CLSemb", None)
-            sample.info.pop(f"{self.model}_aveemb", None)
-            for DNA in sample.cDNAs:
-                DNA.info.pop(f"{self.model}_CLSemb", None)
-                DNA.info.pop(f"{self.model}_aveemb", None)
-        
+        if (self.pooling == 'nosplit'):
+            for sample in samples:
+                # sample.info.pop(f"{self.model}_CLSemb", None)
+                sample.info.pop(f"{self.model}_aveemb", None)
+        else:
+            for sample in samples:
+                for DNA in sample.cDNAs:
+                    # DNA.info.pop(f"{self.model}_CLSemb", None)
+                    DNA.info.pop(f"{self.model}_aveemb", None)
+            
         del self.refEmbeddings # this is huge
         return results
             
@@ -405,97 +413,116 @@ class DNALM(Module):
         uncachedSamples:list[Sample|ProteinSample] = []
         if (self.pooling == "nosplit"):
             for sample in samples:
-                if (f"{self.model}_CLSemb" not in sample.info or f"{self.model}_aveemb" not in sample.info):
+                # if (f"{self.model}_CLSemb" not in sample.info or f"{self.model}_aveemb" not in sample.info):
+                if (f"{self.model}_aveemb" not in sample.info):
                     uncachedSamples.append(sample)
         else:
             NucleotideUtils.extractProtein(samples)
             for sample in samples:
                 for DNA in sample.cDNAs:
-                    if (f"{self.model}_CLSemb" not in DNA.info or f"{self.model}_aveemb" not in DNA.info):
+                    # if (f"{self.model}_CLSemb" not in DNA.info or f"{self.model}_aveemb" not in DNA.info):
+                    if (f"{self.model}_aveemb" not in DNA.info):
                         uncachedSamples.append(DNA)
         
         if (len(uncachedSamples) == 0):
             return
         
 
-        essentialFiles = [self.cacheCLSEmbFile, self.cacheAveEmbFile, self.cacheCLSEmbIndex, self.cacheAveEmbIndex]
+        # essentialFiles = [self.cacheCLSEmbFile, self.cacheAveEmbFile, self.cacheCLSEmbIndex, self.cacheAveEmbIndex]
+        essentialFiles = [self.cacheAveEmbFile, self.cacheAveEmbIndex]
         allExists = True
         for f in essentialFiles:
             if (not os.path.exists(f)):
                 allExists = False
         
         if (allExists):
-            with open(self.cacheCLSEmbIndex) as fp:
-                self.cachedSamples_cls = json.load(fp)
-                self.nextOffset_cls = self.cachedSamples_cls["nextOffset"]
+            # with open(self.cacheCLSEmbIndex) as fp:
+            #     self.cachedSamples_cls = json.load(fp)
+            #     self.nextOffset_cls = self.cachedSamples_cls["nextOffset"]
             with open(self.cacheAveEmbIndex) as fp:
                 self.cachedSamples_ave = json.load(fp)
                 self.nextOffset_ave = self.cachedSamples_ave["nextOffset"]
 
         DNAsToRun:list[Sample|ProteinSample] = list()
         for DNA in uncachedSamples:
-            if (DNA.id not in self.cachedSamples_cls or DNA.id not in self.cachedSamples_ave):
+            # if (DNA.id not in self.cachedSamples_cls or DNA.id not in self.cachedSamples_ave):
+            if (DNA.id not in self.cachedSamples_ave):
                 DNAsToRun.append(DNA)
 
         if (len(DNAsToRun) > 0):
-            self.runML(DNAsToRun)
+            q = multiprocessing.SimpleQueue()
+            proc = multiprocessing.Process(target=runML, args=(self.modelParam, DNAsToRun, self.cacheAveEmbFile, self.nextOffset_ave, q))
+            proc.start()
+            cachedSamples_ave = q.get()
+            proc.join()
 
-        cachedResultFP_cls = open(self.cacheCLSEmbFile)
+            self.cachedSamples_ave.update(cachedSamples_ave)
+            self.nextOffset_ave = cachedSamples_ave["nextOffset"]
+
+            # with open(self.cacheCLSEmbIndex, 'wt') as fp:
+            #     json.dump(self.cachedSamples_cls, fp, indent=2)
+            with open(self.cacheAveEmbIndex, 'wt') as fp:
+                json.dump(self.cachedSamples_ave, fp, indent=2)
+
+        # cachedResultFP_cls = open(self.cacheCLSEmbFile)
         cachedResultFP_ave = open(self.cacheAveEmbFile)
         for sample in tqdm(uncachedSamples, desc="embedding"):
-            cachedResultFP_cls.seek(self.cachedSamples_cls[sample.id])
-            line = cachedResultFP_cls.readline().strip()
-            text = line[line.find('\t')+1:]
-            sample.info[f"{self.model}_CLSemb"] = IOUtils.decodeBase64(text, dtype=numpy.float32)
+            # cachedResultFP_cls.seek(self.cachedSamples_cls[sample.id])
+            # line = cachedResultFP_cls.readline().strip()
+            # text = line[line.find('\t')+1:]
+            # sample.info[f"{self.model}_CLSemb"] = IOUtils.decodeBase64(text, dtype=numpy.float32)
 
             cachedResultFP_ave.seek(self.cachedSamples_ave[sample.id])
             line = cachedResultFP_ave.readline().strip()
             text = line[line.find('\t')+1:]
             sample.info[f"{self.model}_aveemb"] = IOUtils.decodeBase64(text, dtype=numpy.float32)
+        
+        # cachedResultFP_cls.close()
+        cachedResultFP_ave.close()
 
     
-    def runML(self, samples:list[Sample|ProteinSample])->None:
-        if (self.pooling == "nosplit"):
-            threads = min(multiprocessing.cpu_count(), 16)
-        else:
-            threads = multiprocessing.cpu_count()
-        model = DNALMRunner(*self.modelParam, threads=threads)
-        lines = model.run(samples)
+def runML(param, samples:list[Sample|ProteinSample], cacheAveEmbFile, nextOffset_ave, queue)->None:
+    # if (self.pooling == "nosplit"):
+    #     threads = min(multiprocessing.cpu_count(), 16)
+    # else:
+    #     threads = multiprocessing.cpu_count()
 
-        fp_cls = open(self.cacheCLSEmbFile, 'at')
-        fp_ave = open(self.cacheAveEmbFile, 'at')
-        
-        for seq_name, (cls, ave) in lines.items():
-            self.cachedSamples_cls[seq_name] = self.nextOffset_cls
-            self.cachedSamples_ave[seq_name] = self.nextOffset_ave
+    model = DNALMRunner(*param)
+    lines = model.run(samples)
+    model.clean()
+    del model
 
-            clsText = f"{seq_name}\t{IOUtils.encodeBase64(cls.astype(numpy.float32))}\n"
-            aveText = f"{seq_name}\t{IOUtils.encodeBase64(ave.astype(numpy.float32))}\n"
+    # fp_cls = open(self.cacheCLSEmbFile, 'at')
+    fp_ave = open(cacheAveEmbFile, 'at')
 
-            fp_cls.write(clsText)
-            fp_ave.write(aveText)
-            self.nextOffset_cls += len(clsText)
-            self.nextOffset_ave += len(aveText)
+    cachedSamples_ave = {}
+    
+    for seq_name, ave in lines.items():
+        # self.cachedSamples_cls[seq_name] = self.nextOffset_cls
+        cachedSamples_ave[seq_name] = nextOffset_ave
 
-        self.cachedSamples_cls["nextOffset"] = self.nextOffset_cls
-        self.cachedSamples_ave["nextOffset"] = self.nextOffset_ave
+        # clsText = f"{seq_name}\t{IOUtils.encodeBase64(cls.astype(numpy.float32))}\n"
+        aveText = f"{seq_name}\t{IOUtils.encodeBase64(ave.astype(numpy.float32))}\n"
 
-        fp_cls.close()
-        fp_ave.close()
+        # fp_cls.write(clsText)
+        fp_ave.write(aveText)
+        # self.nextOffset_cls += len(clsText)
+        nextOffset_ave += len(aveText)
 
-        del model
+    # self.cachedSamples_cls["nextOffset"] = self.nextOffset_cls
+    cachedSamples_ave["nextOffset"] = nextOffset_ave
 
-        for protein in samples:
-            if (protein.id not in self.cachedSamples_cls):
-                self.cachedSamples_cls[protein.id] = -1
-            if (protein.id not in self.cachedSamples_ave):
-                self.cachedSamples_ave[protein.id] = -1
-        
-        with open(self.cacheCLSEmbIndex, 'wt') as fp:
-            json.dump(self.cachedSamples_cls, fp, indent=2)
-        with open(self.cacheAveEmbIndex, 'wt') as fp:
-            json.dump(self.cachedSamples_ave, fp, indent=2)
+    # fp_cls.close()
+    fp_ave.close()
 
+    for protein in samples:
+        # if (protein.id not in self.cachedSamples_cls):
+        #     self.cachedSamples_cls[protein.id] = -1
+        if (protein.id not in cachedSamples_ave):
+            cachedSamples_ave[protein.id] = -1
+
+    queue.put(cachedSamples_ave)
+    
 
 def softmin(distances):
     w = numpy.exp(-distances)

@@ -148,7 +148,7 @@ class NucleotideUtil:
                     os.remove(f"{cDNAoutputPrefix}.{i}")
 
         cachedProteinFP = open(self.proteinFasta)
-        cachedCDNAFP = open(self.proteinFasta)
+        cachedCDNAFP = open(self.cDNAFasta)
         for sample in samplesNotLoaded:
             self.loadProteinSample(sample, cachedProteinFP, cachedCDNAFP)
         cachedProteinFP.close()
@@ -169,7 +169,7 @@ class NucleotideUtil:
             offset = self.cachedCDNAs[protein]
             cachedCDNAFP.seek(offset)
             sample.cDNAs.append(ProteinSample(SeqRecord(
-                Seq(cachedProteinFP.readline().strip()),
+                Seq(cachedCDNAFP.readline().strip()),
                 id=protein,
                 description=protein)))
         
