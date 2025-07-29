@@ -17,7 +17,8 @@ class MLResult(Result):
 
 
     def addResult(self, name, score):
-        assert (name in taxoTree.ICTVTree.nodes)
+        if (name not in taxoTree.ICTVTree.nodes):
+            raise ValueError(f"{name} is not a valid ICTV name")
         thisNode = taxoTree.ICTVTree.nodes[name]
 
         self.scores[thisNode.rank] = score

@@ -51,26 +51,32 @@ class MLModule(Module):
         genusParams = [
             ("esm2_t33_256_enlarge", 256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus"),
             ("esm2_t33_256", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("working/seq_name_genbank_2024_2024_exclusion.csv.1_2_5_10_30_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("working/seq_name_genbank_2024_2024_exclusion.csv.SCL.genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
         ]
 
-        realmParam = realmParams[int(gen[0])]
-        kingdomParam = kingdomParams[int(gen[1])]
-        phylumParam = phylumParams[int(gen[2])]
-        classParam = classParams[int(gen[3])]
-        orderParam = orderParams[int(gen[4])]
-        familyParam = familyParams[int(gen[5])]
-        genusParam = genusParams[int(gen[6])]
-
-        self.modelParams = {
-            "realm": (*realmParam, "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
-            "kingdom": (*kingdomParam, "facebook/esm2_t33_650M_UR50D", 40, config.mlBatchSize),
-            "phylum": (*phylumParam, "facebook/esm2_t33_650M_UR50D", 51, config.mlBatchSize),
-            "class": (*classParam, "facebook/esm2_t33_650M_UR50D", 76, config.mlBatchSize),
-            "order": (*orderParam, "facebook/esm2_t33_650M_UR50D", 981, config.mlBatchSize),
-            "family": (*familyParam, "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize),
-            "genus": (*genusParam, "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize),
-        }
-
+        self.modelParams = {}
+        if (gen[0] != "N"):
+            realmParam = realmParams[int(gen[0])]
+            self.modelParams["realm"] = (*realmParam, "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize)
+        if (gen[1] != "N"):
+            kingdomParam = kingdomParams[int(gen[1])]
+            self.modelParams["kingdom"] = (*kingdomParam, "facebook/esm2_t33_650M_UR50D", 40, config.mlBatchSize)
+        if (gen[2] != "N"):
+            phylumParam = phylumParams[int(gen[2])]
+            self.modelParams["phylum"] = (*phylumParam, "facebook/esm2_t33_650M_UR50D", 51, config.mlBatchSize)
+        if (gen[3] != "N"):
+            classParam = classParams[int(gen[3])]
+            self.modelParams["class"] = (*classParam, "facebook/esm2_t33_650M_UR50D", 76, config.mlBatchSize)
+        if (gen[4] != "N"):
+            orderParam = orderParams[int(gen[4])]
+            self.modelParams["order"] = (*orderParam, "facebook/esm2_t33_650M_UR50D", 981, config.mlBatchSize)
+        if (gen[5] != "N"):
+            familyParam = familyParams[int(gen[5])]
+            self.modelParams["family"] = (*familyParam, "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize)
+        if (gen[6] != "N"):
+            genusParam = genusParams[int(gen[6])]
+            self.modelParams["genus"] = (*genusParam, "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize)
         
     def run(self, samples:list[Sample]):
         NucleotideUtils.extractProtein(samples)
@@ -103,6 +109,22 @@ class MLModule(Module):
 
 
     def runModel(self, samples:list[Sample], rank:str, modelName:str)->list[Sample]:
+        unTerminatedSamples:list[Sample] = list()
+
+        if (os.path.exists(modelName)):
+            df = pandas.read_csv(modelName)
+            results = {}
+            for _, row in df.iterrows():
+                id = row["SampleID"]
+                pred = row["Predicted_Genus_Name"]
+                if ("Unknown" not in pred):
+                    results[id] = pred
+            for sample in samples:
+                if (sample.id in results):
+                    self.resultDict[sample.id].addResult(results[sample.id], 1)
+                if not (self.resultDict[sample.id].terminate):
+                    unTerminatedSamples.append(sample)
+            return unTerminatedSamples
 
         cacheProbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_prob.tmp"
         cacheProbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_prob.json"
@@ -182,7 +204,6 @@ class MLModule(Module):
                 json.dump(cachedSamples_prob, fp, indent=2)
         
 
-        unTerminatedSamples:list[Sample] = list()
 
 
         if (self.strategy in ["highest", "topdown", "bottomup"]):
