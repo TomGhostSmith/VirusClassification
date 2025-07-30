@@ -76,6 +76,7 @@ class Config():
 
         self.esmBatchSize = 64
         self.mlBatchSize = 64
+        self.DNABatchSize = 1
 
         # self.updatePath()
 

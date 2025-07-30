@@ -330,19 +330,27 @@ def testModelVirusIdentity(models:dict[str, Module], dataset):
 def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subset='all', missingLabel="Unknown", analyseList:list[tuple[str, str]]=[]):
     additionalInfo = set()
     if (analyseList is not None):
-        for factor1, factor2 in analyseList:
-            if (isinstance(factor1, list) and factor1[0] not in ["protein_length", "length", "protein_count"]):
+        for pair in analyseList:
+            if (len(pair) == 2):
+                factor1, factor2 = pair
+            elif (len(pair) == 3):
+                factor1, factor2, _ = pair
+            else:
+                raise ValueError(f"Unknown analyse task: {pair}")
+            if (isinstance(factor1, list)):
                 if (len(factor1) != 2):
                     raise ValueError(f"Missing bins for customized feature {factor1[0]}")
-                additionalInfo.add(factor1[0])
-            if (isinstance(factor2, list) and factor2[0] not in ["protein_length", "length", "protein_count"]):
+                if (factor1[0] not in ["protein_length", "length", "protein_count"]):
+                    additionalInfo.add(factor1[0])
+            if (isinstance(factor2, list)):
                 if (len(factor2) != 2):
-                    raise ValueError(f"Missing bins for customized feature {factor1[0]}")
-                additionalInfo.add(factor2[0])
+                    raise ValueError(f"Missing bins for customized feature {factor2[0]}")
+                if (factor2[0] not in ["protein_length", "length", "protein_count"]):
+                    additionalInfo.add(factor2[0])
             
             if (isinstance(factor1, str) and factor1 not in models):
                 raise ValueError(f"Unknown model name '{factor1}'")
-            if (isinstance(factor2, str) and factor1 not in models):
+            if (isinstance(factor2, str) and factor2 not in models):
                 raise ValueError(f"Unknown model name '{factor2}'")
         
     samples = testModel(models, dataset, evaluationMethod, subset, missingLabel)
@@ -351,9 +359,6 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
         IOUtils.showInfo("Nothing to analyse. Exit")
         return
     NucleotideUtils.extractProtein(samples)
-
-    DFs:dict[str, pandas.DataFrame] = dict()  # desc: DF
-    imgs:dict[str, str] = dict()
     
     # sheet 1: all information
     sampleIDs = list()
@@ -363,9 +368,6 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     stdResults = list()
     stdResultRank = list()
     modelResults:dict[str, list[tuple[str, str, str, str]]] = {model.moduleName: list() for model in models.values()} # for each model, provide a list of (model_result, model_result_rank, LCA_rank)
-
-    modelRankResults:dict[str, dict[str, list[str]]] = {modelDesc: {r: list() for r in config.evaluationRanks} for modelDesc in models.keys()}
-
 
     summaryDict = {
         "id": [],
@@ -387,13 +389,10 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
         for k in additionalInfo:
             summaryDict[k].append(sample.info.get(k))
 
-        stdRanks = {r: None for r in config.evaluationRanks}
         if (std is not None and std.ICTVNode is not None):
             stdNode = std.ICTVNode
             stdResults.append(stdNode.name)
             stdResultRank.append(stdNode.rank)
-            for n in stdNode.path:
-                stdRanks[n.rank] = n.name  # non-standard rank will be discarded later
         else:
             stdNode = None
             stdResults.append('N/A')
@@ -401,32 +400,16 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
 
         for modelDesc, model in models.items():
             pred = sample.results[model.moduleName]
-            predRanks = {r: None for r in config.evaluationRanks}
             if (pred is not None and pred.node is not None):
                 pred = pred.node.ICTVNode
                 if (stdNode is not None):
-                    for n in pred.path:
-                        predRanks[n.rank] = n.name
                     LCANode = taxoTree.ICTVTree.findLCA([pred, stdNode])
                     modelResults[model.moduleName].append((pred.name, pred.rank, LCANode.name, LCANode.rank))
                 else:
                     modelResults[model.moduleName].append((pred.name, pred.rank, "N/A", "N/A"))
             else:
                 modelResults[model.moduleName].append(("N/A", "N/A", "N/A", "N/A"))
-            
-            for r in config.evaluationRanks:
-                if (stdRanks[r] is None):
-                    if (predRanks[r] is None):
-                        modelRankResults[modelDesc][r].append("No_pred No_GT")
-                    else:
-                        modelRankResults[modelDesc][r].append("has_pred No_GT")
-                else:
-                    if (predRanks[r] is None):
-                        modelRankResults[modelDesc][r].append("No_pred has_GT")
-                    elif (predRanks[r] == stdRanks[r]):
-                        modelRankResults[modelDesc][r].append("correct")
-                    else:
-                        modelRankResults[modelDesc][r].append("wrong")
+
 
     summaryDict["id"] = sampleIDs
     summaryDict["length"] = sampleLengths
@@ -446,247 +429,112 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     #     IOUtils.showInfo(f"{k}: {len(v)}")
     
     summaryDF = pandas.DataFrame(summaryDict)
-    DFs["raw results"] = summaryDF
-
-    for k in additionalInfo:
-        if (summaryDF[k].isna().all()):
-            raise ValueError(f"Analysis feature {k} are all None. Please check if the essential model is included")
-
-    # sheet 2: performance related analysis
-    for factor1, factor2 in tqdm(analyseList, desc="sample wise analysis"):
-        if (isinstance(factor1, list) and factor1[0] in ["length", "protein_count", "protein_length"] or factor1[0] in additionalInfo): # perform analyse between length/protein_count/protein_length
-            if (len(factor1) > 1):
-                bins = factor1[1]
-            else:
-                if (factor1[0] in ["length", "protein_length"]):
-                    bins = [-1] + list(range(0, 10000, 1000)) + list(range(10000, 100000, 10000)) + [numpy.inf]
-                else:
-                    bins = [-1, 0] + list(range(10, 210, 10)) + [numpy.inf]
-            factor1 = factor1[0]
-            cellText = f"{factor1} \\ {factor2[0]}"
-            summaryDF[cellText] = pandas.cut(summaryDF[factor1], bins=bins, include_lowest=True)
-
-            if (len(factor2) > 1):
-                bins = factor2[1]
-            else:
-                if (factor2[0] in ["length", "protein_length"]):
-                    bins = [-1] + list(range(0, 10000, 1000)) + list(range(10000, 100000, 10000)) + [numpy.inf]
-                else:
-                    bins = [-1, 0] + list(range(10, 210, 10)) + [numpy.inf]
-            factor2 = factor2[0]
-            summaryDF[f"{factor2}_"] = pandas.cut(summaryDF[factor2], bins=bins, include_lowest=True)
-            analyseDF = pandas.crosstab(summaryDF[cellText], summaryDF[f"{factor2}_"], dropna=False)
-            DFs[f"{factor1} vs {factor2}"] = analyseDF
-
-        elif (isinstance(factor2, list) and factor2[0] in ["length", "protein_count", "protein_length"]  or factor2[0] in additionalInfo):
-            if (len(factor2) > 1):
-                bins = factor2[1]
-            else:
-                bins = None
-            factor2 = factor2[0]
-            modelDesc = factor1
-            if (f"{modelDesc} vs {factor2}" in DFs):
-                dfIdx = 1
-                dfName = f"{modelDesc} vs {factor2} {dfIdx}"
-                while (dfName in DFs):
-                    dfIdx += 1
-                    dfName = f"{modelDesc} vs {factor2} {dfIdx}"
-            else:
-                dfIdx = 0
-                dfName = f"{modelDesc} vs {factor2}"
-            # need to manually bin the factor 2
-            if (factor2 in ["length", "protein_length"]):
-                if (bins is None):
-                    bins = [-1] + list(range(0, 10000, 1000)) + list(range(10000, 100000, 10000)) + [numpy.inf]
-                bin2 = [-1] + list(range(0, 100000, 100))
-                gap = 50
-                # bins = numpy.linspace(summaryDF[factor2].min(), summaryDF[factor2].max(), 21)
-            else:
-                if (bins is None):
-                    bins = [-1, 0] + list(range(10, 210, 10)) + [numpy.inf]
-                bin2 = list(range(-1, 200))
-                gap = 10
-            summaryDF[f"{factor2}_"] = pandas.cut(summaryDF[factor2], bins=bins, include_lowest=True)
-            summaryDF['A_bin2'] = pandas.cut(summaryDF[factor2], bins=bin2, include_lowest=True)
-            summaryDF["tmp"] = pandas.Categorical(summaryDF[f"{modelDesc}_LCA_rank"], categories=["N/A"] + config.evaluationRanks, ordered=True)
-            analyseDF = pandas.crosstab(summaryDF[f"{factor2}_"], summaryDF["tmp"], dropna=False)
-            DFs[dfName] = analyseDF
-
-            ct = pandas.crosstab(summaryDF['A_bin2'], summaryDF["tmp"], dropna=False)
-            ct_percent = ct.div(ct.sum(axis=1), axis=0).fillna(0)
-            x = [str(interval) for interval in ct_percent.index]
-            ys = ct_percent.T.values
-            n_cate = len(config.evaluationRanks) + 1
-            cmap = get_cmap('plasma')
-            colors = [cmap(i / n_cate) for i in range(n_cate)]
-
-            if (dfIdx > 0):  # only draw the image for the first analyse DF, if there are multiple
-                plt.figure(figsize=(20, 6))
-                plt.stackplot(x, ys, labels=["N/A"] + config.evaluationRanks, colors=colors)
-                plt.xticks(ticks = range(0, len(x), gap), labels=[x[i] for i in range(0, len(x), gap)], rotation=90)
-                plt.legend(loc='upper right')
-                plt.title(f'{modelDesc} vs {factor2}')
-                plt.xlabel(factor2)
-                plt.ylabel("Proportion")
-                plt.tight_layout()
-                plt.savefig(f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png")
-                imgs[dfName] = f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png"
-
-            # another df, shows detailed statistics (correct, error, etc.) vs factor 2 for each rank
-            stackDFs = list()
-            categories = ["correct", "wrong", "No_pred has_GT", "has_pred No_GT", "No_pred No_GT"]
-            for r in config.evaluationRanks:
-                tmpDF = pandas.DataFrame({
-                    "tmp": modelRankResults[modelDesc][r]
-                })
-                tmpDF["tmp"] = pandas.Categorical(tmpDF["tmp"], categories=categories, ordered=True)
-                tmpDF[factor2] = summaryDF[f"{factor2}_"]
-                stackDFs.append(pandas.DataFrame([[r, "", "", "", "", ""]], columns=[factor2] + categories))
-                stackDFs.append(pandas.DataFrame([[factor2] + categories], columns=[factor2] + categories))
-                cf = pandas.crosstab(tmpDF[factor2], tmpDF["tmp"], dropna=False)
-                cf[factor2] = summaryDF[f"{factor2}_"].cat.categories
-                stackDFs.append(cf)
-            stackDF = pandas.concat(stackDFs)
-            DFs[f"{dfName} per rank confusion matrics"] = stackDF
-
-            # 3rd df, shows detailed statistics vs rank for each bin in factor 2
-            tmpDF = pandas.DataFrame({
-                factor2: numpy.tile(summaryDF[f"{factor2}_"], len(config.evaluationRanks)),
-                "rank": numpy.concatenate([numpy.tile(x, len(samples)) for x in config.evaluationRanks]),
-                "res": numpy.concatenate([modelRankResults[modelDesc][r] for r in config.evaluationRanks])
-            })
-
-            groups = tmpDF.groupby(factor2)
-            stackDFs = list()
-            for group, gdf in groups:
-                gdf["rank"] = pandas.Categorical(gdf["rank"], categories=config.evaluationRanks, ordered=True)
-                gdf["res"] = pandas.Categorical(gdf["res"], categories=categories, ordered=True)
-                stackDFs.append(pandas.DataFrame([[group, "", "", "", "", ""]], columns=["rank"] + categories))
-                stackDFs.append(pandas.DataFrame([["rank"] + categories], columns=["rank"] + categories))
-                cf = pandas.crosstab(gdf["rank"], gdf["res"], dropna=False)
-                cf["rank"] = config.evaluationRanks
-                stackDFs.append(cf)
-            stackDF = pandas.concat(stackDFs)
-            DFs[f"{dfName} per bin confusion matrics"] = stackDF
-
-            # for c in summaryDF[f"{factor2}_"].cat.categories:
-
-
-
-        elif (isinstance(factor2, list) and len(factor2) > 1):
-            # one model compared to multi model, confusion matrix only
-            tmpDF = {}
-            stackDFs = list()
-            for r in config.evaluationRanks:
-                tmpDF[f"model1_{r}"] = modelRankResults[modelDesc1][r]
-                modelDesc = factor2[0]
-                tmpDF[f"model2_{r}"] = numpy.array(modelRankResults[modelDesc][r])
-                for modelDesc in factor2[1:]:
-                    tmpDF[f"model2_{r}"] = numpy.where(numpy.array(modelRankResults[modelDesc][r]) == tmpDF[f"model2_{r}"], tmpDF[f"model2_{r}"], "Other")
-            tmpDF = pandas.DataFrame(tmpDF)
-            
-            cellText = f"{modelDesc1} \\ {','.join(factor2)}"
-            categories = ["correct", "wrong", "No_pred has_GT", "has_pred No_GT", "No_pred No_GT"]
-            for r in config.evaluationRanks:
-                stackDFs.append(pandas.DataFrame([[r, "", "", "", "", "", ""]], columns=['confusion matrics'] + categories + ["Other"]))
-                stackDFs.append(pandas.DataFrame([[cellText] + categories + ["Other"]], columns=['confusion matrics'] + categories + ["Other"]))
-                tmpDF[cellText] = pandas.Categorical(tmpDF[f"model1_{r}"], categories=categories, ordered=True)
-                tmpDF["tmp"] = pandas.Categorical(tmpDF[f"model2_{r}"], categories=categories + ["Other"], ordered=True)
-                rankDF = pandas.crosstab(tmpDF[cellText], tmpDF[f"tmp"], dropna=False)
-                rankDF["confusion matrics"] = categories
-                stackDFs.append(rankDF)
-
-            stackDF = pandas.concat(stackDFs)
-            DFs[f'{modelDesc1} vs {",".join(factor2)}: confusion matrics'] = stackDF
-
-        else:
-            modelDesc1 = factor1
-            modelDesc2 = factor2[0] if isinstance(factor2, list) else factor2
-            model1 = models[modelDesc1]
-            model2 = models[modelDesc2]
-            # df1: cross table of two models
-            cellText = f"{modelDesc1} \\ {modelDesc2}"
-            summaryDF[cellText] = pandas.Categorical(summaryDF[f"{modelDesc1}_LCA_rank"], categories=["N/A"] + config.evaluationRanks, ordered=True)
-            summaryDF["tmp2"] = pandas.Categorical(summaryDF[f"{modelDesc2}_LCA_rank"], categories=["N/A"] + config.evaluationRanks, ordered=True)
-            analyseDF = pandas.crosstab(summaryDF[cellText], summaryDF[f"tmp2"], dropna=False)
-            DFs[f'{modelDesc1} vs {modelDesc2}: difference'] = analyseDF
-
-
-            # df2: similarity table of two models
-            modelLCAs = list()
-            modelGTLCAs = list()
-            for sample in samples:
-                std = sample.info["stdResult"]
-                if (std is None or std.ICTVNode is None):  # currently we only focus those with GT
-                    modelLCAs.append("No GT")
-                    modelGTLCAs.append("No GT")
-                    continue
-                stdNode = std.ICTVNode
-                pred1 = sample.results[model1.moduleName]
-                pred2 = sample.results[model2.moduleName]
-
-                pred1Avail = pred1 is not None and pred1.node is not None
-                pred2Avail = pred2 is not None and pred2.node is not None
-                if (pred1Avail):
-                    pred1 = pred1.node.ICTVNode
-                if (pred2Avail):
-                    pred2 = pred2.node.ICTVNode
-
-                if (pred1Avail and pred2Avail):
-                    LCANode1 = taxoTree.ICTVTree.findLCA([pred1, pred2])
-                    LCANode2 = taxoTree.ICTVTree.findLCA([pred1, pred2, stdNode])
-                    modelLCAs.append(LCANode1.rank)
-                    modelGTLCAs.append(LCANode2.rank)
-                elif (pred1Avail):
-                    modelLCAs.append(f"{modelDesc1}_only")
-                    modelGTLCAs.append(f"{modelDesc1}_only")
-                elif (pred2Avail):
-                    modelLCAs.append(f"{modelDesc2}_only")
-                    modelGTLCAs.append(f"{modelDesc2}_only")
-                else:
-                    modelLCAs.append("N/A")
-                    modelGTLCAs.append("N/A")
-            
-            tmpDF = pandas.DataFrame({
-                "id": [sample.id for sample in samples],
-                "modelLCA": modelLCAs,
-                "modelGTLCA": modelGTLCAs
-                }
-            )
-
-            cellText = "model_LCA \\ model_GT_LCA"
-            tmpDF[cellText] = pandas.Categorical(tmpDF["modelLCA"], categories=["N/A"] + config.evaluationRanks + ["No GT", f"{modelDesc1}_only", f"{modelDesc2}_only"], ordered=True)
-            tmpDF["tmp2"] = pandas.Categorical(tmpDF["modelGTLCA"], categories=["N/A"] + config.evaluationRanks + ["No GT", f"{modelDesc1}_only", f"{modelDesc2}_only"], ordered=True)
-            analyseDF = pandas.crosstab(tmpDF[cellText], tmpDF[f"tmp2"], dropna=False)
-            DFs[f'{modelDesc1} vs {modelDesc2}: similarity'] = analyseDF
-
-            # df3: confusion matrics
-            tmpDF = {}
-            stackDFs = list()
-            for r in config.evaluationRanks:
-                tmpDF[f"model1_{r}"] = modelRankResults[modelDesc1][r]
-                tmpDF[f"model2_{r}"] = modelRankResults[modelDesc2][r]
-            tmpDF = pandas.DataFrame(tmpDF)
-            
-            cellText = f"{modelDesc1} \\ {modelDesc2}"
-            categories = ["correct", "wrong", "No_pred has_GT", "has_pred No_GT", "No_pred No_GT"]
-            for r in config.evaluationRanks:
-                stackDFs.append(pandas.DataFrame([[r, "", "", "", "", ""]], columns=['confusion matrics'] + categories))
-                stackDFs.append(pandas.DataFrame([[cellText] + categories], columns=['confusion matrics'] + categories))
-                tmpDF[cellText] = pandas.Categorical(tmpDF[f"model1_{r}"], categories=categories, ordered=True)
-                tmpDF["tmp"] = pandas.Categorical(tmpDF[f"model2_{r}"], categories=categories, ordered=True)
-                rankDF = pandas.crosstab(tmpDF[cellText], tmpDF[f"tmp"], dropna=False)
-                rankDF["confusion matrics"] = categories
-                stackDFs.append(rankDF)
-
-            stackDF = pandas.concat(stackDFs)
-            DFs[f'{modelDesc1} vs {modelDesc2}: confusion matrics'] = stackDF
-    
     analysisIndex = 0
-    fileName = f"{config.analysisFolder}/samplewise/sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
+    fileName = f"{config.analysisFolder}/samplewise/samples_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
     while (os.path.exists(fileName)):
         analysisIndex += 1
-        fileName = f"{config.analysisFolder}/samplewise/sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
+        fileName = f"{config.analysisFolder}/samplewise/samples_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
+    
+    with pandas.ExcelWriter(fileName) as writer:
+        summaryDF.to_excel(writer, sheet_name="raw results", index=False)
+
+    if (analyseList):
+        analysis(analysisIndex, summaryDF, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")
+
+
+# input: 
+# - analyseList: a list of analyse tasks: [factor1, factor2, constraint=None]
+#   - factor 1 can be a field with bins, or a model name
+#   - factor 2 can be a field with bins, or a model name, or a set of model names
+#   - constraint can be a function f(row)->bool to focus on specific samples
+# - summaryDF is the data frame with all information needed
+# - outputname is the file name for output. If exists, it will add number behind it
+def analysis(analyseList, summaryDF, outputName="analysis"):
+    for field in ["id", "length", "protein_count", "protein_length", "ground_truth"]:
+        if field not in summaryDF:
+            raise ValueError(f"Required field {field} is missing")
+        
+    models = set()
+    fields = set()
+    missingFields = set()
+    analyseTasks = []
+    for pair in analyseList:
+        # check #member of pair
+        if (len(pair) == 2):
+            factor1, factor2 = pair
+            constraint = None
+        elif (len(pair) == 3):
+            factor1, factor2, constraint = pair
+            analyseTasks.append(factor1, factor2, constraint)
+        else:
+            IOUtils.showInfo(f"Unknown analysis combination: {pair}")
+            continue
+
+        # check if factor1 is valid
+        if (isinstance(factor1, list)):
+            if (len(factor1) != 2):
+                IOUtils.showInfo(f"Missing bins for customized feature {factor1[0]}", "ERROR")
+                continue
+            if (factor1[0] not in summaryDF):
+                IOUtils.showInfo(f"Field {factor1[0]} is missing", "ERROR")
+                continue
+            fields.add(factor1[0])
+        elif (isinstance(factor1, str) and f"{factor1}_pred" in summaryDF):
+            models.add(factor1)
+        else:
+            IOUtils.showInfo(f"Unknown factor: {factor1}")
+            continue
+
+        # check if factor2 is valid
+        if (isinstance(factor2, list)):
+            if (len(factor2) != 2):
+                IOUtils.showInfo(f"Missing bins for customized feature {factor2[0]}", "ERROR")
+                continue
+            if (factor2[0] not in summaryDF):
+                IOUtils.showInfo(f"Field {factor2[0]} is missing", "ERROR")
+                continue
+            fields.add(factor2[0])
+        elif (isinstance(factor2, set)):
+            missing = False
+            for model in factor2:
+                if f"{factor2}_pred" not in summaryDF:
+                    IOUtils.showInfo(f"model {model} is missing", "ERROR")
+                    missing = True
+            if (missing):
+                continue
+        elif (isinstance(factor2, str) and f"{factor2}_pred" in summaryDF):
+            models.add(factor2)
+        else:
+            IOUtils.showInfo(f"Unknown factor: {factor2}")
+            continue
+
+        analyseTasks.append(factor1, factor2, constraint)
+    
+    models = list(models)
+
+    modelRankResults = getModelRankResults(summaryDF, models)
+    # sheet 2: performance related analysis
+    DFs:dict[str, pandas.DataFrame] = dict()  # desc: DF
+    DFs["raw results"] = summaryDF
+    imgs:dict[str, str] = dict()
+
+    for factor1, factor2, constraint in tqdm(analyseTasks, desc="sample wise analysis"):
+        if (isinstance(factor1, list) and isinstance(factor2, list)): 
+            factor2factorConfusion(summaryDF, factor1, factor2, constraint, DFs, imgs)
+        elif (isinstance(factor1, str) and isinstance(factor2, list)):
+            model2factorConfusion(summaryDF, modelRankResults, factor1, factor2, constraint, DFs, imgs)
+        elif (isinstance(factor1, str) and isinstance(factor2, set)):
+            model2modelsConfusion(summaryDF, modelRankResults, factor1, factor2, constraint, DFs, imgs)
+        elif (isinstance(factor1, str) and isinstance(factor2, str)):
+            model2modelConfusion(summaryDF, modelRankResults, factor1, factor2, constraint, DFs, imgs)
+        else:
+            IOUtils.showInfo(f"Unknown analysis combination: '{factor1}' vs '{factor2}' under constraint {constraint}")
+    
+    analysisIndex = 0
+    fileName = f"{config.analysisFolder}/samplewise/{outputName}_{analysisIndex}.xlsx"
+    while (os.path.exists(fileName)):
+        analysisIndex += 1
+        fileName = f"{config.analysisFolder}/samplewise/{outputName}_{analysisIndex}.xlsx"
     
     with pandas.ExcelWriter(fileName) as writer:
         sheetNames = dict()
@@ -712,6 +560,316 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     wb.save(fileName)
 
     IOUtils.showInfo("Analyse finished")
+
+def getModelRankResults(summaryDF:pandas.DataFrame, models):
+    modelRankResults:dict[str, dict[str, list[str]]] = {modelDesc: {r: [] for r in config.evaluationRanks} for modelDesc in models}
+    for _, row in summaryDF.iterrows():
+        # get ground truth labels
+        stdRanks = {r: None for r in config.evaluationRanks}
+        std = taxoTree.ICTVTree.nodes.get(row["ground_truth"])
+        if (std is not None):
+            for n in std.path:
+                stdRanks[n.rank] = n.name  # non-standard rank will be discarded later
+        
+        # get rank result for each model
+        for modelDesc in models:
+            predRanks = {r: None for r in config.evaluationRanks}
+            pred = row[f"{modelDesc}_pred"]
+            if pred is not None:
+                for n in pred.path:
+                    predRanks[n.rank] = n.name
+
+            for r in config.evaluationRanks:
+                if (stdRanks[r] is None):
+                    if (predRanks[r] is None):
+                        modelRankResults[modelDesc][r].append("No_pred No_GT")
+                    else:
+                        modelRankResults[modelDesc][r].append("has_pred No_GT")
+                else:
+                    if (predRanks[r] is None):
+                        modelRankResults[modelDesc][r].append("No_pred has_GT")
+                    elif (predRanks[r] == stdRanks[r]):
+                        modelRankResults[modelDesc][r].append("correct")
+                    else:
+                        modelRankResults[modelDesc][r].append("wrong")
+
+
+def model2modelConfusion(summaryDF:pandas.DataFrame, modelRankResults, factor1, factor2, constraint, DFs, imgs):
+    modelDesc1 = factor1
+    modelDesc2 = factor2
+
+    modelLCAs = []
+    modelGTLCAs = []
+    LCA1s = []
+    LCA2s = []
+    validIndexes = []
+    for idx, row in summaryDF.iterrows():
+        if (constraint and not constraint(row)):
+            continue
+        validIndexes.append(idx)
+        std = taxoTree.ICTVTree.nodes.get(row["ground_truth"])
+        if (std is None):  # currently we only focus those with GT
+            LCA1s.append("N/A")
+            LCA2s.append("N/A")
+            modelLCAs.append("No GT")
+            modelGTLCAs.append("No GT")
+            continue
+        pred1 = taxoTree.ICTVTree.nodes.get(row[f"{modelDesc1}_pred"])
+        pred2 = taxoTree.ICTVTree.nodes.get(row[f"{modelDesc2}_pred"])
+
+        if (pred1 is not None and pred2 is not None):
+            LCANode1 = taxoTree.ICTVTree.findLCA([pred1, std])
+            LCANode2 = taxoTree.ICTVTree.findLCA([pred2, std])
+            LCANode3 = taxoTree.ICTVTree.findLCA([pred1, pred2])
+            LCANode4 = taxoTree.ICTVTree.findLCA([pred1, pred2, std])
+            LCA1s.append(LCANode1.rank)
+            LCA2s.append(LCANode2.rank)
+            modelLCAs.append(LCANode3.rank)
+            modelGTLCAs.append(LCANode4.rank)
+        elif (pred1 is not None):
+            LCANode1 = taxoTree.ICTVTree.findLCA([pred1, std])
+            LCA1s.append(LCANode1.rank)
+            LCA2s.append("N/A")
+            modelLCAs.append(f"{modelDesc1}_only")
+            modelGTLCAs.append(f"{modelDesc1}_only")
+        elif (pred2 is not None):
+            LCANode2 = taxoTree.ICTVTree.findLCA([pred2, std])
+            LCA1s.append("N/A")
+            LCA2s.append(LCANode2.rank)
+            modelLCAs.append(f"{modelDesc2}_only")
+            modelGTLCAs.append(f"{modelDesc2}_only")
+        else:
+            LCA1s.append("N/A")
+            LCA2s.append("N/A")
+            modelLCAs.append("N/A")
+            modelGTLCAs.append("N/A")
+    
+    # df1: cross table of two models
+    tmpDF = pandas.DataFrame({
+        modelDesc1: LCA1s,
+        modelDesc2: LCA2s
+        }
+    )
+    cellText = f"{modelDesc1} \\ {modelDesc2}"
+    tmpDF[cellText] = pandas.Categorical(tmpDF[modelDesc1], categories=["N/A"] + config.evaluationRanks, ordered=True)
+    tmpDF["tmp2"] = pandas.Categorical(tmpDF[modelDesc2], categories=["N/A"] + config.evaluationRanks, ordered=True)
+    analyseDF = pandas.crosstab(tmpDF[cellText], tmpDF[f"tmp2"], dropna=False)
+    DFs[f'{modelDesc1} vs {modelDesc2}: difference'] = analyseDF
+    
+    # df2: similarity table of two models
+    tmpDF = pandas.DataFrame({
+        "modelLCA": modelLCAs,
+        "modelGTLCA": modelGTLCAs
+        }
+    )
+    cellText = "model_LCA \\ model_GT_LCA"
+    tmpDF[cellText] = pandas.Categorical(tmpDF["modelLCA"], categories=["N/A"] + config.evaluationRanks + ["No GT", f"{modelDesc1}_only", f"{modelDesc2}_only"], ordered=True)
+    tmpDF["tmp2"] = pandas.Categorical(tmpDF["modelGTLCA"], categories=["N/A"] + config.evaluationRanks + ["No GT", f"{modelDesc1}_only", f"{modelDesc2}_only"], ordered=True)
+    analyseDF = pandas.crosstab(tmpDF[cellText], tmpDF[f"tmp2"], dropna=False)
+    DFs[f'{modelDesc1} vs {modelDesc2}: similarity'] = analyseDF
+
+    # df3: confusion matrics
+    tmpDF = {}
+    stackDFs = list()
+    for r in config.evaluationRanks:
+        r1 = modelRankResults[modelDesc1][r]
+        r2 = modelRankResults[modelDesc2][r]
+        tmpDF[f"model1_{r}"] = [r1[i] for i in validIndexes]
+        tmpDF[f"model2_{r}"] = [r2[i] for i in validIndexes]
+    tmpDF = pandas.DataFrame(tmpDF)
+    
+    cellText = f"{modelDesc1} \\ {modelDesc2}"
+    categories = ["correct", "wrong", "No_pred has_GT", "has_pred No_GT", "No_pred No_GT"]
+    for r in config.evaluationRanks:
+        stackDFs.append(pandas.DataFrame([[r, "", "", "", "", ""]], columns=['confusion matrics'] + categories))
+        stackDFs.append(pandas.DataFrame([[cellText] + categories], columns=['confusion matrics'] + categories))
+        tmpDF[cellText] = pandas.Categorical(tmpDF[f"model1_{r}"], categories=categories, ordered=True)
+        tmpDF["tmp"] = pandas.Categorical(tmpDF[f"model2_{r}"], categories=categories, ordered=True)
+        rankDF = pandas.crosstab(tmpDF[cellText], tmpDF[f"tmp"], dropna=False)
+        rankDF["confusion matrics"] = categories
+        stackDFs.append(rankDF)
+
+    stackDF = pandas.concat(stackDFs)
+    DFs[f'{modelDesc1} vs {modelDesc2}: confusion matrics'] = stackDF
+
+def model2modelsConfusion(summaryDF:pandas.DataFrame, modelRankResults, factor1, factor2, constraint, DFs, imgs):
+    # one model compared to multi model, confusion matrix only
+    modelDesc1 = factor1
+    factor2 = list(factor2)
+    tmpDF:dict[str, list] = {}
+    stackDFs = []
+
+    validIndexes = []
+    for idx, row in summaryDF.iterrows():
+        if (constraint and not constraint(row)):
+            continue
+        validIndexes.append(idx)
+
+
+    for r in config.evaluationRanks:
+        r1 = modelRankResults[modelDesc1][r]
+        tmpDF[f"model1_{r}"] = [r1[i] for i in validIndexes]
+
+        modelDesc = factor2[0]
+        r2 = modelRankResults[modelDesc][r]
+        tmpDF[f"model2_{r}"] = numpy.array([r2[i] for i in validIndexes])
+
+        for modelDesc in factor2[1:]:
+            r2 = modelRankResults[modelDesc][r]
+            tmpDF[f"model2_{r}"] = numpy.where(numpy.array([r2[i] for i in validIndexes]) == tmpDF[f"model2_{r}"], tmpDF[f"model2_{r}"], "Other")
+    tmpDF = pandas.DataFrame(tmpDF)
+    
+    cellText = f"{modelDesc1} \\ {','.join(factor2)}"
+    categories = ["correct", "wrong", "No_pred has_GT", "has_pred No_GT", "No_pred No_GT"]
+    for r in config.evaluationRanks:
+        stackDFs.append(pandas.DataFrame([[r, "", "", "", "", "", ""]], columns=['confusion matrics'] + categories + ["Other"]))
+        stackDFs.append(pandas.DataFrame([[cellText] + categories + ["Other"]], columns=['confusion matrics'] + categories + ["Other"]))
+        tmpDF[cellText] = pandas.Categorical(tmpDF[f"model1_{r}"], categories=categories, ordered=True)
+        tmpDF["tmp"] = pandas.Categorical(tmpDF[f"model2_{r}"], categories=categories + ["Other"], ordered=True)
+        rankDF = pandas.crosstab(tmpDF[cellText], tmpDF[f"tmp"], dropna=False)
+        rankDF["confusion matrics"] = categories
+        stackDFs.append(rankDF)
+
+    stackDF = pandas.concat(stackDFs)
+    DFs[f'{modelDesc1} vs {",".join(factor2)}: confusion matrics'] = stackDF
+
+def model2factorConfusion(summaryDF:pandas.DataFrame, modelRankResults, factor1, factor2, constraint, DFs, imgs):
+    bins = factor2[1]
+    factor2 = factor2[0]
+    modelDesc = factor1
+    if (f"{modelDesc} vs {factor2}" in DFs):
+        dfIdx = 1
+        dfName = f"{modelDesc} vs {factor2} {dfIdx}"
+        while (dfName in DFs):
+            dfIdx += 1
+            dfName = f"{modelDesc} vs {factor2} {dfIdx}"
+    else:
+        dfIdx = 0
+        dfName = f"{modelDesc} vs {factor2}"
+
+    # need to manually bin the factor 2
+    if (factor2 in ["length", "protein_length"]):
+        bin2 = [-1] + list(range(0, 100000, 100))
+        gap = 50
+        # bins = numpy.linspace(summaryDF[factor2].min(), summaryDF[factor2].max(), 21)
+    else:
+        bin2 = list(range(-1, 200))
+        gap = 10
+
+
+    LCAs = []
+    factors = []
+    validIndexes = []
+    for idx, row in summaryDF.iterrows():
+        if (constraint and not constraint(row)):
+            continue
+        validIndexes.append(idx)
+        factors.append(row[factor2])
+        std = taxoTree.ICTVTree.nodes.get(row["ground_truth"])
+        if (std is None):  # currently we only focus those with GT
+            LCAs.append("N/A")
+            continue
+        pred1 = taxoTree.ICTVTree.nodes.get(row[f"{modelDesc}_pred"])
+
+        if (pred1 is not None):
+            LCANode = taxoTree.ICTVTree.findLCA([pred1, std])
+            LCAs.append(LCANode.rank)
+        else:
+            LCAs.append("N/A")
+
+    # df1: LCA vs factor2
+    sumDF = pandas.DataFrame({
+        "LCA": LCAs,
+        "factors": factors
+    })
+
+    f2 = pandas.cut(sumDF["factors"], bins=bins, include_lowest=True)
+    if f2.isna().any():
+        f2 = f2.cat.add_categories("N/A").fillna("N/A")
+    sumDF[f"factors_"] = f2
+    sumDF['A_bin2'] = pandas.cut(sumDF["factors"], bins=bin2, include_lowest=True)
+    sumDF["tmp"] = pandas.Categorical(sumDF["LCA"], categories=["N/A"] + config.evaluationRanks, ordered=True)
+    analyseDF = pandas.crosstab(sumDF["factors_"], sumDF["tmp"], dropna=False)
+    DFs[dfName] = analyseDF
+
+    # img for df1
+    ct = pandas.crosstab(sumDF['A_bin2'], sumDF["tmp"], dropna=False)
+    ct_percent = ct.div(ct.sum(axis=1), axis=0).fillna(0)
+    x = [str(interval) for interval in ct_percent.index]
+    ys = ct_percent.T.values
+    n_cate = len(config.evaluationRanks) + 1
+    cmap = get_cmap('plasma')
+    colors = [cmap(i / n_cate) for i in range(n_cate)]
+
+    if (dfIdx > 0):  # only draw the image for the first analyse DF, if there are multiple
+        plt.figure(figsize=(20, 6))
+        plt.stackplot(x, ys, labels=["N/A"] + config.evaluationRanks, colors=colors)
+        plt.xticks(ticks = range(0, len(x), gap), labels=[x[i] for i in range(0, len(x), gap)], rotation=90)
+        plt.legend(loc='upper right')
+        plt.title(f'{modelDesc} vs {factor2}')
+        plt.xlabel(factor2)
+        plt.ylabel("Proportion")
+        plt.tight_layout()
+        plt.savefig(f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png")
+        imgs[dfName] = f"{config.analysisFolder}/figure/{modelDesc} vs {factor2}.png"
+
+    # df2: shows detailed statistics (correct, error, etc.) vs factor 2 for each rank
+    stackDFs = list()
+    categories = ["correct", "wrong", "No_pred has_GT", "has_pred No_GT", "No_pred No_GT"]
+    for r in config.evaluationRanks:
+        tmpDF = pandas.DataFrame({
+            "tmp": modelRankResults[modelDesc][r]
+        })
+        tmpDF["tmp"] = pandas.Categorical(tmpDF["tmp"], categories=categories, ordered=True)
+        tmpDF[factor2] = sumDF["factors_"]
+        stackDFs.append(pandas.DataFrame([[r, "", "", "", "", ""]], columns=[factor2] + categories))
+        stackDFs.append(pandas.DataFrame([[factor2] + categories], columns=[factor2] + categories))
+        cf = pandas.crosstab(tmpDF[factor2], tmpDF["tmp"], dropna=False)
+        cf[factor2] = sumDF["factors_"].cat.categories
+        stackDFs.append(cf)
+    stackDF = pandas.concat(stackDFs)
+    DFs[f"{dfName} per rank confusion matrics"] = stackDF
+
+    # df3: shows detailed statistics vs rank for each bin in factor 2
+    rankRes = {}
+    for r in config.evaluationRanks:
+        rankRes[r] = [modelRankResults[modelDesc][r][i] for i in validIndexes]
+    tmpDF = pandas.DataFrame({
+        factor2: numpy.tile(sumDF[f"{factor2}_"], len(config.evaluationRanks)),
+        "rank": numpy.concatenate([numpy.tile(x, len(validIndexes)) for x in config.evaluationRanks]),
+        "res": numpy.concatenate([rankRes[r] for r in config.evaluationRanks])
+    })
+
+    groups = tmpDF.groupby(factor2)
+    stackDFs = list()
+    for group, gdf in groups:
+        gdf["rank"] = pandas.Categorical(gdf["rank"], categories=config.evaluationRanks, ordered=True)
+        gdf["res"] = pandas.Categorical(gdf["res"], categories=categories, ordered=True)
+        stackDFs.append(pandas.DataFrame([[group, "", "", "", "", ""]], columns=["rank"] + categories))
+        stackDFs.append(pandas.DataFrame([["rank"] + categories], columns=["rank"] + categories))
+        cf = pandas.crosstab(gdf["rank"], gdf["res"], dropna=False)
+        cf["rank"] = config.evaluationRanks
+        stackDFs.append(cf)
+    stackDF = pandas.concat(stackDFs)
+    DFs[f"{dfName} per bin confusion matrics"] = stackDF
+
+    # for c in summaryDF[f"{factor2}_"].cat.categories:
+
+def factor2factorConfusion(summaryDF:pandas.DataFrame, factor1, factor2, constraint, DFs, imgs):
+    summaryDF = summaryDF[summaryDF.apply(constraint, axis=1)]
+
+    bins = factor1[1]
+    factor1 = factor1[0]
+    bins2 = factor2[1]
+    factor2 = factor2[0]
+    cellText = f"{factor1} \\ {factor2}"
+    summaryDF[cellText] = pandas.cut(summaryDF[factor1], bins=bins, include_lowest=True)
+
+    summaryDF[f"{factor2}_"] = pandas.cut(summaryDF[factor2], bins=bins2, include_lowest=True)
+    analyseDF = pandas.crosstab(summaryDF[cellText], summaryDF[f"{factor2}_"], dropna=False)
+
+    DFs[f"{factor1} vs {factor2}"] = analyseDF
+
 
 def mergeCachedResults():
     comingResultFolder = f"{config.cacheFolder}/resultsFromServer"
@@ -761,3 +919,8 @@ def mergeCachedResults():
             
             IOUtils.showInfo(f"Updated {file}")
             os.remove(filePath)
+
+def reAnalysis(dataset, subset, evaluationMethod, missingLabel, idx, analyseList):
+    fileName = f"{config.analysisFolder}/samplewise/sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{idx}.xlsx"
+    df = pandas.read_excel(fileName, sheet_name="raw results")
+    analysis(analyseList, df, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")

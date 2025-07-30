@@ -61,7 +61,9 @@ class ANI(Module):
                     thisOffset = nextOffset
                     alignmentCount = 0
 
+                thisName = sampleName
                 nextOffset += len(line)
+                alignmentCount += 1
                 targetFP.write(line)
 
             
