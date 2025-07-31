@@ -100,6 +100,8 @@ class ICTVTree():
 
                 # extract the synonyms
                 syn = row["Virus name(s)"]
+                if (pandas.isna(syn)):
+                    continue
                 if syn not in synonyms:
                     synonyms[syn] = {ID}
                 else:

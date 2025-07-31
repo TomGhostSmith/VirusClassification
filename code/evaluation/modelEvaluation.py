@@ -439,7 +439,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
         summaryDF.to_excel(writer, sheet_name="raw results", index=False)
 
     if (analyseList):
-        analysis(analysisIndex, summaryDF, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")
+        analysis(analyseList, summaryDF, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")
 
 
 # input: 
@@ -508,7 +508,7 @@ def analysis(analyseList, summaryDF, outputName="analysis"):
             IOUtils.showInfo(f"Unknown factor: {factor2}")
             continue
 
-        analyseTasks.append(factor1, factor2, constraint)
+        analyseTasks.append((factor1, factor2, constraint))
     
     models = list(models)
 
@@ -574,7 +574,7 @@ def getModelRankResults(summaryDF:pandas.DataFrame, models):
         # get rank result for each model
         for modelDesc in models:
             predRanks = {r: None for r in config.evaluationRanks}
-            pred = row[f"{modelDesc}_pred"]
+            pred = taxoTree.ICTVTree.nodes.get(row[f"{modelDesc}_pred"])
             if pred is not None:
                 for n in pred.path:
                     predRanks[n.rank] = n.name
@@ -592,6 +592,7 @@ def getModelRankResults(summaryDF:pandas.DataFrame, models):
                         modelRankResults[modelDesc][r].append("correct")
                     else:
                         modelRankResults[modelDesc][r].append("wrong")
+    return modelRankResults
 
 
 def model2modelConfusion(summaryDF:pandas.DataFrame, modelRankResults, factor1, factor2, constraint, DFs, imgs):
@@ -835,7 +836,7 @@ def model2factorConfusion(summaryDF:pandas.DataFrame, modelRankResults, factor1,
     for r in config.evaluationRanks:
         rankRes[r] = [modelRankResults[modelDesc][r][i] for i in validIndexes]
     tmpDF = pandas.DataFrame({
-        factor2: numpy.tile(sumDF[f"{factor2}_"], len(config.evaluationRanks)),
+        factor2: numpy.tile(sumDF[f"factors_"], len(config.evaluationRanks)),
         "rank": numpy.concatenate([numpy.tile(x, len(validIndexes)) for x in config.evaluationRanks]),
         "res": numpy.concatenate([rankRes[r] for r in config.evaluationRanks])
     })
@@ -920,7 +921,9 @@ def mergeCachedResults():
             IOUtils.showInfo(f"Updated {file}")
             os.remove(filePath)
 
-def reAnalysis(dataset, subset, evaluationMethod, missingLabel, idx, analyseList):
-    fileName = f"{config.analysisFolder}/samplewise/sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{idx}.xlsx"
-    df = pandas.read_excel(fileName, sheet_name="raw results")
-    analysis(analyseList, df, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")
+def reAnalysis(dataset, evaluationMethod, subset='all', missingLabel="Unknown", idx=0, analyseList=[], rawResult=False):
+    prefix = "samples" if rawResult else "sampleAnalysis" 
+    if (analyseList):
+        fileName = f"{config.analysisFolder}/samplewise/{prefix}_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{idx}.xlsx"
+        df = pandas.read_excel(fileName, sheet_name="raw results", keep_default_na=False)
+        analysis(analyseList, df, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")

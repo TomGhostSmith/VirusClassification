@@ -53,29 +53,36 @@ class MLModule(Module):
             ("esm2_t33_256", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.1_2_5_10_30_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.SCL.genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("working/seq_name_genbank_2024_2024_exclusion.csv.1_2_3_4_5_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("working/seq_name_genbank_2024_2024_exclusion.csv.len_1_lr_1e-5_hidden_dim_512_SCL_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("working/seq_name_genbank_2024_2024_exclusion.csv.len_1_SCL_temp_0.05_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("working/seq_name_genbank_2024_2024_exclusion.csv.len_1_SCL_hiddendim_512_enlarge_protein_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("working/seq_name_genbank_2024_2024_exclusion.csv.len_1_SCL_enlarge_protein_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("working/seq_name_genbank_2024_2024_exclusion.csv.len_1_SCL_temp_0.05_best_enlarge_protein_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("working/seq_name_genbank_2024_2024_exclusion.csv.len_1_SCL_temp_0.15_best_enlarge_protein_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
         ]
 
         self.modelParams = {}
         if (gen[0] != "N"):
-            realmParam = realmParams[int(gen[0])]
+            realmParam = realmParams[ord(gen[0]) - 48]  # 48 is the ascii of "0"
             self.modelParams["realm"] = (*realmParam, "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize)
         if (gen[1] != "N"):
-            kingdomParam = kingdomParams[int(gen[1])]
+            kingdomParam = kingdomParams[ord(gen[1]) - 48]
             self.modelParams["kingdom"] = (*kingdomParam, "facebook/esm2_t33_650M_UR50D", 40, config.mlBatchSize)
         if (gen[2] != "N"):
-            phylumParam = phylumParams[int(gen[2])]
+            phylumParam = phylumParams[ord(gen[2]) - 48]
             self.modelParams["phylum"] = (*phylumParam, "facebook/esm2_t33_650M_UR50D", 51, config.mlBatchSize)
         if (gen[3] != "N"):
-            classParam = classParams[int(gen[3])]
+            classParam = classParams[ord(gen[3]) - 48]
             self.modelParams["class"] = (*classParam, "facebook/esm2_t33_650M_UR50D", 76, config.mlBatchSize)
         if (gen[4] != "N"):
-            orderParam = orderParams[int(gen[4])]
+            orderParam = orderParams[ord(gen[4]) - 48]
             self.modelParams["order"] = (*orderParam, "facebook/esm2_t33_650M_UR50D", 981, config.mlBatchSize)
         if (gen[5] != "N"):
-            familyParam = familyParams[int(gen[5])]
+            familyParam = familyParams[ord(gen[5]) - 48]
             self.modelParams["family"] = (*familyParam, "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize)
         if (gen[6] != "N"):
-            genusParam = genusParams[int(gen[6])]
+            genusParam = genusParams[ord(gen[6]) - 48]
             self.modelParams["genus"] = (*genusParam, "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize)
         
     def run(self, samples:list[Sample]):
