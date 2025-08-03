@@ -215,6 +215,12 @@ class Diamond(Module):
             if result is None:
                 result = PlainResult(taxoTree.ICTVTree.ID2name[winner], score=maxVotes/totalVotes)
 
+
+        proteinCount = len(sample.proteins)
+        if (proteinCount == 1 and result is None):
+            proteinCount = 0.5
+            
+        sample.info["protein_count_match"] = proteinCount
         
         return result
     

@@ -13,6 +13,7 @@ from module.marker import Marker
 from tqdm import tqdm
 import numpy
 import math
+import subprocess
 import multiprocessing
 import time
 
@@ -36,6 +37,7 @@ class DNALM(Module):
         models = {
             "DNABert2": "zhihan1996/DNABERT-2-117M",
             "DNABertS": "zhihan1996/DNABERT-S",
+            "VitaxHyena": None
         }
 
         if (model not in models):
@@ -450,14 +452,39 @@ class DNALM(Module):
                 DNAsToRun.append(DNA)
 
         if (len(DNAsToRun) > 0):
-            q = multiprocessing.SimpleQueue()
-            proc = multiprocessing.Process(target=runML, args=(self.modelParam, DNAsToRun, self.cacheAveEmbFile, self.nextOffset_ave, q))
-            proc.start()
-            cachedSamples_ave = q.get()
-            proc.join()
+            if (self.model == "VitaxHyena"):
+                cwd = "/Software/ViTax"
+                input_fasta = f"{config.cacheFolder}/vitaxHyena.fasta"
+                output_txt = f"{config.cacheFolder}/vitaxHyena.txt"
+                IOUtils.writeSampleFasta(DNAsToRun, input_fasta)
+                cmd = f"conda run -n vitax --no-capture-output python embedding.py --contigs {input_fasta} --out {output_txt}"
+                subprocess.run(cmd, shell=True, cwd=cwd)
+                fp = open(output_txt)                
+                fp_ave = open(self.cacheAveEmbFile, 'at')
+                for line in fp:
+                    seq_name, _ = line.strip().split('\t')
+                    self.cachedSamples_ave[seq_name] = self.nextOffset_ave
+                    fp_ave.write(line)
+                    self.nextOffset_ave += len(line)
+                self.cachedSamples_ave["nextOffset"] = self.nextOffset_ave
 
-            self.cachedSamples_ave.update(cachedSamples_ave)
-            self.nextOffset_ave = cachedSamples_ave["nextOffset"]
+                fp_ave.close()
+                fp.close()
+
+                for protein in samples:
+                    # if (protein.id not in self.cachedSamples_cls):
+                    #     self.cachedSamples_cls[protein.id] = -1
+                    if (protein.id not in cachedSamples_ave):
+                        cachedSamples_ave[protein.id] = -1
+            else:
+                q = multiprocessing.SimpleQueue()
+                proc = multiprocessing.Process(target=runML, args=(self.modelParam, DNAsToRun, self.cacheAveEmbFile, self.nextOffset_ave, q))
+                proc.start()
+                cachedSamples_ave = q.get()
+                proc.join()
+
+                self.cachedSamples_ave.update(cachedSamples_ave)
+                self.nextOffset_ave = cachedSamples_ave["nextOffset"]
 
             # with open(self.cacheCLSEmbIndex, 'wt') as fp:
             #     json.dump(self.cachedSamples_cls, fp, indent=2)

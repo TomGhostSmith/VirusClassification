@@ -60,6 +60,8 @@ class MLModule(Module):
             ("working/seq_name_genbank_2024_2024_exclusion.csv.len_1_SCL_enlarge_protein_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.len_1_SCL_temp_0.05_best_enlarge_protein_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.len_1_SCL_temp_0.15_best_enlarge_protein_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("working/seq_name_genbank_2024_2024_exclusion.csv.CNN_online_1to10_bs2048_kernel_1_3_5_num_filters_512_lr_1e-4_weight_decay_1e-4_best_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("working/seq_name_genbank_2024_2024_exclusion.csv.CNN_online_1to10_bs2048_kernel_1_3_5_num_filters_512_lr_1e-4_weight_decay_1e-4_enlarge_best_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
         ]
 
         self.modelParams = {}
