@@ -1,4 +1,5 @@
 # reconstructed
+import multiprocessing.shared_memory
 import os
 import json
 import pandas
@@ -209,132 +210,6 @@ class DNALM(Module):
                 mu = mu.astype(numpy.float32)
                 var = var.astype(numpy.float32)
                 fp.write(f"{name}\t{IOUtils.encodeBase64(mu)}\t{IOUtils.encodeBase64(var)}\t{IOUtils.encodeBase64(distances)}\n")
-
-    def applyStrategy(self, distances, confidenceScores):
-        # here we use softmin weighted distance
-        # size of [cluster,  sample]
-        if (self.strategy == 'nearest'):
-            return softmin(distances)
-        if (self.strategy == 'nearest_bound'):
-            distances = distances + numpy.where(confidenceScores == 0, numpy.inf, 0)
-            return softmin(distances)
-        if (self.strategy == 'confidence'):
-            return confidenceScores
-        if (self.strategy == 'product'):
-            w = softmin(distances)
-            return w * confidenceScores
-        if (self.strategy.startswith('nearest_conf')):
-            thresh = float(self.strategy[12:])
-            distances = distances + numpy.where(confidenceScores < thresh, numpy.inf, 0)
-            return softmin(distances)
-
-
-    def extractWeightMatrix(self, clusters:list[tuple[str, list[numpy.ndarray]]], embeddings):
-        distances = numpy.zeros((len(clusters), embeddings.shape[0]), dtype=numpy.float32)
-        if (self.strategy == "individual"):
-            emb = embeddings * self.invStdVar
-            emb_sq = numpy.sum(emb ** 2, axis=1, keepdims=True).T
-            re = self.refEmbeddings @ emb.T
-            sq = self.ref_sq - 2 * re + emb_sq
-            sq = numpy.maximum(sq, 0.0)
-            distances = numpy.sqrt(sq)
-
-            weights = softmin(distances)
-            return weights
-
-        else:
-            confidenceScores = numpy.zeros((len(clusters), embeddings.shape[0]), dtype=numpy.float16)
-            for idx, (name, mu, var, dis_threshes) in enumerate(clusters):
-                mu = mu.astype(numpy.float64)
-                var = var.astype(numpy.float64)
-                dis = numpy.sqrt(numpy.sum((embeddings - mu) ** 2 / var, axis=1)).astype(numpy.float32)
-                ranks = numpy.searchsorted(dis_threshes, dis, side='left')   # ideally, we should calculate average between left and right. But here, we think the identical number is almost impossible
-                scores = 1 - ranks / len(dis_threshes)
-
-                distances[idx] = dis
-                confidenceScores[idx] = scores
-
-            weights = self.applyStrategy(distances, confidenceScores)
-            return weights
-        
-    def extractPrediction(self, scores):
-        votes = numpy.bincount(self.inverse_indicies, weights=scores)
-        total = sum(votes)
-        idx = numpy.argmax(votes)
-        if (total == 0):
-            res = 0
-        else:
-            res = votes[idx]/total
-        return self.uniqueNames[idx], res
-        
-    
-    def runSingle(self, clusters, samples:list[Sample], indexs, t=0, queue=None):
-        res = []
-        incre = 0
-        if (queue is None):
-            bar = tqdm(total=len(samples))
-
-        for index, sample in zip(indexs, samples):
-            if (self.pooling == "nosplit"):
-                # if (self.embedding == 'CLS'):
-                #     embeddings = numpy.array([sample.info[f"{self.model}_CLSemb"]])
-                if (self.embedding == 'ave'):
-                    embeddings = numpy.array([sample.info[f"{self.model}_aveemb"]])
-
-                weights = self.extractWeightMatrix(clusters, embeddings)
-                weights = weights.squeeze(1)
-
-                pred, score = self.extractPrediction(weights)
-
-                res.append((PlainResult(pred, score), index))
-
-            else:
-                if (len(sample.cDNAs) == 0):
-                    res.append((None, index))
-                    continue
-                # if (self.embedding == 'CLS'):
-                #     embeddings = numpy.array([DNA.info[f"{self.model}_CLSemb"] for DNA in sample.cDNAs])
-                if (self.embedding == 'ave'):
-                    embeddings = numpy.array([DNA.info[f"{self.model}_aveemb"] for DNA in sample.cDNAs])
-
-                embeddings = embeddings.astype(numpy.float64)
-                if (self.pooling == "mean"):
-                    aveEmbedding = numpy.mean(embeddings, axis=0, keepdims=True)
-                    weights = self.extractWeightMatrix(clusters, aveEmbedding)
-                    weights = weights.squeeze(1)
-
-                    pred, score = self.extractPrediction(weights)
-
-                    res.append((PlainResult(pred, score), index))
-
-                else:
-                    weights = self.extractWeightMatrix(clusters, embeddings)
-                    
-                    if (self.pooling == 'sum'):
-                        votes = numpy.sum(weights, axis=1)
-                    elif (self.pooling.startswith('top')):
-                        thresh = int(self.pooling[3:])
-                        nonTopWeightsIdx = numpy.argpartition(-weights, thresh, axis=0)[thresh:]
-                        weights[nonTopWeightsIdx, numpy.arange(weights.shape[1])] = 0
-                        votes = numpy.sum(weights, axis=1)
-
-                    pred, score = self.extractPrediction(votes)
-
-                    res.append((PlainResult(pred, score), index))
-            
-            if (queue is None):
-                bar.update(1)
-            else:
-                try:
-                    queue.put((t, 1 + incre), block=False)
-                    incre = 0
-                except queue.Full:
-                    incre += 1
-        if (queue is None):
-            bar.close()
-        return res
-
-
         
     def run(self, samples:list[Sample]):
         if (not os.path.exists(self.cacheClusterFile) and self.strategy != "individual"):
@@ -361,27 +236,44 @@ class DNALM(Module):
         self.uniqueNames, self.inverse_indicies = numpy.unique(names, return_inverse=True)
 
         if (self.threads == 1):
-            res = self.runSingle(clusters, samples, list(range(len(samples))))
+            res = runSingle(clusters, samples, list(range(len(samples))), self.pooling, self.embedding, self.strategy, self.model, self.invStdVar, self.refEmbeddings, self.ref_sq, self.inverse_indicies, self.uniqueNames)
             r, i = zip(*res)
             results = r
         else:
             samplePerThread = math.ceil(len(samples)/self.threads)
             jobs = []
             pbars = []
+
+            shms = []
+
+            isv, shm = IOUtils.createSharedMemory(self.invStdVar)
+            shms.append(shm)
+            ref, shm = IOUtils.createSharedMemory(self.refEmbeddings)
+            shms.append(shm)
+            refsq, shm = IOUtils.createSharedMemory(self.ref_sq)
+            shms.append(shm)
+            ind, shm = IOUtils.createSharedMemory(self.inverse_indicies)
+            shms.append(shm)
+            # isv = self.invStdVar
+            # ref = self.refEmbeddings
+            # refsq = self.ref_sq
+            # ind = self.inverse_indicies
+
             for t in range(self.threads):
                 start = t*samplePerThread
                 end = min((t+1)*samplePerThread, len(samples))
                 if (end <= start):
                     continue
-                pbar = tqdm(total=(end-start), desc=f"Thread {t}")
-                pbars.append(pbar)
-                jobs.append([clusters, samples[start : end], list(range(start, end)), t])
-
+                # pbar = tqdm(total=(end-start), desc=f"Thread {t}")
+                # pbars.append(pbar)
+                jobs.append([clusters, samples[start : end], list(range(start, end)), self.pooling, self.embedding, self.strategy, self.model, isv, ref, refsq, ind, self.uniqueNames, 0])
+            pbars = [tqdm(total=len(samples), desc="Merge")]
             listener, queue = IOUtils.getProgressListener(pbars)
             
-                    
-            with multiprocessing.Pool(processes=self.threads) as pool:
-                asyncResults = [pool.apply_async(self.runSingle, [*job, queue]) for job in jobs]
+            ctx = multiprocessing.get_context("spawn")
+            # ctx = multiprocessing.get_context("fork")
+            with ctx.Pool(processes=self.threads) as pool:
+                asyncResults = [pool.apply_async(runSingle, [*job, queue]) for job in jobs]
                 pool.close()
                 while asyncResults:
                     for asyncResult in asyncResults[:]:
@@ -394,6 +286,8 @@ class DNALM(Module):
                 pool.join()
             
             IOUtils.stopProgressListener(listener, queue)
+            for shm in shms:
+                IOUtils.unlinkSharedMemory(shm)
 
         # clear the cached embedding, to prevent OOM
         if (self.pooling == 'nosplit'):
@@ -459,7 +353,7 @@ class DNALM(Module):
                 IOUtils.writeSampleFasta(DNAsToRun, input_fasta)
                 cmd = f"conda run -n vitax --no-capture-output python embedding.py --contigs {input_fasta} --out {output_txt}"
                 subprocess.run(cmd, shell=True, cwd=cwd)
-                fp = open(output_txt)                
+                fp = open(output_txt)
                 fp_ave = open(self.cacheAveEmbFile, 'at')
                 for line in fp:
                     seq_name, _ = line.strip().split('\t')
@@ -474,8 +368,8 @@ class DNALM(Module):
                 for protein in samples:
                     # if (protein.id not in self.cachedSamples_cls):
                     #     self.cachedSamples_cls[protein.id] = -1
-                    if (protein.id not in cachedSamples_ave):
-                        cachedSamples_ave[protein.id] = -1
+                    if (protein.id not in self.cachedSamples_ave):
+                        self.cachedSamples_ave[protein.id] = -1
             else:
                 q = multiprocessing.SimpleQueue()
                 proc = multiprocessing.Process(target=runML, args=(self.modelParam, DNAsToRun, self.cacheAveEmbFile, self.nextOffset_ave, q))
@@ -549,6 +443,164 @@ def runML(param, samples:list[Sample|ProteinSample], cacheAveEmbFile, nextOffset
             cachedSamples_ave[protein.id] = -1
 
     queue.put(cachedSamples_ave)
+
+def applyStrategy(distances, confidenceScores, strategy):
+    # here we use softmin weighted distance
+    # size of [cluster,  sample]
+    if (strategy == 'nearest'):
+        return softmin(distances)
+    if (strategy == 'nearest_bound'):
+        distances = distances + numpy.where(confidenceScores == 0, numpy.inf, 0)
+        return softmin(distances)
+    if (strategy == 'confidence'):
+        return confidenceScores
+    if (strategy == 'product'):
+        w = softmin(distances)
+        return w * confidenceScores
+    if (strategy.startswith('nearest_conf')):
+        thresh = float(strategy[12:])
+        distances = distances + numpy.where(confidenceScores < thresh, numpy.inf, 0)
+        return softmin(distances)
+
+
+def extractWeightMatrix(clusters:list[tuple[str, list[numpy.ndarray]]], embeddings, strategy, invStdVar, refEmbeddings, ref_sq):
+    distances = numpy.zeros((len(clusters), embeddings.shape[0]), dtype=numpy.float32)
+    if (strategy == "individual"):
+        emb = embeddings * invStdVar
+        emb_sq = numpy.sum(emb ** 2, axis=1, keepdims=True).T
+        re = refEmbeddings @ emb.T
+        sq = ref_sq - 2 * re + emb_sq
+        sq = numpy.maximum(sq, 0.0)
+        distances = numpy.sqrt(sq)
+
+        weights = softmin(distances)
+        return weights
+
+    else:
+        confidenceScores = numpy.zeros((len(clusters), embeddings.shape[0]), dtype=numpy.float16)
+        for idx, (name, mu, var, dis_threshes) in enumerate(clusters):
+            mu = mu.astype(numpy.float64)
+            var = var.astype(numpy.float64)
+            dis = numpy.sqrt(numpy.sum((embeddings - mu) ** 2 / var, axis=1)).astype(numpy.float32)
+            ranks = numpy.searchsorted(dis_threshes, dis, side='left')   # ideally, we should calculate average between left and right. But here, we think the identical number is almost impossible
+            scores = 1 - ranks / len(dis_threshes)
+
+            distances[idx] = dis
+            confidenceScores[idx] = scores
+
+        weights = applyStrategy(distances, confidenceScores, strategy)
+        return weights
+    
+def extractPrediction(scores, inverse_indicies, uniqueNames):
+    votes = numpy.bincount(inverse_indicies, weights=scores)
+    total = sum(votes)
+    idx = numpy.argmax(votes)
+    if (total == 0):
+        res = 0
+    else:
+        res = votes[idx]/total
+    return uniqueNames[idx], res
+
+
+def runSingle(clusters, samples:list[Sample], indexs, pooling, embedding, strategy, model, isv, ref, refsq, ind, uniqueNames, t=0, queue=None):
+    res = []
+    incre = 0
+    shms = []
+    
+    if (isinstance(isv, tuple)):
+        shm, invStdVar = IOUtils.loadSharedMemory(*isv)
+        shms.append(shm)
+    else:
+        invStdVar = isv
+
+    if (isinstance(ref, tuple)):
+        shm, refEmbeddings = IOUtils.loadSharedMemory(*ref)
+        shms.append(shm)
+    else:
+        refEmbeddings = ref
+
+    if (isinstance(refsq, tuple)):
+        shm, ref_sq = IOUtils.loadSharedMemory(*refsq)
+        shms.append(shm)
+    else:
+        ref_sq = refsq
+
+    if (isinstance(ind, tuple)):
+        shm, inverse_indicies = IOUtils.loadSharedMemory(*ind)
+        shms.append(shm)
+    else:
+        inverse_indicies = ind
+
+    if (queue is None):
+        bar = tqdm(total=len(samples))
+
+    for index, sample in zip(indexs, samples):
+        if (pooling == "nosplit"):
+            # if (self.embedding == 'CLS'):
+            #     embeddings = numpy.array([sample.info[f"{self.model}_CLSemb"]])
+            if (embedding == 'ave'):
+                embeddings = numpy.array([sample.info[f"{model}_aveemb"]])
+
+            weights = extractWeightMatrix(clusters, embeddings, strategy, invStdVar, refEmbeddings, ref_sq)
+            weights = weights.squeeze(1)
+
+            pred, score = extractPrediction(weights, inverse_indicies, uniqueNames)
+
+            res.append((PlainResult(pred, score), index))
+
+        else:
+            if (len(sample.cDNAs) == 0):
+                res.append((None, index))
+                continue
+            # if (self.embedding == 'CLS'):
+            #     embeddings = numpy.array([DNA.info[f"{self.model}_CLSemb"] for DNA in sample.cDNAs])
+            if (embedding == 'ave'):
+                embeddings = numpy.array([DNA.info[f"{model}_aveemb"] for DNA in sample.cDNAs])
+
+            embeddings = embeddings.astype(numpy.float64)
+            if (pooling == "mean"):
+                aveEmbedding = numpy.mean(embeddings, axis=0, keepdims=True)
+                weights = extractWeightMatrix(clusters, aveEmbedding, strategy, invStdVar, refEmbeddings, ref_sq)
+                weights = weights.squeeze(1)
+
+                pred, score = extractPrediction(weights, inverse_indicies, uniqueNames)
+
+                res.append((PlainResult(pred, score), index))
+
+            else:
+                weights = extractWeightMatrix(clusters, embeddings, strategy, invStdVar, refEmbeddings, ref_sq)
+                
+                if (pooling == 'sum'):
+                    votes = numpy.sum(weights, axis=1)
+                elif (pooling.startswith('top')):
+                    # IOUtils.showInfo("s1")
+                    thresh = int(pooling[3:])
+                    # IOUtils.showInfo("s2")
+                    nonTopWeightsIdx = numpy.argpartition(-weights, thresh, axis=0)[thresh:]
+                    # IOUtils.showInfo("s3")
+                    weights[nonTopWeightsIdx, numpy.arange(weights.shape[1])] = 0
+                    # IOUtils.showInfo("s4")
+                    votes = numpy.sum(weights, axis=1)
+
+                pred, score = extractPrediction(votes, inverse_indicies, uniqueNames)
+
+                res.append((PlainResult(pred, score), index))
+        
+        if (queue is None):
+            bar.update(1)
+        else:
+            try:
+                queue.put((t, 1 + incre), block=False)
+                incre = 0
+            except queue.Full:
+                IOUtils.showInfo("stuck")
+                incre += 1
+    if (queue is None):
+        bar.close()
+    
+    for shm in shms:
+        IOUtils.closeSharedMemory(shm)
+    return res
     
 
 def softmin(distances):
