@@ -1,3 +1,4 @@
+import multiprocessing.shared_memory
 import os
 import sys
 import math
@@ -134,3 +135,20 @@ def getProgressListener(pbars):
 def stopProgressListener(listener, queue):
     queue.put("Done")
     listener.join()
+
+def createSharedMemory(array: numpy.ndarray):
+    shm = multiprocessing.shared_memory.SharedMemory(create=True, size=array.nbytes)
+    sharedArray = numpy.ndarray(array.shape, dtype=array.dtype, buffer=shm.buf)
+    sharedArray[:] = array[:]
+    return (shm.name, array.shape, array.dtype), shm
+
+def unlinkSharedMemory(shm):
+    shm.close()
+    shm.unlink()
+
+def loadSharedMemory(name, shape, dtype):
+    shm = multiprocessing.shared_memory.SharedMemory(name=name)
+    return shm, numpy.ndarray(shape, dtype=dtype, buffer=shm.buf)
+
+def closeSharedMemory(shm):
+    shm.close()
