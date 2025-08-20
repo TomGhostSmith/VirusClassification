@@ -26,6 +26,14 @@ class CAT(Module):
         self.cachedSamples:dict[str, str] = dict()
         self.threads = 2
 
+        # self.queryChunkSize = 280  # unit: MB
+        self.queryChunkSize = 60  # unit: MB
+        self.refChunkSize = 10     # unit: GB
+        # self.refChunkSize = 24     # unit: GB
+
+        self.memThresh = 60
+        # self.memThresh = 240
+
     
     def runOneCAT(self, outputFolder, idx, blockSize, querySize):
         IOUtils.showInfo(f"run cat for subset {idx}")
@@ -44,8 +52,7 @@ class CAT(Module):
         monitor_timeout = 600
         diamondPID = None
         diamondProcess = None
-        mem_thresh = 60
-        # mem_thresh = 248
+        mem_thresh = self.memThresh
         # step 1: find diamond
         while monitored_time < wait_diamond_timeout:
             for child in cat_process.children(recursive=True):
@@ -159,8 +166,8 @@ class CAT(Module):
 
         # maxSamplePerThread = 1800
         # maxSamplePerThread = 60
-        # maxSamplePerThread = 220
-        maxSamplePerThread = 45
+        maxSamplePerThread = self.queryChunkSize
+        # maxSamplePerThread = 45
         # if (len(basicSamples) > 2 * maxSamplePerThread):
         #     processes = math.ceil(len(basicSamples) / maxSamplePerThread / 2) * 2   # we want to avoid an "odd" number of threads
         # else:
@@ -181,8 +188,7 @@ class CAT(Module):
                 os.makedirs(outputFolder)
                 # IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
                 IOUtils.writeSampleFasta(thisCollection, queryFile)
-                params.append([outputFolder, str(thisIdx), 10, totalBP/1024/1024])
-                # params.append([outputFolder, str(thisIdx), 24, totalBP/1024/1024])
+                params.append([outputFolder, str(thisIdx), self.refChunkSize, totalBP/1024/1024])
                 indexes.append(str(thisIdx))
                 thisCollection = list()
                 totalBP = 0
@@ -194,8 +200,7 @@ class CAT(Module):
             os.makedirs(outputFolder)
             # IOUtils.writeSampleFasta(basicSamples[i*filePerThread:(i+1)*filePerThread], queryFile)
             IOUtils.writeSampleFasta(thisCollection, queryFile)
-            params.append([outputFolder, str(thisIdx), 10, totalBP/1024/1024])
-            # params.append([outputFolder, str(thisIdx), 24, totalBP/1024/1024])
+            params.append([outputFolder, str(thisIdx), self.refChunkSize, totalBP/1024/1024])
             indexes.append(str(thisIdx))
             thisCollection = list()
             totalBP = 0

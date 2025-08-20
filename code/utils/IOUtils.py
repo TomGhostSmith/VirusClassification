@@ -53,7 +53,7 @@ def loadSamples(fastaFile:str, subsetFile:str=None, subset:list=None)->list[Samp
         if (subset is not None):
             interestedSampleIDs = interestedSampleIDs & set(subset)
     elif (subset is not None):
-        interestedSampleIDs = set(subsetFile)
+        interestedSampleIDs = set(subset)
     samples:list[Sample] = list()
     for record in SeqIO.parse(fastaFile, 'fasta'):
         if interestedSampleIDs is None or record.id in interestedSampleIDs:
@@ -71,7 +71,7 @@ def loadProteinSamples(fastaFile:str, subsetFile:str=None, subset:list=None)->li
         if (subset is not None):
             interestedSampleIDs = interestedSampleIDs & set(subset)
     elif (subset is not None):
-        interestedSampleIDs = set(subsetFile)
+        interestedSampleIDs = set(subset)
     samples:list[ProteinSample] = list()
     for record in SeqIO.parse(fastaFile, 'fasta'):
         if interestedSampleIDs is None or record.id in interestedSampleIDs:

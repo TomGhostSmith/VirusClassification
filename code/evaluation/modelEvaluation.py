@@ -355,9 +355,6 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
         
     samples = testModel(models, dataset, evaluationMethod, subset, missingLabel)
 
-    if (analyseList is None):
-        IOUtils.showInfo("Nothing to analyse. Exit")
-        return
     NucleotideUtils.extractProtein(samples)
     
     # sheet 1: all information
@@ -440,6 +437,8 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
 
     if (analyseList):
         analysis(analyseList, summaryDF, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")
+    else:
+        IOUtils.showInfo("Nothing to analyse. Exit")
 
 
 # input: 
