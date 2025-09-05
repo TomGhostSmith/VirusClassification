@@ -435,10 +435,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     with pandas.ExcelWriter(fileName) as writer:
         summaryDF.to_excel(writer, sheet_name="raw results", index=False)
 
-    if (analyseList):
-        analysis(analyseList, summaryDF, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")
-    else:
-        IOUtils.showInfo("Nothing to analyse. Exit")
+    analysis(models, analyseList, summaryDF, dataset, subset, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")
 
 
 # input: 
@@ -448,15 +445,91 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
 #   - constraint can be a function f(row)->bool to focus on specific samples
 # - summaryDF is the data frame with all information needed
 # - outputname is the file name for output. If exists, it will add number behind it
-def analysis(analyseList, summaryDF, outputName="analysis"):
+def analysis(modelDict, analyseList, summaryDF, dataset, subset, outputName="analysis"):
     for field in ["id", "length", "protein_count", "protein_length", "ground_truth"]:
         if field not in summaryDF:
             raise ValueError(f"Required field {field} is missing")
         
     models = set()
     fields = set()
-    missingFields = set()
     analyseTasks = []
+    
+
+    modelRankResults = getModelRankResults(summaryDF, modelDict.keys())
+    # sheet 2: performance related analysis
+    DFs:dict[str, pandas.DataFrame] = dict()  # desc: DF
+    DFs["raw results"] = summaryDF
+    imgs:dict[str, str] = dict()
+
+    # draw the plot
+    def getMetrics(series):
+        correct = (series == "correct").sum()
+        error = (series == "wrong").sum()
+        noPred = (series == "Np_pred has_GT").sum()
+        hasGT = correct + error + noPred
+        hasPred = (series == "has_pred No_GT").sum()
+        leave = (series == "No_pred No_GT").sum()
+        noGT = hasPred + leave
+        return pandas.Series({
+            "recall": (correct + error) / hasGT if hasGT > 0 else 0, 
+            "correct": correct / hasGT if hasGT > 0 else 0, 
+            "overPredict": -hasPred / noGT if noGT > 0 else 0
+            })
+    
+    rankLevels = list()
+    for r in config.resultRanks:
+        if (not r.startswith('sub')):
+            rankLevels.append(r)
+    availableColors = numpy.vstack((plt.get_cmap('tab20').colors, plt.get_cmap('tab20b').colors, plt.get_cmap('tab20c').colors))
+    fig, ax = plt.subplots(figsize=(2*(1 + len(rankLevels)), 6))
+    x = numpy.arange(len(rankLevels))
+    width = 2 / (len(modelDict) + 2)
+    for idx, model in enumerate(modelDict.keys()):
+        tmpDF = pandas.DataFrame(modelRankResults[model])
+        tmpDF = tmpDF[rankLevels]
+        metrics = tmpDF.apply(getMetrics)
+        recalls = metrics.loc["recall"].values
+        corrects = metrics.loc["correct"].values
+        overPredicts = metrics.loc["overPredict"].values
+        ax.bar(x*2 + idx*width, recalls, width, color='white', hatch='/', edgecolor=availableColors[idx])
+        ax.bar(x*2 + idx*width, corrects, width, color=availableColors[idx], alpha=1, label=f"{model}")
+        ax.bar(x*2 + idx*width, overPredicts, width, color='white', hatch='/', edgecolor=availableColors[idx])
+
+    ax.set_xticks(x*2 + width * (len(models) - 1)/2)
+    ax.set_xticklabels(rankLevels)
+    ax.legend(loc="upper left", bbox_to_anchor=(1, 1))
+    ax.set_xlabel("rank")
+    ax.axhline(0, color="black", linewidth=1)
+    # ax.set_ylabel("Proportion")
+
+    yticks = ax.get_yticks()
+    ax.set_yticklabels([f"{abs(y):.2f}" for y in yticks])
+
+    ax.annotate(
+        "", xy=(0, 1), xycoords=("axes fraction", "axes fraction"),
+        xytext=(0, -0.05), textcoords=("axes fraction", "axes fraction"),
+        arrowprops=dict(arrowstyle="<->", color="black", lw=1.2)
+    )
+
+    ax.text(-5, 0.9, "Higher Recall ↑", ha="left", va="center", fontsize=10)
+    ax.text(-5, -0.9, "More Unlabelled prediction ↓", ha="left", va="center", fontsize=10)
+
+
+    fileNamePrefix = f"{config.analysisFolder}/figure/newPerformance_{dataset}_{subset}"
+
+    i = 0
+    fileName = f"{fileNamePrefix}_{i}.png"
+    while (os.path.exists(fileName)):
+        i += 1
+        fileName = f"{fileNamePrefix}_{i}.png"
+
+    plt.savefig(fileName, bbox_inches="tight")
+    plt.close()
+
+    if (not analyseList):
+        IOUtils.showInfo("Nothing to analyse. Exit")
+        return
+
     for pair in analyseList:
         # check #member of pair
         if (len(pair) == 2):
@@ -511,11 +584,10 @@ def analysis(analyseList, summaryDF, outputName="analysis"):
     
     models = list(models)
 
-    modelRankResults = getModelRankResults(summaryDF, models)
-    # sheet 2: performance related analysis
-    DFs:dict[str, pandas.DataFrame] = dict()  # desc: DF
-    DFs["raw results"] = summaryDF
-    imgs:dict[str, str] = dict()
+    for model in models:
+        if (model not in modelDict):
+            IOUtils.showInfo(f"Unknown model: {model}")
+
 
     for factor1, factor2, constraint in tqdm(analyseTasks, desc="sample wise analysis"):
         if (isinstance(factor1, list) and isinstance(factor2, list)): 
@@ -856,7 +928,8 @@ def model2factorConfusion(summaryDF:pandas.DataFrame, modelRankResults, factor1,
     # for c in summaryDF[f"{factor2}_"].cat.categories:
 
 def factor2factorConfusion(summaryDF:pandas.DataFrame, factor1, factor2, constraint, DFs, imgs):
-    summaryDF = summaryDF[summaryDF.apply(constraint, axis=1)]
+    if (constraint):
+        summaryDF = summaryDF[summaryDF.apply(constraint, axis=1)]
 
     bins = factor1[1]
     factor1 = factor1[0]
@@ -920,9 +993,8 @@ def mergeCachedResults():
             IOUtils.showInfo(f"Updated {file}")
             os.remove(filePath)
 
-def reAnalysis(dataset, evaluationMethod, subset='all', missingLabel="Unknown", idx=0, analyseList=[], rawResult=False):
+def reAnalysis(models, dataset, evaluationMethod, subset='all', missingLabel="Unknown", idx=0, analyseList=[], rawResult=False):
     prefix = "samples" if rawResult else "sampleAnalysis" 
-    if (analyseList):
-        fileName = f"{config.analysisFolder}/samplewise/{prefix}_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{idx}.xlsx"
-        df = pandas.read_excel(fileName, sheet_name="raw results", keep_default_na=False)
-        analysis(analyseList, df, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")
+    fileName = f"{config.analysisFolder}/samplewise/{prefix}_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{idx}.xlsx"
+    df = pandas.read_excel(fileName, sheet_name="raw results", keep_default_na=False)
+    analysis(models, analyseList, df, dataset, subset, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")
