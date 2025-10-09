@@ -16,6 +16,8 @@ from moduleResult.plainResult import PlainResult
 class Virgo(Module):
     def __init__(self, trainset):
         super().__init__(f"Virgo-{trainset}")
+        if (trainset not in ["VMRv4", "VMRv4_ML_train"]):
+            raise ValueError("Unsupported Virgo training set")
         self.cacheResult = f"{config.cacheResultFolder}/{self.moduleName}.json"
         self.trainset = trainset
         self.cachedSamples:dict[str, str] = dict()

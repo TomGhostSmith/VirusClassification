@@ -5,6 +5,8 @@ import math
 import numpy
 import pandas
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
 from tqdm import tqdm
 # sys.path.append('./code')
 
@@ -465,7 +467,7 @@ def analysis(modelDict, analyseList, summaryDF, dataset, subset, outputName="ana
     def getMetrics(series):
         correct = (series == "correct").sum()
         error = (series == "wrong").sum()
-        noPred = (series == "Np_pred has_GT").sum()
+        noPred = (series == "No_pred has_GT").sum()
         hasGT = correct + error + noPred
         hasPred = (series == "has_pred No_GT").sum()
         leave = (series == "No_pred No_GT").sum()
@@ -481,9 +483,10 @@ def analysis(modelDict, analyseList, summaryDF, dataset, subset, outputName="ana
         if (not r.startswith('sub')):
             rankLevels.append(r)
     availableColors = numpy.vstack((plt.get_cmap('tab20').colors, plt.get_cmap('tab20b').colors, plt.get_cmap('tab20c').colors))
-    fig, ax = plt.subplots(figsize=(2*(1 + len(rankLevels)), 6))
+    fig, ax = plt.subplots(figsize=(2*(1 + len(rankLevels)), 12))
     x = numpy.arange(len(rankLevels))
     width = 2 / (len(modelDict) + 2)
+    pattern_handles = []
     for idx, model in enumerate(modelDict.keys()):
         tmpDF = pandas.DataFrame(modelRankResults[model])
         tmpDF = tmpDF[rankLevels]
@@ -491,28 +494,39 @@ def analysis(modelDict, analyseList, summaryDF, dataset, subset, outputName="ana
         recalls = metrics.loc["recall"].values
         corrects = metrics.loc["correct"].values
         overPredicts = metrics.loc["overPredict"].values
-        ax.bar(x*2 + idx*width, recalls, width, color='white', hatch='/', edgecolor=availableColors[idx])
-        ax.bar(x*2 + idx*width, corrects, width, color=availableColors[idx], alpha=1, label=f"{model}")
-        ax.bar(x*2 + idx*width, overPredicts, width, color='white', hatch='/', edgecolor=availableColors[idx])
+        ax.bar(x*2 + idx*width, recalls, width, color='white', hatch='//', edgecolor=availableColors[idx])
+        ax.bar(x*2 + idx*width, corrects, width, color=availableColors[idx], alpha=1)
+        ax.bar(x*2 + idx*width, overPredicts, width, color='white', hatch='....', edgecolor=availableColors[idx])
+        pattern_handles.append(Patch(facecolor=availableColors[idx], label=model))
 
-    ax.set_xticks(x*2 + width * (len(models) - 1)/2)
+    pattern_handles += [
+        Line2D([0], [0], color='white', linewidth=1),
+        Patch(facecolor='gray', edgecolor='gray', label='Correct prediction'),
+        Patch(facecolor='white', hatch='////', edgecolor='gray', label='Wrong prediction'),
+        Patch(facecolor='white', hatch="....", edgecolor='gray', label='Unlabelled prediction')
+    ]
+    # ax.legend(handles=pattern_handles, title="Prediction Type", loc='upper right')
+
+    ax.set_xticks(x*2 + width * (len(modelDict) - 1)/2)
     ax.set_xticklabels(rankLevels)
-    ax.legend(loc="upper left", bbox_to_anchor=(1, 1))
+    ax.legend(handles=pattern_handles, loc="upper left", bbox_to_anchor=(1, 1))
     ax.set_xlabel("rank")
     ax.axhline(0, color="black", linewidth=1)
     # ax.set_ylabel("Proportion")
 
-    yticks = ax.get_yticks()
+
+    yticks = numpy.arange(-1, 1.1, 0.1)
+    ax.set_yticks(yticks)
     ax.set_yticklabels([f"{abs(y):.2f}" for y in yticks])
 
     ax.annotate(
         "", xy=(0, 1), xycoords=("axes fraction", "axes fraction"),
         xytext=(0, -0.05), textcoords=("axes fraction", "axes fraction"),
-        arrowprops=dict(arrowstyle="<->", color="black", lw=1.2)
+        arrowprops=dict(arrowstyle="<->", color="black", lw=2)
     )
 
-    ax.text(-5, 0.9, "Higher Recall ↑", ha="left", va="center", fontsize=10)
-    ax.text(-5, -0.9, "More Unlabelled prediction ↓", ha="left", va="center", fontsize=10)
+    ax.text(-2, 0.5, "samples w/ ground truth", ha="left", va="center", fontsize=10, rotation=90)
+    ax.text(-2, -0.5, "samples w/o ground truth", ha="left", va="center", fontsize=10, rotation=90)
 
 
     fileNamePrefix = f"{config.analysisFolder}/figure/newPerformance_{dataset}_{subset}"

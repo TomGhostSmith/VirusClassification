@@ -18,9 +18,12 @@ from moduleResult.vitapResult import VitapResult
 
 
 class VITAP(Module):
-    def __init__(self, threads=multiprocessing.cpu_count()):
+    def __init__(self, trainset, threads=multiprocessing.cpu_count()):
         self.threads = threads
-        super().__init__("VITAP-VMRv4")
+        if trainset not in ["VMRv4", "VMRv4_ML_train"]:
+            raise ValueError("Unsupported VITAP training set")
+        self.trainset = trainset
+        super().__init__(f"VITAP-{trainset}")
         self.cacheResult = f"{config.cacheResultFolder}/{self.moduleName}.json"
         self.cachedSamples:dict[str, str] = dict()
 
@@ -32,7 +35,7 @@ class VITAP(Module):
         
         cwd = "/Software/VITAP"
         inputFasta = f"{outputFolder}/query.fasta"
-        databasePath = "DB_MSL"
+        databasePath = f"DB_{self.trainset}"
         command = f"conda run -n vitap --no-capture-output bash scripts/VITAP assignment -i {inputFasta} -d {databasePath} -o {outputFolder}"
         # subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=cwd, env=env)
         subprocess.run(command, shell=True, cwd=cwd, env=env, stdout=sys.stdout, stderr=sys.stderr)
