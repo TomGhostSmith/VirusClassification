@@ -379,6 +379,11 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     for k in additionalInfo:
         summaryDict[k] = []
 
+    with open("/Data/VirusClassification/model/VMRv4_ML_train/taxonCount.json") as jsonFP:
+        taxonDistribution = json.load(jsonFP)
+
+    taxoCounts:dict[str, list[str]] = {rank: [] for rank in config.resultRanks}
+
     for sample in tqdm(samples, desc="sample wise result"):
         sampleIDs.append(sample.id)
         sampleLengths.append(sample.length)
@@ -396,6 +401,14 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             stdNode = None
             stdResults.append('N/A')
             stdResultRank.append('N/A')
+
+        if (stdNode is not None):
+            rankC = {}
+            for n in stdNode.path:
+                if n.rank in taxonDistribution:
+                    rankC[n.rank] = taxonDistribution[n.rank].get(n.name, 0)
+        for r in config.resultRanks:
+            taxoCounts[r].append(rankC.get(r, 0))
 
         for modelDesc, model in models.items():
             pred = sample.results[model.moduleName]
@@ -416,6 +429,9 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     summaryDict["protein_length"] = sampleProteinLengths
     summaryDict["ground_truth"] = stdResults
     summaryDict["ground_truth_rank"] = stdResultRank
+
+    for r, taxonCountList in taxoCounts.items():
+        summaryDict[f"{r}_count_in_train"] = taxonCountList
 
     for modelDesc, model in models.items():
         preds, predRanks, LCAs, LCARanks = zip(*modelResults[model.moduleName])

@@ -2,12 +2,15 @@
 import os
 import json
 import pandas
+from concurrent.futures import ProcessPoolExecutor
+
 from config import config
 from prototype.module import Module
 from moduleResult.mlResult import MLResult
+from moduleResult.plainResult import PlainResult
 from entity.sample import Sample
 from entity.proteinSample import ProteinSample
-from module.esmRunner import ESMRunner
+from module.esmTaxo import ESMTaxo
 from tqdm import tqdm
 
 from utils import IOUtils
@@ -19,6 +22,8 @@ class MLModule(Module):
         self.thresh = thresh
         self.gen = gen
         self.pooling = pooling
+        if (strategy not in ["highest", "topdown", "bottomup"]):
+            raise ValueError("Unsupported strategy")
         if (pooling not in ["sum"] and not pooling.startswith("top")):
             raise ValueError("Unsupported pooling method")
         super().__init__(f'ML-stratgy={strategy};th={thresh}, gen={gen}, pooling={pooling}')
@@ -26,31 +31,31 @@ class MLModule(Module):
         self.resultDict:dict[str, MLResult] = dict()
 
         realmParams = [
-            ("esm2_t33_256", 256, f"{config.modelRoot}/realm/esm2_t33_256"),
-            ("esm2_t33_512", 512, f"{config.modelRoot}/realm/esm2_t33_512")
+            ("realm_esm2_t33_256", 256, f"{config.modelRoot}/realm/esm2_t33_256"),
+            ("realm_esm2_t33_512", 512, f"{config.modelRoot}/realm/esm2_t33_512")
         ]
         kingdomParams = [
-            ("esm2_t33_256", 256, f"{config.modelRoot}/kingdom/esm2_t33_256"),
-            ("esm2_t33_512", 512, f"{config.modelRoot}/kingdom/esm2_t33_512")
+            ("kingdom_esm2_t33_256", 256, f"{config.modelRoot}/kingdom/esm2_t33_256"),
+            ("kingdom_esm2_t33_512", 512, f"{config.modelRoot}/kingdom/esm2_t33_512")
         ]
         phylumParams = [
-            ("esm2_t33_256", 256, f"{config.modelRoot}/phylum/esm2_t33_256"),
-            ("esm2_t33_512", 512, f"{config.modelRoot}/phylum/esm2_t33_512")
+            ("phylum_esm2_t33_256", 256, f"{config.modelRoot}/phylum/esm2_t33_256"),
+            ("phylum_esm2_t33_512", 512, f"{config.modelRoot}/phylum/esm2_t33_512")
         ]
         classParams = [
-            ("esm2_t33_256", 256, f"{config.modelRoot}/class/esm2_t33_256"),
-            ("esm2_t33_512", 512, f"{config.modelRoot}/class/esm2_t33_512")
+            ("class_esm2_t33_256", 256, f"{config.modelRoot}/class/esm2_t33_256"),
+            ("class_esm2_t33_512", 512, f"{config.modelRoot}/class/esm2_t33_512")
         ]
         orderParams = [
-            ("esm2_t33_512", 512, f"{config.modelRoot}/order/esm2_t33_512")
+            ("order_esm2_t33_512", 512, f"{config.modelRoot}/order/esm2_t33_512")
         ]
         familyParams = [
-            ("esm2_t33_512", 512, f"{config.modelRoot}/family/esm2_t33_512"),
-            ("esm2_t33_512_enlarge", 512, f"{config.modelRoot}/family/esm2_t33_512_enlarge")
+            ("family_esm2_t33_512", 512, f"{config.modelRoot}/family/esm2_t33_512"),
+            ("family_esm2_t33_512_enlarge", 512, f"{config.modelRoot}/family/esm2_t33_512_enlarge")
         ]
         genusParams = [
-            ("esm2_t33_256_enlarge", 256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus"),
-            ("esm2_t33_256", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("genus_esm2_t33_256_enlarge", 256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus"),
+            ("genus_esm2_t33_256", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.1_2_5_10_30_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.SCL.genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.1_2_3_4_5_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
@@ -67,25 +72,25 @@ class MLModule(Module):
         self.modelParams = {}
         if (gen[0] != "N"):
             realmParam = realmParams[ord(gen[0]) - 48]  # 48 is the ascii of "0"
-            self.modelParams["realm"] = (*realmParam, "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize)
+            self.modelParams["realm"] = (*realmParam, "facebook/esm2_t33_650M_UR50D", 29)
         if (gen[1] != "N"):
             kingdomParam = kingdomParams[ord(gen[1]) - 48]
-            self.modelParams["kingdom"] = (*kingdomParam, "facebook/esm2_t33_650M_UR50D", 40, config.mlBatchSize)
+            self.modelParams["kingdom"] = (*kingdomParam, "facebook/esm2_t33_650M_UR50D", 40)
         if (gen[2] != "N"):
             phylumParam = phylumParams[ord(gen[2]) - 48]
-            self.modelParams["phylum"] = (*phylumParam, "facebook/esm2_t33_650M_UR50D", 51, config.mlBatchSize)
+            self.modelParams["phylum"] = (*phylumParam, "facebook/esm2_t33_650M_UR50D", 51)
         if (gen[3] != "N"):
             classParam = classParams[ord(gen[3]) - 48]
-            self.modelParams["class"] = (*classParam, "facebook/esm2_t33_650M_UR50D", 76, config.mlBatchSize)
+            self.modelParams["class"] = (*classParam, "facebook/esm2_t33_650M_UR50D", 76)
         if (gen[4] != "N"):
             orderParam = orderParams[ord(gen[4]) - 48]
-            self.modelParams["order"] = (*orderParam, "facebook/esm2_t33_650M_UR50D", 981, config.mlBatchSize)
+            self.modelParams["order"] = (*orderParam, "facebook/esm2_t33_650M_UR50D", 981)
         if (gen[5] != "N"):
             familyParam = familyParams[ord(gen[5]) - 48]
-            self.modelParams["family"] = (*familyParam, "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize)
+            self.modelParams["family"] = (*familyParam, "facebook/esm2_t33_650M_UR50D", 1129)
         if (gen[6] != "N"):
             genusParam = genusParams[ord(gen[6]) - 48]
-            self.modelParams["genus"] = (*genusParam, "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize)
+            self.modelParams["genus"] = (*genusParam, "facebook/esm2_t33_650M_UR50D", 3523)
         
     def run(self, samples:list[Sample]):
         NucleotideUtils.extractProtein(samples)
@@ -134,139 +139,27 @@ class MLModule(Module):
                 if not (self.resultDict[sample.id].terminate):
                     unTerminatedSamples.append(sample)
             return unTerminatedSamples
-
-        cacheProbFile = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_prob.tmp"
-        cacheProbIndex = f"{config.cacheResultFolder}/ESM_taxo_{rank}_{modelName}_prob.json"
-
-        essentialFiles = [cacheProbFile, cacheProbIndex]
-        allExists = True
-        for f in essentialFiles:
-            if (not os.path.exists(f)):
-                allExists = False
         
-        if (allExists):
-            with open(cacheProbIndex) as fp:
-                cachedSamples_prob = json.load(fp)
-                nextOffset_prob = cachedSamples_prob["nextOffset"]
-        else:
-            cachedSamples_prob = {"nextOffset": 0}
-            nextOffset_prob = 0
-
-        cachedMapping = f"{config.cacheResultFolder}/ESM_mapping_{rank}_{modelName}.json"
-        if (os.path.exists(cachedMapping)):
-            with open(cachedMapping) as fp:
-                id2Name = json.load(fp)
-        else:
-            level = rank.capitalize()
-            taxamap_file = f'{config.modelRoot}/mapping/VMR_MSL39_v4.json.processed_data.json.nosub_addunknown.json{level}_mapping.csv'
-            taxamap_df = pandas.read_csv(taxamap_file)
-            id2Name = {}
-            for _, row in taxamap_df.iterrows():
-                index = row[f"{rank.capitalize()} ID"]
-                name = row[rank.capitalize()]
-                if (index not in id2Name):
-                    id2Name[index] = name
-                elif (id2Name[index] != name):
-                    IOUtils.showInfo(f"{rank} ID {index} corresponds to multiple names", "ERROR")
-            with open(cachedMapping, 'wt') as fp:
-                json.dump(id2Name, fp, indent=2)
+        with ProcessPoolExecutor() as ex:
+            results = ex.submit(runESM, self.modelParams[rank][:-1], samples).result()  # note: ex.submit() do not unpack params
         
-        # convert dict to list for better performance
-        names = [None] * len(id2Name)
-        for idx, name in id2Name.items():
-            names[int(idx)] = name
-
-        proteinsToRun:list[ProteinSample] = list()
         for sample in samples:
-            for protein in sample.proteins:
-                if (protein.id not in cachedSamples_prob):
-                    proteinsToRun.append(protein)
+            taxo, score = results[sample.id]
+            self.resultDict[sample.id].addResult(taxo, score)
 
+            if not (self.resultDict[sample.id].terminate):
+                unTerminatedSamples.append(sample)
 
-        if (len(proteinsToRun) > 0):
-            IOUtils.showInfo(f"run {len(proteinsToRun)} proteins on ESM for {rank}")
-            model = ESMRunner(*self.modelParams[rank][1:])
-            lines = model.run(proteinsToRun)
-
-            fp_prob = open(cacheProbFile, 'at')
-            
-
-            for seq_name, (prob, cls, ave) in lines.items():
-                cachedSamples_prob[seq_name] = nextOffset_prob
-
-                probText = f"{seq_name}\t{IOUtils.encodeBase64(prob)}\n"
-
-                fp_prob.write(probText)
-                nextOffset_prob += len(probText)
-
-            cachedSamples_prob["nextOffset"] = nextOffset_prob
-
-            fp_prob.close()
-
-            del model
-            
-            for protein in proteinsToRun:
-                if (protein.id not in cachedSamples_prob):
-                    cachedSamples_prob[protein.id] = -1
-            
-            with open(cacheProbIndex, 'wt') as fp:
-                json.dump(cachedSamples_prob, fp, indent=2)
-        
-
-
-
-        if (self.strategy in ["highest", "topdown", "bottomup"]):
-            cachedResultFP_prob = open(cacheProbFile)
-            for sample in tqdm(samples, desc=f"{rank} pooling"):
-                if (self.pooling == "sum"):
-                    votes = {n: 0 for n in names if "Unknown" not in n}
-                    for protein in sample.proteins:
-                        offset = cachedSamples_prob[protein.id]
-                        if (offset == -1):
-                            continue
-                        cachedResultFP_prob.seek(offset)
-                        line = cachedResultFP_prob.readline().strip()
-                        scores = IOUtils.decodeBase64(line[line.find('\t')+1:])
-                        for taxo, score in zip(names, scores):
-                            if ("Unknown" not in taxo):
-                                votes[taxo] += score
-                elif (self.pooling.startswith("top")):
-                    thresh = int(self.pooling[3:])
-                    votes = {}
-                    for protein in sample.proteins:
-                        offset = cachedSamples_prob[protein.id]
-                        if (offset == -1):
-                            continue
-                        cachedResultFP_prob.seek(offset)
-                        line = cachedResultFP_prob.readline().strip()
-                        scores = IOUtils.decodeBase64(line[line.find('\t')+1:])
-                        rawScores = {taxo: score for taxo, score in zip(names, scores)}
-                        tops = sorted(list(rawScores.items()), key=lambda x:x[1], reverse=True)
-                        for taxo, score in tops[:thresh]:
-                            if ("Unknown" not in taxo):
-                                if (taxo in votes):
-                                    votes[taxo] += score
-                                else:
-                                    votes[taxo] = score
-
-                totalVotes = sum(votes.values())    # If pooling method == "sum", the totalVotes will be 1 * len(proteins) (not considering "Unknown" labels)
-                if (len(votes) > 0 and totalVotes > 0):
-                    winner, maxVotes = max(votes.items(), key=lambda x:x[1])
-                    self.resultDict[sample.id].addResult(winner, maxVotes/totalVotes)
-                
-                if not (self.resultDict[sample.id].terminate):
-                    unTerminatedSamples.append(sample)
-            cachedResultFP_prob.close()
-
-        # TODO: KNN and load trainset embedding
-        elif (self.strategy == "ClsEmbKNN"):
-            # cachedResultFP_cls = open(cacheCLSEmbFile)
-            # cachedResultFP_cls.close()
-            pass
-        elif (self.strategy == "AveEmbKNN"):
-            # cachedResultFP_ave = open(cacheAveEmbFile)
-            # cachedResultFP_ave.close()
-            pass
-
-        
         return unTerminatedSamples
+    
+def runESM(params, samples:list[Sample]):
+    model = ESMTaxo(*params)  # currently we do not need to pass n_class
+    mName = model.moduleName
+    model.getResults(samples)
+    results = {}
+    
+    for sample in samples:
+        res:PlainResult = sample.results[mName]
+        results[sample.id] = (res.pred, res.score)
+
+    return results

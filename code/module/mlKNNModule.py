@@ -41,39 +41,27 @@ class MLKNN(Module):
 
 
         modelParams = {
-            "realm_esm2_t33_256": (256, f"{config.modelRoot}/realm/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
-            "realm_esm2_t33_512": (512, f"{config.modelRoot}/realm/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 29, config.mlBatchSize),
-            "kingdom_esm2_t33_256": (256, f"{config.modelRoot}/kingdom/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 40, config.mlBatchSize),
-            "kingdom_esm2_t33_512": (512, f"{config.modelRoot}/kingdom/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 40, config.mlBatchSize),
-            "phylum_esm2_t33_256": (256, f"{config.modelRoot}/phylum/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 51, config.mlBatchSize),
-            "phylum_esm2_t33_512": (512, f"{config.modelRoot}/phylum/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 51, config.mlBatchSize),
-            "class_esm2_t33_256": (256, f"{config.modelRoot}/class/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 76, config.mlBatchSize),
-            "class_esm2_t33_512": (512, f"{config.modelRoot}/class/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 76, config.mlBatchSize),
-            "order_esm2_t33_512": (512, f"{config.modelRoot}/order/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 981, config.mlBatchSize),
-            "family_esm2_t33_512": (512, f"{config.modelRoot}/family/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize),
-            "family_esm2_t33_512_enlarge": (512, f"{config.modelRoot}/family/esm2_t33_512_enlarge", "facebook/esm2_t33_650M_UR50D", 1129, config.mlBatchSize),
-            "genus_esm2_t33_256": (256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune", "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize),
-            "genus_esm2_t33_256_enlarge": (256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523, config.mlBatchSize),
+            "realm_esm2_t33_256": (256, f"{config.modelRoot}/realm/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 29),
+            "realm_esm2_t33_512": (512, f"{config.modelRoot}/realm/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 29),
+            "kingdom_esm2_t33_256": (256, f"{config.modelRoot}/kingdom/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 40),
+            "kingdom_esm2_t33_512": (512, f"{config.modelRoot}/kingdom/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 40),
+            "phylum_esm2_t33_256": (256, f"{config.modelRoot}/phylum/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 51),
+            "phylum_esm2_t33_512": (512, f"{config.modelRoot}/phylum/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 51),
+            "class_esm2_t33_256": (256, f"{config.modelRoot}/class/esm2_t33_256", "facebook/esm2_t33_650M_UR50D", 76),
+            "class_esm2_t33_512": (512, f"{config.modelRoot}/class/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 76),
+            "order_esm2_t33_512": (512, f"{config.modelRoot}/order/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 981),
+            "family_esm2_t33_512": (512, f"{config.modelRoot}/family/esm2_t33_512", "facebook/esm2_t33_650M_UR50D", 1129),
+            "family_esm2_t33_512_enlarge": (512, f"{config.modelRoot}/family/esm2_t33_512_enlarge", "facebook/esm2_t33_650M_UR50D", 1129),
+            "genus_esm2_t33_256": (256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune", "facebook/esm2_t33_650M_UR50D", 3523),
+            "genus_esm2_t33_256_enlarge": (256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523),
         }
 
         if (model not in modelParams):
             raise ValueError("Unknown model")
-        self.modelParam = modelParams[model]
-
-        # cacheProbFile = f"{config.cacheResultFolder}/ESM_taxo_{model}_prob.tmp"
-        self.cacheCLSEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{model}_cls_emb.tmp"
-        self.cacheAveEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{model}_ave_emb.tmp"
-        # cacheProbIndex = f"{config.cacheResultFolder}/ESM_taxo_{model}_prob.json"
-        self.cacheCLSEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{model}_cls_emb.json"
-        self.cacheAveEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{model}_ave_emb.json"
+        self.modelParam = [model, *modelParams[model]]
 
         useMarkerGene = "marker" if marker else "full"
         self.cacheClusterFile = f"{config.modelRoot}/{self.reference}/{model}_{embedding}_{useMarkerGene}.tsv"
-
-        self.cachedSamples_cls = {"nextOffset": 0}
-        self.nextOffset_cls = 0
-        self.cachedSamples_ave = {"nextOffset": 0}
-        self.nextOffset_ave = 0
 
         self.invStdVar = None
         self.refEmbeddings = None
@@ -86,8 +74,6 @@ class MLKNN(Module):
         referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
         samples = IOUtils.loadSamples(referenceFasta)
         self.getEmbedding(samples)
-
-
 
         if (self.marker):
             markerModule = Marker(self.reference, "sum")
@@ -374,8 +360,6 @@ class MLKNN(Module):
         del self.refEmbeddings # this is huge
         return results
             
-
-
     def getEmbedding(self, samples:list[Sample])->None:  # The embedding will be stored in the ProteinSample's info dict
         NucleotideUtils.extractProtein(samples)
         uncachedSamples = []
@@ -386,84 +370,10 @@ class MLKNN(Module):
         
         if (len(uncachedSamples) == 0):
             return
-        
 
-        essentialFiles = [self. cacheCLSEmbFile, self.cacheAveEmbFile, self.cacheCLSEmbIndex, self.cacheAveEmbIndex]
-        allExists = True
-        for f in essentialFiles:
-            if (not os.path.exists(f)):
-                allExists = False
-        
-        if (allExists):
-            with open(self.cacheCLSEmbIndex) as fp:
-                self.cachedSamples_cls = json.load(fp)
-                self.nextOffset_cls = self.cachedSamples_cls["nextOffset"]
-            with open(self.cacheAveEmbIndex) as fp:
-                self.cachedSamples_ave = json.load(fp)
-                self.nextOffset_ave = self.cachedSamples_ave["nextOffset"]
-
-        proteinsToRun:list[ProteinSample] = list()
-        for protein in uncachedSamples:
-            if (protein.id not in self.cachedSamples_cls or protein.id not in self.cachedSamples_ave):
-                proteinsToRun.append(protein)
-
-        if (len(proteinsToRun) > 0):
-            self.runESM(proteinsToRun)
-
-        cachedResultFP_cls = open(self.cacheCLSEmbFile)
-        cachedResultFP_ave = open(self.cacheAveEmbFile)
-        for sample in tqdm(uncachedSamples, desc="embedding"):
-            cachedResultFP_cls.seek(self.cachedSamples_cls[sample.id])
-            line = cachedResultFP_cls.readline().strip()
-            text = line[line.find('\t')+1:]
-            sample.info[f"{self.model}_CLSemb"] = IOUtils.decodeBase64(text)
-
-            cachedResultFP_ave.seek(self.cachedSamples_ave[sample.id])
-            line = cachedResultFP_ave.readline().strip()
-            text = line[line.find('\t')+1:]
-            sample.info[f"{self.model}_aveemb"] = IOUtils.decodeBase64(text)
-        cachedResultFP_cls.close()
-        cachedResultFP_ave.close()
+        model = ESMRunner(*self.modelParam[:-1])
+        model.run(uncachedSamples, getAve=(self.embedding == "ave"), getCls=(self.embedding == "CLS"))
     
-    def runESM(self, samples:list[ProteinSample])->None:
-        model = ESMRunner(*self.modelParam)
-        lines = model.run(samples)
-
-        fp_cls = open(self.cacheCLSEmbFile, 'at')
-        fp_ave = open(self.cacheAveEmbFile, 'at')
-        
-        for seq_name, (prob, cls, ave) in lines.items():
-            self.cachedSamples_cls[seq_name] = self.nextOffset_cls
-            self.cachedSamples_ave[seq_name] = self.nextOffset_ave
-
-            clsText = f"{seq_name}\t{IOUtils.encodeBase64(cls)}\n"
-            aveText = f"{seq_name}\t{IOUtils.encodeBase64(ave)}\n"
-
-            fp_cls.write(clsText)
-            fp_ave.write(aveText)
-            self.nextOffset_cls += len(clsText)
-            self.nextOffset_ave += len(aveText)
-
-        self.cachedSamples_cls["nextOffset"] = self.nextOffset_cls
-        self.cachedSamples_ave["nextOffset"] = self.nextOffset_ave
-
-        fp_cls.close()
-        fp_ave.close()
-
-        del model
-
-        for protein in samples:
-            if (protein.id not in self.cachedSamples_cls):
-                self.cachedSamples_cls[protein.id] = -1
-            if (protein.id not in self.cachedSamples_ave):
-                self.cachedSamples_ave[protein.id] = -1
-        
-        with open(self.cacheCLSEmbIndex, 'wt') as fp:
-            json.dump(self.cachedSamples_cls, fp, indent=2)
-        with open(self.cacheAveEmbIndex, 'wt') as fp:
-            json.dump(self.cachedSamples_ave, fp, indent=2)
-
-
 def softmin(distances):
     w = numpy.exp(-distances)
     s = numpy.sum(w, axis=0)

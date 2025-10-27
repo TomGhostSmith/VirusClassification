@@ -14,6 +14,7 @@ import multiprocessing
 from datasets import Dataset
 from tqdm import tqdm
 import torch
+import json
 import math
 import csv
 import os
@@ -26,23 +27,36 @@ from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
 class ESMRunner():
-    def __init__(self, maxLen, modelFolder, baseModelFolder, n_class, batchSize=64, cachedResult=None):
-        self.tempResTSV = f"{config.cacheFolder}/res.tsv"
+    def __init__(self, modelName, maxLen, modelFolder, baseModelFolder, n_class, batchSize=None):
+        self.modelName = modelName
 
         self.maxLen = maxLen
         self.modelFolder = modelFolder
         self.baseModelFolder = baseModelFolder
         self.n_class = n_class
+        if (batchSize is None):
+            batchSize = config.mlBatchSize
         self.batchSize = batchSize
 
-        self.useCache = cachedResult is not None
 
-        if (self.useCache):
-            self.tempResTSV = cachedResult
+        self.cacheProbFile = f"{config.cacheResultFolder}/ESM_taxo_{self.modelName}_prob.tmp"
+        self.cacheCLSEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{self.modelName}_cls_emb.tmp"
+        self.cacheAveEmbFile = f"{config.cacheResultFolder}/ESM_taxo_{self.modelName}_ave_emb.tmp"
+        self.cacheProbIndex = f"{config.cacheResultFolder}/ESM_taxo_{self.modelName}_prob.json"
+        self.cacheCLSEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{self.modelName}_cls_emb.json"
+        self.cacheAveEmbIndex = f"{config.cacheResultFolder}/ESM_taxo_{self.modelName}_ave_emb.json"
+
+        self.cachedSamples_prob = {"nextOffset": 0}
+        self.nextOffset_prob = 0
+        self.cachedSamples_cls = {"nextOffset": 0}
+        self.nextOffset_cls = 0
+        self.cachedSamples_ave = {"nextOffset": 0}
+        self.nextOffset_ave = 0
+
 
     def loadModel(self):
         self.model = transformers.AutoModelForSequenceClassification.from_pretrained(self.baseModelFolder,
-                                                                                num_labels=self.n_class,
+                                                                                num_labels=n_class,
                                                                                 trust_remote_code=True,
                                                                                 torch_dtype=torch.float16,
                                                                                 )
@@ -74,13 +88,10 @@ class ESMRunner():
             labels=labels,
             attention_mask=input_ids.ne(self.tokenizer.pad_token_id),
         )
-
-    def run(self, proteins:list[ProteinSample]):
+    
+    def esm(self, proteins):
         def tokenize_function(examples):  # do not padding in the tokenizer but in batch: prevent too many padding if one sequence is too long
             return self.tokenizer(examples["sequence"], truncation=True)
-        if (self.useCache):
-            return
-        
 
         labels = []
         sequences = []
@@ -111,9 +122,12 @@ class ESMRunner():
         test_loader = DataLoader(tokenized_datasets, batch_size=self.batchSize, collate_fn=self.collateData)
 
         softmax = Softmax(dim=0)
-        result = {}
 
         self.loadModel()
+
+        fp_prob = open(self.cacheProbFile, 'at')
+        fp_cls = open(self.cacheCLSEmbFile, 'at')
+        fp_ave = open(self.cacheAveEmbFile, 'at')
 
         with torch.no_grad():
             for batch in tqdm(test_loader, total=len(test_loader)):
@@ -140,19 +154,104 @@ class ESMRunner():
                     # embedding = numpy.frombuffer(base64.b64decode(embedding_str), dtype=numpy.float16)  # note: we are using float16
                     seq_name = labels[i]
 
-                    result[seq_name] = (probabilities, cls_embeddings[i], ave_embeddings[i])
+                    self.cachedSamples_prob[seq_name] = self.nextOffset_prob
+                    self.cachedSamples_cls[seq_name] = self.nextOffset_cls
+                    self.cachedSamples_ave[seq_name] = self.nextOffset_ave
 
+                    probText = f"{seq_name}\t{IOUtils.encodeBase64(probabilities)}\n"
+                    clsText = f"{seq_name}\t{IOUtils.encodeBase64(cls_embeddings[i])}\n"
+                    aveText = f"{seq_name}\t{IOUtils.encodeBase64(ave_embeddings[i])}\n"
 
-        # lines = dict()
-        # with open(self.tempResTSV, 'wt') as fp:
-        #     # write head 
-        #     line = "seq_name\t" + "\t".join([f'class_{i}' for i in range(self.n_class)]) + "\n"
-        #     lines["title"] = line
-        #     fp.write(line)
-        #     for seq_name, probabilities in result.items():
-        #         probabilities = [str(p) for p in probabilities]
-        #         line = f"{seq_name}\t" + "\t".join(probabilities) + "\n"
-        #         fp.write(line)
-        #         lines[seq_name] = line
+                    fp_prob.write(probText)
+                    fp_cls.write(clsText)
+                    fp_ave.write(aveText)
+                    self.nextOffset_prob += len(probText)
+                    self.nextOffset_cls += len(clsText)
+                    self.nextOffset_ave += len(aveText)
+
+        self.cachedSamples_prob["nextOffset"] = self.nextOffset_prob
+        self.cachedSamples_cls["nextOffset"] = self.nextOffset_cls
+        self.cachedSamples_ave["nextOffset"] = self.nextOffset_ave
+
+        fp_prob.close()
+        fp_cls.close()
+        fp_ave.close()
+
+        for protein in proteins:
+            if (protein.id not in self.cachedSamples_prob):
+                self.cachedSamples_prob[protein.id] = -1
+            if (protein.id not in self.cachedSamples_cls):
+                self.cachedSamples_cls[protein.id] = -1
+            if (protein.id not in self.cachedSamples_ave):
+                self.cachedSamples_ave[protein.id] = -1
+
         
-        return result
+    def run(self, proteins:list[ProteinSample], getProb=False, getCls=False, getAve=False):
+        essentialFiles = [self.cacheProbFile, self.cacheCLSEmbFile, self.cacheAveEmbFile, self.cacheProbIndex, self.cacheCLSEmbIndex, self.cacheAveEmbIndex]
+        allExists = True
+        for f in essentialFiles:
+            if (not os.path.exists(f)):
+                allExists = False
+        
+        if (allExists):
+            with open(self.cacheProbIndex) as fp:
+                self.cachedSamples_prob = json.load(fp)
+                self.nextOffset_prob = self.cachedSamples_prob["nextOffset"]
+            with open(self.cacheCLSEmbIndex) as fp:
+                self.cachedSamples_cls = json.load(fp)
+                self.nextOffset_cls = self.cachedSamples_cls["nextOffset"]
+            with open(self.cacheAveEmbIndex) as fp:
+                self.cachedSamples_ave = json.load(fp)
+                self.nextOffset_ave = self.cachedSamples_ave["nextOffset"]
+
+        proteinsToRun:list[ProteinSample] = list()
+        for protein in proteins:
+            if (protein.id not in self.cachedSamples_prob or proteins.id not in self.cachedSamples_cls or proteins.id not in self.cachedSamples_ave):
+                proteinsToRun.append(protein)
+
+        if (len(proteinsToRun) > 0):
+            IOUtils.showInfo(f"run {len(proteinsToRun)} proteins on ESM {self.modelName}")
+            self.esm(proteinsToRun)
+
+            with open(self.cacheProbIndex, 'wt') as fp:
+                json.dump(self.cachedSamples_prob, fp, indent=2)
+            with open(self.cacheCLSEmbIndex, 'wt') as fp:
+                json.dump(self.cachedSamples_cls, fp, indent=2)
+            with open(self.cacheAveEmbIndex, 'wt') as fp:
+                json.dump(self.cachedSamples_ave, fp, indent=2)
+        
+        if (getProb):
+            cachedResultFP_prob = open(self.cacheProbFile)
+            for protein in proteins:
+                offset = self.cachedSamples_prob[protein.id]
+                if (offset == -1):
+                    continue
+                cachedResultFP_prob.seek(offset)
+                line = cachedResultFP_prob.readline().strip()
+                text = line[line.find('\t')+1:]
+                protein.info[f"{self.modelName}_prob"] = IOUtils.decodeBase64(text)
+            cachedResultFP_prob.close()
+        if (getCls):
+            cachedResultFP_cls = open(self.cacheCLSEmbFile)
+            for protein in proteins:
+                offset = self.cachedSamples_cls[protein.id]
+                if (offset == -1):
+                    protein.info[f"{self.model}_CLSemb"] = None
+                else:
+                    cachedResultFP_cls.seek(offset)
+                    line = cachedResultFP_cls.readline().strip()
+                    text = line[line.find('\t')+1:]
+                    protein.info[f"{self.model}_CLSemb"] = IOUtils.decodeBase64(text)
+            cachedResultFP_cls.close()
+        if (getAve):
+            cachedResultFP_ave = open(self.cacheAveEmbFile)
+            for protein in proteins:
+                offset = self.cachedSamples_ave[protein.id]
+                if (offset == -1):
+                    protein.info[f"{self.model}_aveemb"] = None
+                else:
+                    cachedResultFP_ave.seek(offset)
+                    line = cachedResultFP_ave.readline().strip()
+                    text = line[line.find('\t')+1:]
+                    protein.info[f"{self.model}_aveemb"] = IOUtils.decodeBase64(text)
+            cachedResultFP_ave.close()

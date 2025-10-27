@@ -26,6 +26,7 @@ class ESM(Module):
         # self.modelPath = self.models[shortName]
         
         super().__init__(f'esm-150M_512')
+        raise NotImplementedError("ESM predictor is not implemented for the new ESM runner")
 
     def run(self, samples:list[Sample]):
         results = list()
