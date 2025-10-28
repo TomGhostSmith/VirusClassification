@@ -192,6 +192,7 @@ class Marker(Module):
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                protein.results[self.baseName] = alignments
                 if (len(alignments) > 0):
                     bestAlignment = alignments[0]
                     for alignment in alignments[1:]:
@@ -208,6 +209,8 @@ class Marker(Module):
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
+                protein.results[self.baseName] = alignments
                 for alignment in alignments:
                     ICTVName = self.LCAs[alignment.ref]
                     if ICTVName in votes:
@@ -221,6 +224,7 @@ class Marker(Module):
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
+                protein.results[self.baseName] = alignments
                 for alignment in alignments[:thresh]:
                     ICTVName = self.LCAs[alignment.ref]
                     if ICTVName in votes:

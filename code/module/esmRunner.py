@@ -56,7 +56,7 @@ class ESMRunner():
 
     def loadModel(self):
         self.model = transformers.AutoModelForSequenceClassification.from_pretrained(self.baseModelFolder,
-                                                                                num_labels=n_class,
+                                                                                num_labels=self.n_class,
                                                                                 trust_remote_code=True,
                                                                                 torch_dtype=torch.float16,
                                                                                 )
@@ -206,7 +206,7 @@ class ESMRunner():
 
         proteinsToRun:list[ProteinSample] = list()
         for protein in proteins:
-            if (protein.id not in self.cachedSamples_prob or proteins.id not in self.cachedSamples_cls or proteins.id not in self.cachedSamples_ave):
+            if (protein.id not in self.cachedSamples_prob or protein.id not in self.cachedSamples_cls or protein.id not in self.cachedSamples_ave):
                 proteinsToRun.append(protein)
 
         if (len(proteinsToRun) > 0):

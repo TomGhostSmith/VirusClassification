@@ -13,9 +13,12 @@ from tqdm import tqdm
 from utils import IOUtils
 
 class ESMTaxo(Module):
-    def __init__(self, modelName, maxLen, modelFolder, baseModelFolder, rank, batchSize=None):
-        super.__init__(f"ESM_taxo_{modelName}")
+    def __init__(self, modelName, maxLen, modelFolder, baseModelFolder, rank, pooling, batchSize=None):
+        super().__init__(f"ESM_taxo_{modelName}")
         self.name = modelName
+        if (pooling not in ["sum"] and not pooling.startswith("top")):
+            raise ValueError("Unsupported pooling method")
+        self.pooling = pooling
         self.maxLen = maxLen
         self.modelFolder = modelFolder
         self.baseModelFolder = baseModelFolder
@@ -90,4 +93,4 @@ class ESMTaxo(Module):
             winner, maxVotes = max(votes.items(), key=lambda x:x[1])
             return PlainResult(winner, maxVotes/totalVotes)
         else:
-            return None            
+            return None

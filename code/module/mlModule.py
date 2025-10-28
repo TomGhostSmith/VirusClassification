@@ -141,25 +141,29 @@ class MLModule(Module):
             return unTerminatedSamples
         
         with ProcessPoolExecutor() as ex:
-            results = ex.submit(runESM, self.modelParams[rank][:-1], samples).result()  # note: ex.submit() do not unpack params
+            results = ex.submit(runESM, self.modelParams[rank][:-1], samples, rank, self.pooling).result()  # note: ex.submit() do not unpack params
         
         for sample in samples:
             taxo, score = results[sample.id]
-            self.resultDict[sample.id].addResult(taxo, score)
+            if (taxo is not None and score is not None):
+                self.resultDict[sample.id].addResult(taxo, score)
 
             if not (self.resultDict[sample.id].terminate):
                 unTerminatedSamples.append(sample)
 
         return unTerminatedSamples
     
-def runESM(params, samples:list[Sample]):
-    model = ESMTaxo(*params)  # currently we do not need to pass n_class
+def runESM(params, samples:list[Sample], rank, pooling):
+    model = ESMTaxo(*params, rank=rank, pooling=pooling)  # currently we do not need to pass n_class
     mName = model.moduleName
     model.getResults(samples)
     results = {}
     
     for sample in samples:
         res:PlainResult = sample.results[mName]
-        results[sample.id] = (res.pred, res.score)
+        if (res):
+            results[sample.id] = (res.pred, res.score)
+        else:
+            results[sample.id] = (None, None)
 
     return results
