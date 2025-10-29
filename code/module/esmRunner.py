@@ -1,30 +1,23 @@
 #This file is modified from https://github.com/ChengPENG-wolf/ViraLM/blob/main/viralm.py
-
+from concurrent.futures import ProcessPoolExecutor
 from transformers import AutoTokenizer
 from torch.utils.data import DataLoader
 from datasets import load_dataset
 from typing import Dict, Sequence
 from dataclasses import dataclass
 from torch.nn import Softmax
-from Bio import SeqIO
 from torch import nn
 import transformers
-import subprocess
 import multiprocessing
 from datasets import Dataset
 from tqdm import tqdm
 import torch
 import json
-import math
-import csv
 import os
-import base64
 
 from entity.proteinSample import ProteinSample
 from config import config
-from Bio import SeqIO
 from utils import IOUtils
-from utils.NucleotideUtils import NucleotideUtils
 
 class ESMRunner():
     def __init__(self, modelName, maxLen, modelFolder, baseModelFolder, n_class, batchSize=None):
@@ -90,8 +83,6 @@ class ESMRunner():
         )
     
     def esm(self, proteins):
-        def tokenize_function(examples):  # do not padding in the tokenizer but in batch: prevent too many padding if one sequence is too long
-            return self.tokenizer(examples["sequence"], truncation=True)
 
         labels = []
         sequences = []
@@ -113,21 +104,19 @@ class ESMRunner():
             trust_remote_code=True
         )
 
+        # run tokenizer with multiprocessing in an separate function to avoid inheret huge self.cache
+        with ProcessPoolExecutor() as ex:
+            tokenized_datasets = ex.submit(tokenize, testset, self.tokenizer, self.batchSize).result()
 
-        tokenized_datasets = testset.map(tokenize_function, 
-                                         batched=True, 
-                                         batch_size=self.batchSize,
-                                         remove_columns=["sequence"], 
-                                         num_proc=multiprocessing.cpu_count()).with_format("torch")
         test_loader = DataLoader(tokenized_datasets, batch_size=self.batchSize, collate_fn=self.collateData)
 
         softmax = Softmax(dim=0)
 
         self.loadModel()
 
-        fp_prob = open(self.cacheProbFile, 'at')
-        fp_cls = open(self.cacheCLSEmbFile, 'at')
-        fp_ave = open(self.cacheAveEmbFile, 'at')
+        probLines = []
+        clsLines = []
+        aveLines = []
 
         with torch.no_grad():
             for batch in tqdm(test_loader, total=len(test_loader)):
@@ -162,9 +151,10 @@ class ESMRunner():
                     clsText = f"{seq_name}\t{IOUtils.encodeBase64(cls_embeddings[i])}\n"
                     aveText = f"{seq_name}\t{IOUtils.encodeBase64(ave_embeddings[i])}\n"
 
-                    fp_prob.write(probText)
-                    fp_cls.write(clsText)
-                    fp_ave.write(aveText)
+                    probLines.append(probText)
+                    clsLines.append(clsText)
+                    aveLines.append(aveText)
+
                     self.nextOffset_prob += len(probText)
                     self.nextOffset_cls += len(clsText)
                     self.nextOffset_ave += len(aveText)
@@ -172,6 +162,16 @@ class ESMRunner():
         self.cachedSamples_prob["nextOffset"] = self.nextOffset_prob
         self.cachedSamples_cls["nextOffset"] = self.nextOffset_cls
         self.cachedSamples_ave["nextOffset"] = self.nextOffset_ave
+
+        # write results at the end to avoid interruption and offset not updated
+
+        fp_prob = open(self.cacheProbFile, 'at')
+        fp_cls = open(self.cacheCLSEmbFile, 'at')
+        fp_ave = open(self.cacheAveEmbFile, 'at')
+
+        fp_prob.writelines(probLines)
+        fp_cls.writelines(clsLines)
+        fp_ave.writelines(aveLines)
 
         fp_prob.close()
         fp_cls.close()
@@ -229,7 +229,14 @@ class ESMRunner():
                 cachedResultFP_prob.seek(offset)
                 line = cachedResultFP_prob.readline().strip()
                 text = line[line.find('\t')+1:]
-                protein.info[f"{self.modelName}_prob"] = IOUtils.decodeBase64(text)
+                try:
+                    protein.info[f"{self.modelName}_prob"] = IOUtils.decodeBase64(text)
+                except Exception as e:
+                    print(f"offset={offset}")
+                    print(f"'{line}'")
+                    print(f"'{text}'")
+                    print(e)
+                    raise Exception
             cachedResultFP_prob.close()
         if (getCls):
             cachedResultFP_cls = open(self.cacheCLSEmbFile)
@@ -255,3 +262,15 @@ class ESMRunner():
                     text = line[line.find('\t')+1:]
                     protein.info[f"{self.model}_aveemb"] = IOUtils.decodeBase64(text)
             cachedResultFP_ave.close()
+
+
+def tokenize(testset, tokenizer, batchSize):
+    def tokenize_function(examples):  # do not padding in the tokenizer but in batch: prevent too many padding if one sequence is too long
+        return tokenizer(examples["sequence"], truncation=True)
+
+    tokenized_datasets = testset.map(tokenize_function, 
+                                    batched=True, 
+                                    batch_size=batchSize,
+                                    remove_columns=["sequence"], 
+                                    num_proc=multiprocessing.cpu_count()).with_format("torch")
+    return tokenized_datasets

@@ -56,6 +56,7 @@ class MLModule(Module):
         genusParams = [
             ("genus_esm2_t33_256_enlarge", 256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus"),
             ("genus_esm2_t33_256", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
+            ("genus_esm2_t33_1022", 1022, f"{config.modelRoot}/genus/esm2_t33_650M_UR50D_MAXLEN_1022_bs2x4_accum2_lr3e-5_ep10"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.1_2_5_10_30_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.SCL.genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.1_2_3_4_5_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
@@ -140,30 +141,17 @@ class MLModule(Module):
                     unTerminatedSamples.append(sample)
             return unTerminatedSamples
         
-        with ProcessPoolExecutor() as ex:
-            results = ex.submit(runESM, self.modelParams[rank][:-1], samples, rank, self.pooling).result()  # note: ex.submit() do not unpack params
+        model = ESMTaxo(*self.modelParams[rank][:-1], rank=rank, pooling=self.pooling)  # currently we do not need to pass n_class
+        mName = model.moduleName
+        model.getResults(samples)
+        results = {}
         
         for sample in samples:
-            taxo, score = results[sample.id]
-            if (taxo is not None and score is not None):
-                self.resultDict[sample.id].addResult(taxo, score)
+            res:PlainResult = sample.results[mName]
+            if (res):
+                self.resultDict[sample.id].addResult(res.pred, res.score)
 
             if not (self.resultDict[sample.id].terminate):
                 unTerminatedSamples.append(sample)
 
         return unTerminatedSamples
-    
-def runESM(params, samples:list[Sample], rank, pooling):
-    model = ESMTaxo(*params, rank=rank, pooling=pooling)  # currently we do not need to pass n_class
-    mName = model.moduleName
-    model.getResults(samples)
-    results = {}
-    
-    for sample in samples:
-        res:PlainResult = sample.results[mName]
-        if (res):
-            results[sample.id] = (res.pred, res.score)
-        else:
-            results[sample.id] = (None, None)
-
-    return results

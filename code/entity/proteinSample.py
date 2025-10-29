@@ -12,9 +12,5 @@ class ProteinSample():
             self.index = 0
         self.length:int = len(seq.seq)
         self.seq:SeqRecord = seq
-        # if (stdResult is not None):
-        #     self.stdResult = taxoTree.getTaxoNodeFromICTV(ICTVName=stdResult)
-        # else:
-        #     self.stdResult = None
         self.results = dict()
         self.info = dict()

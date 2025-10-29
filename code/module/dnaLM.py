@@ -9,7 +9,6 @@ from moduleResult.plainResult import PlainResult
 from entity.sample import Sample
 from entity.proteinSample import ProteinSample
 from module.dnaLMRunner import DNALMRunner
-from module.esmRunner import ESMRunner
 from module.marker import Marker
 from tqdm import tqdm
 import numpy

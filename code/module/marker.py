@@ -38,7 +38,7 @@ class Marker(Module):
         self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_marker.dmnd"
         self.markerDB = f"{config.cacheResultFolder}/{self.reference}_marker.json"
 
-        self.LCAs = dict()
+        self.LCAs = {}
     
     def buildDB(self):
         # build diamond DB
@@ -82,7 +82,7 @@ class Marker(Module):
                     occurSet[refID] = occurSet[queryID]  # now they share the same addr in mem
         
         # step 4: calculate LCA for each protein
-        self.LCAs = dict()
+        self.LCAs = {}
         for proteinID, nodeset in occurSet.items():
             LCANode = taxoTree.ICTVTree.findLCA(nodeset)
             self.LCAs[proteinID] = LCANode.name
@@ -287,3 +287,9 @@ class Marker(Module):
         # stdout, stderr = cline()
         command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20"
         return command
+    
+    def getLCAs(self):
+        if len(self.LCAs) == 0:
+            with open(self.markerDB) as fp:
+                self.LCAs = json.load(fp)
+        return self.LCAs

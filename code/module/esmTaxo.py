@@ -2,6 +2,8 @@
 import os
 import json
 import pandas
+from concurrent.futures import ProcessPoolExecutor
+
 from config import config
 from prototype.module import Module
 from moduleResult.plainResult import PlainResult
@@ -11,10 +13,11 @@ from module.esmRunner import ESMRunner
 from tqdm import tqdm
 
 from utils import IOUtils
+from utils.NucleotideUtils import NucleotideUtils
 
 class ESMTaxo(Module):
     def __init__(self, modelName, maxLen, modelFolder, baseModelFolder, rank, pooling, batchSize=None):
-        super().__init__(f"ESM_taxo_{modelName}")
+        super().__init__(f"ESM_taxo_{modelName}_{pooling}")
         self.name = modelName
         if (pooling not in ["sum"] and not pooling.startswith("top")):
             raise ValueError("Unsupported pooling method")
@@ -53,17 +56,25 @@ class ESMTaxo(Module):
         self.class_names = names
 
     def run(self, samples:list[Sample])->list[PlainResult]:
+        NucleotideUtils.extractProtein(samples)
         proteinsToRun:list[ProteinSample] = list()
         for sample in samples:
             for protein in sample.proteins:
                 protein.info[f"{self.rank}_labels"] = self.class_names
                 proteinsToRun.append(protein)
 
+        with ProcessPoolExecutor() as ex:
+            results = ex.submit(getProbs, self.name, self.maxLen, self.modelFolder, self.baseModelFolder, len(self.class_names), self.batchSize, proteinsToRun).result()  # note: ex.submit() do not unpack params
+            key = f"{self.name}_prob"
+        
+        for r, p in zip(results, proteinsToRun):
+            p.info[key] = r
 
-        model = ESMRunner(self.name, self.maxLen, self.modelFolder, self.baseModelFolder, len(self.class_names), self.batchSize)
-        model.run(proteinsToRun, getProb=True)
 
         results = [self.getResult(sample) for sample in samples]
+
+        for p in proteinsToRun:
+            p.info.pop(key)
         return results
     
     def getResult(self, sample:Sample):
@@ -78,7 +89,7 @@ class ESMTaxo(Module):
             thresh = int(self.pooling[3:])
             votes = {}
             for protein in sample.proteins:
-                scores = protein.info[f"{self.name}_prob"]
+                scores = protein.info[f"{self.name}_prob"].tolist()
                 rawScores = {taxo: score for taxo, score in zip(self.class_names, scores)}
                 tops = sorted(list(rawScores.items()), key=lambda x:x[1], reverse=True)
                 for taxo, score in tops[:thresh]:
@@ -94,3 +105,10 @@ class ESMTaxo(Module):
             return PlainResult(winner, maxVotes/totalVotes)
         else:
             return None
+        
+def getProbs(name, maxLen, modelFolder, baseModelFolder, n_class, batchSize, proteinsToRun):
+    model = ESMRunner(name, maxLen, modelFolder, baseModelFolder, n_class, batchSize)
+    model.run(proteinsToRun, getProb=True)
+    key = f"{name}_prob"
+    results = [p.info[key] for p in proteinsToRun]
+    return results
