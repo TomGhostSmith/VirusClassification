@@ -108,7 +108,10 @@ class ICTVTree():
                     synonyms[syn].add(ID)
         
         # update synonyms to name2ID when the synonym is unique; otherwise we use the LCA of them
+        # if syn is already used, do not replace it
         for syn, IDs in synonyms.items():
+            if (syn in self.nodes):
+                continue
             if len(IDs) == 1:
                 id = next(iter(IDs))
                 self.nodes[syn] = self.species[id]

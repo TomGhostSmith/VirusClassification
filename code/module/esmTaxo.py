@@ -55,7 +55,7 @@ class ESMTaxo(Module):
         
         self.class_names = names
 
-    def run(self, samples:list[Sample])->list[PlainResult]:
+    def run(self, samples:list[Sample], keepProb=False)->list[PlainResult]:
         NucleotideUtils.extractProtein(samples)
         proteinsToRun:list[ProteinSample] = list()
         for sample in samples:
@@ -73,8 +73,9 @@ class ESMTaxo(Module):
 
         results = [self.getResult(sample) for sample in samples]
 
-        for p in proteinsToRun:
-            p.info.pop(key)
+        if (not keepProb):
+            for p in proteinsToRun:
+                p.info.pop(key)
         return results
     
     def getResult(self, sample:Sample):

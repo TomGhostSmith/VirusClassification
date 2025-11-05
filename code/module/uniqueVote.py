@@ -50,11 +50,11 @@ class UniqueVote(Module):
         self.rank = mlModel[:mlModel.find("_")]
 
     def run(self, samples):
-        markerModule = Marker(self.trainset, "vote")
+        markerModule = Marker(self.trainset, "vote", coverage=80, identity=50)
         markerModule.getResults(samples)
 
         esmTaxo = ESMTaxo(*self.params[:-1], pooling="sum", rank=self.rank)
-        esmTaxo.getResults(samples)
+        esmTaxo.run(samples, keepProb=True)  # should not use getResults because we want to get prob
 
         taxoLabels = esmTaxo.class_names
         votes = {taxo: 0 for taxo in taxoLabels}
@@ -65,6 +65,7 @@ class UniqueVote(Module):
         thresh = 3
 
         markerLCAs = markerModule.getLCAs()
+        key = f"{self.mlName}_prob"
 
         for sample in samples:
             for protein in sample.proteins:
@@ -98,6 +99,8 @@ class UniqueVote(Module):
                             votes[taxo] += score
                         else:
                             votes[taxo] = score
+
+                protein.info.pop(key)
 
             # print(votes)
             # with open("working/dump.json", "wt") as fp:

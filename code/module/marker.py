@@ -18,15 +18,17 @@ from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
 class Marker(Module):
-    def __init__(self, reference, method, threads=multiprocessing.cpu_count(), threshRank='species'):
+    def __init__(self, reference, method, threads=multiprocessing.cpu_count(), threshRank='species', coverage=None, identity=50):
         if (method not in ["sum", "vote"] and not method.startswith("top")):
             raise ValueError("Unsupported pooling method")
         self.method = method
         self.reference=reference
         self.threshRank = threshRank
+        self.identity = identity
+        self.coverage = coverage
         self.threads = threads
-        super().__init__(f'marker-ref={self.reference};method={self.method};thresh={self.threshRank}')
-        self.baseName = f'marker-ref={self.reference}'  # do not use 'self.moduleName' in code directly, in case of subClass!
+        super().__init__(f'marker-ref={self.reference};coverage={coverage};identity={identity};method={self.method};thresh={self.threshRank}')
+        self.baseName = f'marker-ref={self.reference};coverage={coverage};identity={identity}'  # do not use 'self.moduleName' in code directly, in case of subClass!
 
         self.cacheFile = f"{config.cacheResultFolder}/{self.baseName}.tmp"
         self.cacheIndex = f"{config.cacheResultFolder}/{self.baseName}.json"
@@ -35,8 +37,8 @@ class Marker(Module):
         self.cachedSampleNameFile = f"{config.cacheResultFolder}/{self.baseName}.names"
         self.cachedSampleNames = set()
 
-        self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_marker.dmnd"
-        self.markerDB = f"{config.cacheResultFolder}/{self.reference}_marker.json"
+        self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_c{coverage}_i{identity}_marker.dmnd"
+        self.markerDB = f"{config.cacheResultFolder}/{self.reference}_c{coverage}_i{identity}_marker.json"
 
         self.LCAs = {}
     
@@ -67,7 +69,7 @@ class Marker(Module):
         resultFile = f"{config.cacheFolder}/blast.tsv"
         IOUtils.showInfo(f"Begin self-diamond on {self.reference}")
         IOUtils.writeSampleProteinFasta(refSamples, queryFile)
-        command = self.getBlastCommand(queryFile, resultFile)
+        command = self.getBlastCommandForMarker(queryFile, resultFile)
         subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         # step 3: collect results, merge similar genes
@@ -77,7 +79,7 @@ class Marker(Module):
                 queryID = terms[0]   # protein ID
                 refID = terms[1]     # protein ID
                 score = float(terms[2])
-                if (score > 0.95):
+                if (score > self.identity/100):
                     occurSet[queryID] |= occurSet[refID]
                     occurSet[refID] = occurSet[queryID]  # now they share the same addr in mem
         
@@ -103,7 +105,7 @@ class Marker(Module):
 
         IOUtils.writeSampleProteinFasta(samples, queryFile)
 
-        command = self.getBlastCommand(queryFile, resultFile)
+        command = self.getBlastCommandForQuery(queryFile, resultFile)
         subprocess.run(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         targetFP = open(self.cacheFile, 'at')
@@ -280,12 +282,14 @@ class Marker(Module):
         
         return result
     
-    def getBlastCommand(self, queryFile, resultFile):
-        # first check if the reference fasta is made a database
-
-        # cline = NcbiblastnCommandline(query=queryFile, db=referenceDB, evalue=1e-3, outfmt=5, out=resultFile)
-        # stdout, stderr = cline()
-        command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20"
+    def getBlastCommandForMarker(self, queryFile, resultFile):
+        identityTh = f" --id {self.identity}"
+        coverageTh = f" --query-cover {self.coverage} --subject-cover {self.coverage}" if self.coverage else ""
+        command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20{identityTh}{coverageTh}"
+        return command
+    
+    def getBlastCommandForQuery(self, queryFile, resultFile):
+        command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20 --more-sensitive --evalue 1e-3"
         return command
     
     def getLCAs(self):
