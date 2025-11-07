@@ -407,8 +407,12 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             for n in stdNode.path:
                 if n.rank in taxonDistribution:
                     rankC[n.rank] = taxonDistribution[n.rank].get(n.name, 0)
-        for r in config.resultRanks:
-            taxoCounts[r].append(rankC.get(r, 0))
+            for r in config.resultRanks:
+                taxoCounts[r].append(rankC.get(r, 0))
+        else:
+            for r in config.resultRanks:
+                taxoCounts[r].append(0)
+
 
         for modelDesc, model in models.items():
             pred = sample.results[model.moduleName]

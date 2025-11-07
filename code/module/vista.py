@@ -42,8 +42,8 @@ class VISTA(Module):
         cwd = "/Software/VISTA"
         while jobs or procs:
             for proc, idx in procs:
+                output_txt = f"{config.cacheFolder}/vista_{idx}.tsv"
                 if (proc.poll() is not None):
-                    output_txt = f"{config.cacheFolder}/vista_{idx}.tsv"
                     procs.remove((proc, idx))
                     with open(output_txt) as fp:
                         for line in fp:

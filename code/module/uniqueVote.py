@@ -24,7 +24,7 @@ class UniqueVote(Module):
         if (trainset not in ["VMRv4", "VMRv4_ML_train"]):
             raise ValueError("Unsupported training set")
         self.trainset = trainset
-        if (strategy not in ["both", "ml"]):   # full_ml: voting with marker + ml. ml: use ml only when marker is not available
+        if (strategy not in ["both", "ml", "marker"]):   # full_ml: voting with marker + ml. ml: use ml only when marker is not available
             raise ValueError("Unsupported strategy")
         self.strategy = strategy
 
@@ -57,7 +57,6 @@ class UniqueVote(Module):
         esmTaxo.run(samples, keepProb=True)  # should not use getResults because we want to get prob
 
         taxoLabels = esmTaxo.class_names
-        votes = {taxo: 0 for taxo in taxoLabels}
         targetRankLevel = config.rankLevels[self.rank]
 
         results = []
@@ -68,6 +67,7 @@ class UniqueVote(Module):
         key = f"{self.mlName}_prob"
 
         for sample in samples:
+            votes = {taxo: 0 for taxo in taxoLabels}
             for protein in sample.proteins:
                 markerPred:list[DiamondAlignment] = protein.results[markerModule.baseName]
                 aligned = False
@@ -75,22 +75,25 @@ class UniqueVote(Module):
                     taxo = markerLCAs[alignment.ref]
                     node = taxoTree.ICTVTree.nodes[taxo]
                     thisRankLevel = config.rankLevels[node.rank]
-                    if thisRankLevel == targetRankLevel:
-                        pred = taxo
-                    elif thisRankLevel > targetRankLevel:
+                    if thisRankLevel > targetRankLevel:  # species
                         for n in node.path:
                             if config.rankLevels[n.rank] == targetRankLevel:
                                 pred = n.name
-                    else:
-                        continue
-                    aligned = True
-                    if (pred in votes):
-                        votes[pred] += alignment.similarity/100
-                    else:
-                        votes[pred] = alignment.similarity/100
+                        aligned = True
+                        break
+                    elif thisRankLevel == targetRankLevel:   # genus
+                        pred = taxo
+                        aligned = True
+                        break
+                    elif (self.strategy != "ml"):  # family or above
+                        pred = taxo
+                        if (pred in votes):
+                            votes[pred] += alignment.similarity/100
+                        else:
+                            votes[pred] = alignment.similarity/100
                     
 
-                if (aligned == False or self.strategy == "both"):  # add ml voting
+                if (aligned == True and self.strategy != "marker"):  # add ml voting
                     scores = protein.info[f"{self.mlName}_prob"].tolist()
                     rawScores = {taxo: score for taxo, score in zip(taxoLabels, scores)}
                     tops = sorted(list(rawScores.items()), key=lambda x:x[1], reverse=True)
