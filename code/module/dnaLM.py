@@ -37,7 +37,8 @@ class DNALM(Module):
         models = {
             "DNABert2": "zhihan1996/DNABERT-2-117M",
             "DNABertS": "zhihan1996/DNABERT-S",
-            "VitaxHyena": None
+            "VitaxHyena": None,
+            "LucaVirusDefault": "/Data/VirusClassification/model/LucaVirusDefault3.8M"
         }
 
         if (model not in models):
@@ -72,6 +73,7 @@ class DNALM(Module):
         
 
     def loadRefClusterEmbeddings(self, recursive=True):
+        IOUtils.showInfo(f"load ref embeddings of {self.reference}")
         referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
         samples = IOUtils.loadSamples(referenceFasta)
         self.getEmbedding(samples)
@@ -305,6 +307,7 @@ class DNALM(Module):
 
 
     def getEmbedding(self, samples:list[Sample])->None:  # The embedding will be stored in the ProteinSample's info dict
+        IOUtils.showInfo(f"Get {len(samples)} samples embeddings")
         uncachedSamples:list[Sample|ProteinSample] = []
         if (self.pooling == "nosplit"):
             for sample in samples:

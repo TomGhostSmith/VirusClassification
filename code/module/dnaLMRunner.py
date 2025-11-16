@@ -1,5 +1,5 @@
 #This file is modified from https://github.com/ChengPENG-wolf/ViraLM/blob/main/viralm.py
-
+from lucagplm import LucaGPLMModel, LucaGPLMTokenizer
 from transformers import AutoTokenizer, AutoModel
 from torch.utils.data import DataLoader
 from datasets import load_dataset
@@ -49,18 +49,14 @@ class DNALMRunner():
             #     bs = bs * 4
             #     initial = False
             # else:
-            bs = bs * 3
+            # bs = bs * 3
+            bs = int(bs * 2.5)
             i = i * 2
         self.batchSizes = list(reversed(self.batchSizes))
 
     def loadModel(self):
-        manualLoadConfig = None
-        if (manualLoadConfig):
-            self.model = AutoModel.from_pretrained(self.modelName,
-                                                   config = self.manualLoadConfig,
-                                                   trust_remote_code=True,
-                                                   torch_dtype=torch.float32)
-
+        if ("Luca" in self.modelName):
+            self.model = LucaGPLMModel.from_pretrained(self.modelName)
         else:
             self.model = AutoModel.from_pretrained(self.modelName,
                                                    trust_remote_code=True,
@@ -99,10 +95,13 @@ class DNALMRunner():
         #     embeddings[sample[0]] = 0
         #     totalCounts[sample[0]] = 0
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.modelName,
-            trust_remote_code=True
-        )
+        if ("Luca" in self.modelName):
+            self.tokenizer = LucaGPLMTokenizer.from_pretrained(self.modelName)
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.modelName,
+                trust_remote_code=True
+            )
 
         # input_ids = []
         # real_masks = []
