@@ -75,7 +75,7 @@ class ESMTaxo(Module):
 
         if (not keepProb):
             for p in proteinsToRun:
-                p.info.pop(key)
+                p.info.pop(key, None)
         return results
     
     def getResult(self, sample:Sample):

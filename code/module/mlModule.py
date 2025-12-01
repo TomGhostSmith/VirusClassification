@@ -57,6 +57,7 @@ class MLModule(Module):
             ("genus_esm2_t33_256_enlarge", 256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus"),
             ("genus_esm2_t33_256", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("genus_esm2_t33_1022", 1022, f"{config.modelRoot}/genus/esm2_t33_650M_UR50D_MAXLEN_1022_bs2x4_accum2_lr3e-5_ep10"),
+            ("genus_esm2_t33_1022_2", 1022, f"{config.modelRoot}/genus/esm2_t33_650M_UR50D_MAX_LENGTH_1022_per_device_batch_size_2_num_train_epochs_10_save_steps_10000_lr_3e-5_save_steps_10000"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.1_2_5_10_30_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.SCL.genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),
             ("working/seq_name_genbank_2024_2024_exclusion.csv.1_2_3_4_5_genus_predictions.csv", 256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune"),

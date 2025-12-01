@@ -9,6 +9,7 @@ from moduleResult.virusPredictionResult import VirusPredictionResult
 from module.esmRunner import ESMRunner
 from entity.sample import Sample
 from entity.proteinSample import ProteinSample
+from utils.NucleotideUtils import NucleotideUtils
 
 class ESM(Module):
     def __init__(self):
@@ -28,43 +29,26 @@ class ESM(Module):
         super().__init__(f'esm-150M_512')
 
     def run(self, samples:list[Sample]):
-        raise NotImplementedError("ESM predictor is not implemented for the new ESM runner")
+        NucleotideUtils.extractProtein(samples)
         results = list()
-
-        cacheFile = f"{config.cacheResultFolder}/ESM_pred.json"
-        cachedSamples:dict[str, float] = {}  # the score of being a virus
-        if (os.path.exists(cacheFile)):
-            with open(cacheFile) as fp:
-                cachedSamples = json.load(fp)
 
         proteinsToRun:list[ProteinSample] = list()
         for sample in samples:
             for protein in sample.proteins:
-                if protein.id not in cachedSamples:
-                    proteinsToRun.append(sample)
+                proteinsToRun.append(protein)
         
-        if (len(proteinsToRun) > 0):
-            self.model = ESMRunner(512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)
-            lines = self.model.run(samples)
+        model = ESMRunner("identify", 512, f"{config.modelRoot}/viral_identify/esm2_t30_512", "facebook/esm2_t30_150M_UR50D", 2, config.esmBatchSize)
+        model.run(proteinsToRun, getProb=True)
+        del model
 
-            for seqName, (prob, cls, ave) in lines.items():
-                cachedSamples[seqName] = prob[1]
-            
-            del self.model
-
-            for protein in proteinsToRun:
-                if (protein.id not in cachedSamples):
-                    cachedSamples[protein.id] = 'N/A'
-
-            with open(cacheFile, 'wt') as fp:
-                json.dump(cachedSamples, fp, indent=2)
+        key = "identify_prob"
 
         for sample in samples:
             totalScore = 0
             validProteinCount = 0
             for protein in sample.proteins:
-                if (cachedSamples[protein.id] != 'N/A'):
-                    totalScore += cachedSamples[protein.id]
+                if (key in protein.info):
+                    totalScore += protein.info[key][1]
                     validProteinCount += 1
             
             if (validProteinCount > 0):
@@ -74,5 +58,9 @@ class ESM(Module):
                     results.append(None)
             else:
                 results.append(None)
+
+        for sample in samples:
+            for protein in sample.proteins:
+                protein.info.pop(key, None)
         
         return results

@@ -243,24 +243,24 @@ class ESMRunner():
             for protein in proteins:
                 offset = self.cachedSamples_cls[protein.id]
                 if (offset == -1):
-                    protein.info[f"{self.model}_CLSemb"] = None
+                    protein.info[f"{self.modelName}_CLSemb"] = None
                 else:
                     cachedResultFP_cls.seek(offset)
                     line = cachedResultFP_cls.readline().strip()
                     text = line[line.find('\t')+1:]
-                    protein.info[f"{self.model}_CLSemb"] = IOUtils.decodeBase64(text)
+                    protein.info[f"{self.modelName}_CLSemb"] = IOUtils.decodeBase64(text)
             cachedResultFP_cls.close()
         if (getAve):
             cachedResultFP_ave = open(self.cacheAveEmbFile)
             for protein in proteins:
                 offset = self.cachedSamples_ave[protein.id]
                 if (offset == -1):
-                    protein.info[f"{self.model}_aveemb"] = None
+                    protein.info[f"{self.modelName}_aveemb"] = None
                 else:
                     cachedResultFP_ave.seek(offset)
                     line = cachedResultFP_ave.readline().strip()
                     text = line[line.find('\t')+1:]
-                    protein.info[f"{self.model}_aveemb"] = IOUtils.decodeBase64(text)
+                    protein.info[f"{self.modelName}_aveemb"] = IOUtils.decodeBase64(text)
             cachedResultFP_ave.close()
 
 
