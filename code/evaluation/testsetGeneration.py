@@ -1,6 +1,7 @@
 from sortedcontainers import SortedList
 from tqdm import tqdm
 import random
+import json
 import sys
 import os
 from Bio import SeqIO
@@ -17,6 +18,29 @@ config.setPath(modelRoot=modelRoot, outputRoot=outputRoot, queryFile=queryFilePa
 
 from entity.taxoTree import taxoTree
 
+def loadRefseqSpecies(mergeSubSpecies=True):
+    species:dict[str, list[tuple]] = dict()
+    scope = "Viruses"
+    fnaNameFile = f"{config.modelRoot}/NCBI/Assembly/{scope}/names.json"
+    fnaFolder = f"{config.modelRoot}/NCBI/Assembly/{scope}/fna"
+    with open(fnaNameFile) as fp:
+        filenames = json.load(fp)
+    for filename, id in filenames.items():
+        path = f"{fnaFolder}/{filename}.fasta"
+        if (mergeSubSpecies):
+            if (id not in taxoTree.viralNCBITree.nodes):
+                IOUtils.showInfo(f"Sequence with taxID {id} has no taxo meta data. Skipped.")
+                continue
+            node = taxoTree.viralNCBITree.nodes[id]
+            speciesID = taxoTree.viralNCBITree.getSpeciesNode(node).name
+        else:
+            speciesID = id
+
+        if speciesID in species:
+            species[speciesID].append((filename, path))
+        else:
+            species[speciesID] = [(filename, path)]
+    return species
 
 def loadGenbankSpecies(version, fileName="genbank.accession", species:dict[str, list[tuple]] = dict()):
     # for row in tqdm(metaDF.itertuples(), desc="loading meta data"):
@@ -153,11 +177,12 @@ def generateTestset(source, species, seed, addNonVirus=False, maxPerSpecies=floa
     targetFP.close()
 
 def main():
+    species = loadRefseqSpecies()
     # species = loadGenbankSpecies("20241225")
     # species = loadGenbankSpecies("20250505", "genbank_2025Spring.accession")
-    species = loadGenbankSpecies("20250505", "genbank_2024.accession")
+    # species = loadGenbankSpecies("20250505", "genbank_2024.accession")
     # generateTestset("genbank", species, 2024, True, 2, "test")
-    generateTestset("genbank", species, 2024, False, 2, "2024")
+    # generateTestset("genbank", species, 2024, False, 2, "2024")
 
 if (__name__ == '__main__'):
     main()

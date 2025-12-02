@@ -2,8 +2,11 @@ from Bio.SeqRecord import SeqRecord
 
 class ProteinSample():
     # the stdResult is ICTV name
-    def __init__(self, seq:SeqRecord):
+    def __init__(self, seq:SeqRecord, head:str=None):
         self.id:str = seq.id
+        if (head is None):
+            head = seq.description
+        self.head = head
         splitID = self.id.rsplit('_', 1)
         self.contigID = splitID[0]
         if (len(splitID) == 2):

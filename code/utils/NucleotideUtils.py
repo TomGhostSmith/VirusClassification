@@ -24,10 +24,14 @@ class NucleotideUtil:
         self.cDNAIndex = f"{config.cacheResultFolder}/cDNAs.json"
         self.cDNAFasta = f"{config.cacheResultFolder}/cDNAs.fasta"
         self.c2pCache = f"{config.cacheResultFolder}/c2p.json"
+        self.proteinMetaCache = f"{config.cacheResultFolder}/proteins_meta.json"
+        self.CDNAMetaCache = f"{config.cacheResultFolder}/cDNAs_meta.json"
 
-        self.c2p:dict[str, list] = dict()
-        self.cachedProteins:dict[str, int] = dict()
-        self.cachedCDNAs:dict[str, int] = dict()
+        self.c2p:dict[str, list] = {}
+        self.cachedProteins:dict[str, int] = {}
+        self.cachedCDNAs:dict[str, int] = {}
+        self.proteinMeta:dict[str, str] = {}
+        self.CDNAMeta:dict[str, str] = {}
         if (os.path.exists(self.c2pCache) and os.path.exists(self.proteinIndex)):
             with open(self.c2pCache) as fp:
                 self.c2p = json.load(fp)
@@ -35,7 +39,11 @@ class NucleotideUtil:
                 self.cachedProteins = json.load(fp)
             with open(self.cDNAIndex) as fp:
                 self.cachedCDNAs = json.load(fp)
-        
+            with open(self.proteinMetaCache) as fp:
+                self.proteinMeta = json.load(fp)
+            with open(self.CDNAMetaCache) as fp:
+                self.CDNAMeta = json.load(fp)
+                
         self.proteinOffset = self.cachedProteins["nextOffset"] if "nextOffset" in self.cachedProteins else 0
         self.cDNAOffset = self.cachedCDNAs["nextOffset"] if "nextOffset" in self.cachedCDNAs else 0
 
@@ -44,8 +52,8 @@ class NucleotideUtil:
         outputPrefix = f"{config.cacheFolder}/tmp.faa"
         cDNAoutputPrefix = f"{config.cacheFolder}/tmp.fna"
         # step 1: get samples to run, load cached samples
-        samplesToRun:list[Sample] = list()
-        samplesNotLoaded:list[Sample] = list()
+        samplesToRun:list[Sample] = []
+        samplesNotLoaded:list[Sample] = []
 
         for sample in samples:
             if (sample.proteins is not None): # skip the sample that already has protein annotation
@@ -55,10 +63,11 @@ class NucleotideUtil:
         for sample in samplesNotLoaded:
             cached = True
             if sample.id in self.c2p:
-                    proteins = self.c2p[sample.id]
-                    for protein in proteins:
-                        if (protein not in self.cachedProteins):
-                            cached = False
+                proteins = self.c2p[sample.id]
+                for protein in proteins:
+                    if (protein not in self.cachedProteins):
+                        cached = False
+                        break
             else:
                 cached = False
             if (not cached):
@@ -106,6 +115,8 @@ class NucleotideUtil:
 
                     head = f">{protein.id}\n"
                     seq = f"{protein.seq.seq}\n"
+
+                    self.proteinMeta[protein.id] = protein.head
                     
                     proteinFP.write(head)
                     proteinFP.write(seq)
@@ -117,6 +128,8 @@ class NucleotideUtil:
                 for protein in cDNASamples:
                     head = f">{protein.id}\n"
                     seq = f"{protein.seq.seq}\n"
+
+                    self.CDNAMeta[protein.id] = protein.head
                     
                     cDNAFP.write(head)
                     cDNAFP.write(seq)
@@ -139,6 +152,10 @@ class NucleotideUtil:
                 json.dump(self.cachedProteins, fp, indent=2)
             with open(self.cDNAIndex, 'wt') as fp:
                 json.dump(self.cachedCDNAs, fp, indent=2)
+            with open(self.proteinMetaCache, 'wt') as fp:
+                json.dump(self.proteinMeta, fp, indent=2)
+            with open(self.CDNAMetaCache, 'wt') as fp:
+                json.dump(self.CDNAMeta, fp, indent=2)
                 
             for i in range(splitCount):
                 os.remove(f"{tempFileName}.{i}")
@@ -164,13 +181,13 @@ class NucleotideUtil:
             sample.proteins.append(ProteinSample(SeqRecord(
                 Seq(cachedProteinFP.readline().strip()),
                 id=protein,
-                description=protein)))
+                description=protein), head=self.proteinMeta[protein]))
             
             offset = self.cachedCDNAs[protein]
             cachedCDNAFP.seek(offset)
             sample.cDNAs.append(ProteinSample(SeqRecord(
                 Seq(cachedCDNAFP.readline().strip()),
                 id=protein,
-                description=protein)))
+                description=protein), head=self.CDNAMeta[protein]))
         
 NucleotideUtils = NucleotideUtil()  # this is a singleton

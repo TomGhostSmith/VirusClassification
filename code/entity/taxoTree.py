@@ -21,8 +21,8 @@ class TaxoTree():
         self.viralNCBITree = NCBITree('Viruses')
         self.viralNCBITree.loadNodes()
         self.viralNCBITree.loadAnnotations()
-        self.viralNCBITree.loadSpecies()
-        self.viralNCBITree.loadAccession()
+        self.viralNCBITree.loadSpecies()    # load refseq species
+        self.viralNCBITree.loadAccession()  # load genbank species and their file paths
 
         # IOUtils.showInfo('Loading Bacteria NCBI Tree')
         # self.bacteriaNCBITree = NCBITree('Bacteria')
