@@ -9,6 +9,7 @@ from moduleResult.plainResult import PlainResult
 from entity.sample import Sample
 from entity.proteinSample import ProteinSample
 from module.dnaLMRunner import DNALMRunner
+from module.pstRunner import PSTRunner
 from module.marker import Marker
 from tqdm import tqdm
 import numpy
@@ -38,7 +39,9 @@ class DNALM(Module):
             "DNABert2": "zhihan1996/DNABERT-2-117M",
             "DNABertS": "zhihan1996/DNABERT-S",
             "VitaxHyena": None,
-            "LucaVirusDefault": "/Data/VirusClassification/model/LucaVirusDefault3.8M"
+            "LucaVirusDefault": "/Data/VirusClassification/model/LucaVirusDefault3.8M",
+            "PST-TL-P__large": PSTRunner("PST-TL-P__large"),
+            "PST-TL-T__large": PSTRunner("PST-TL-T__large")
         }
 
         if (model not in models):
@@ -116,11 +119,15 @@ class DNALM(Module):
             else:
                 for sample in samples:
                     if (self.pooling == "nosplit"):
+                        if (f"{self.model}_aveemb" not in sample.info):
+                            continue
                         DNAs:list[Sample|ProteinSample] = [sample]
                     elif (len(sample.cDNAs) == 0):
                         continue
                     else:
-                        DNAs = sample.cDNAs
+                        DNAs = [d for d in sample.cDNAs if f"{self.model}_aveemb" in d.info]
+                        if (len(DNAs) == 0):
+                            continue
                     ICTVID = taxoTree.ICTVTree.accession2ID[sample.id]
                     node = taxoTree.ICTVTree.species[ICTVID]
                     names = set()
@@ -165,11 +172,15 @@ class DNALM(Module):
             else:
                 for sample in samples:
                     if (self.pooling == "nosplit"):
+                        if (f"{self.model}_aveemb" not in sample.info):
+                            continue
                         DNAs:list[Sample|ProteinSample] = [sample]
                     elif (len(sample.cDNAs) == 0):
                         continue
                     else:
-                        DNAs = sample.cDNAs
+                        DNAs = [d for d in sample.cDNAs if f"{self.model}_aveemb" in d.info]
+                        if (len(DNAs) == 0):
+                            continue
                     ICTVID = taxoTree.ICTVTree.accession2ID[sample.id]
                     node = taxoTree.ICTVTree.species[ICTVID]
                     # if (self.embedding == 'CLS'):
@@ -394,11 +405,12 @@ class DNALM(Module):
             # line = cachedResultFP_cls.readline().strip()
             # text = line[line.find('\t')+1:]
             # sample.info[f"{self.model}_CLSemb"] = IOUtils.decodeBase64(text, dtype=numpy.float32)
-
-            cachedResultFP_ave.seek(self.cachedSamples_ave[sample.id])
-            line = cachedResultFP_ave.readline().strip()
-            text = line[line.find('\t')+1:]
-            sample.info[f"{self.model}_aveemb"] = IOUtils.decodeBase64(text, dtype=numpy.float32)
+            offset = self.cachedSamples_ave[sample.id]
+            if (offset != -1):
+                cachedResultFP_ave.seek(offset)
+                line = cachedResultFP_ave.readline().strip()
+                text = line[line.find('\t')+1:]
+                sample.info[f"{self.model}_aveemb"] = IOUtils.decodeBase64(text, dtype=numpy.float32)
         
         # cachedResultFP_cls.close()
         cachedResultFP_ave.close()
@@ -410,7 +422,10 @@ def runML(param, samples:list[Sample|ProteinSample], cacheAveEmbFile, nextOffset
     # else:
     #     threads = multiprocessing.cpu_count()
 
-    model = DNALMRunner(*param)
+    if (isinstance(param[0], DNALMRunner)):
+        model = param[0]
+    else:
+        model = DNALMRunner(*param)
     lines = model.run(samples)
     model.clean()
     del model
@@ -541,6 +556,9 @@ def runSingle(clusters, samples:list[Sample], indexs, pooling, embedding, strate
             # if (self.embedding == 'CLS'):
             #     embeddings = numpy.array([sample.info[f"{self.model}_CLSemb"]])
             if (embedding == 'ave'):
+                if (f"{model}_aveemb" not in sample.info):
+                    res.append((None, index))
+                    continue
                 embeddings = numpy.array([sample.info[f"{model}_aveemb"]])
 
             weights = extractWeightMatrix(clusters, embeddings, strategy, invStdVar, refEmbeddings, ref_sq)
@@ -557,7 +575,7 @@ def runSingle(clusters, samples:list[Sample], indexs, pooling, embedding, strate
             # if (self.embedding == 'CLS'):
             #     embeddings = numpy.array([DNA.info[f"{self.model}_CLSemb"] for DNA in sample.cDNAs])
             if (embedding == 'ave'):
-                embeddings = numpy.array([DNA.info[f"{model}_aveemb"] for DNA in sample.cDNAs])
+                embeddings = numpy.array([DNA.info[f"{model}_aveemb"] for DNA in sample.cDNAs if f"{model}_aveemb" in DNA.info])
 
             embeddings = embeddings.astype(numpy.float64)
             if (pooling == "mean"):
