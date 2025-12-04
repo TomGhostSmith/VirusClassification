@@ -131,6 +131,16 @@ class TaxoTree():
             else:
                 self.NCBI2ICTV[NCBIID] = targetNode
 
+    def getTaxoNodeFromAccession(self, accession):
+        if (accession in self.ICTVTree.accession2ID):
+            ICTVID = self.ICTVTree.accession2ID[accession]
+            return self.getTaxoNodeFromICTV(ICTVID=ICTVID)
+        accession = accession[:accession.rfind(".")]
+        if (accession in self.viralNCBITree.accession2ID):
+            ncbiID = self.viralNCBITree.accession2ID[accession]
+            return self.getTaxoNodeFromNCBI(NCBIID=ncbiID)
+        return None
+
     def getTaxoNodeFromNCBI(self, NCBIID=None, NCBIName=None):
         result = TaxoNode()
         result.origin = "NCBI"

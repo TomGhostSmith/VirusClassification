@@ -128,8 +128,7 @@ class DNALM(Module):
                         DNAs = [d for d in sample.cDNAs if f"{self.model}_aveemb" in d.info]
                         if (len(DNAs) == 0):
                             continue
-                    ICTVID = taxoTree.ICTVTree.accession2ID[sample.id]
-                    node = taxoTree.ICTVTree.species[ICTVID]
+                    node = taxoTree.getTaxoNodeFromAccession(sample.id).ICTVNode
                     names = set()
                     for n in node.paths:
                         names.add(n.name)
@@ -181,8 +180,7 @@ class DNALM(Module):
                         DNAs = [d for d in sample.cDNAs if f"{self.model}_aveemb" in d.info]
                         if (len(DNAs) == 0):
                             continue
-                    ICTVID = taxoTree.ICTVTree.accession2ID[sample.id]
-                    node = taxoTree.ICTVTree.species[ICTVID]
+                    node = taxoTree.getTaxoNodeFromAccession(sample.id).ICTVNode
                     # if (self.embedding == 'CLS'):
                     #     for DNA in DNAs:
                     #         clusters.append([node.name])

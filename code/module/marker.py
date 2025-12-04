@@ -59,8 +59,7 @@ class Marker(Module):
 
         # step 1: assume all genes are unique
         for sample in refSamples:
-            speciesID = taxoTree.ICTVTree.accession2ID[sample.id]
-            speciesNode = taxoTree.ICTVTree.nodes[taxoTree.ICTVTree.ID2name[speciesID]]
+            speciesNode = taxoTree.getTaxoNodeFromAccession(sample.id).ICTVNode
             for protein in sample.proteins:
                 occurSet[protein.id] = {speciesNode}
 

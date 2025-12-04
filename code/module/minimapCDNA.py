@@ -165,11 +165,11 @@ class MinimapCDNA(Module):
                     for alignment in alignments[1:]:
                         if alignment.betterThan(bestAlignment):
                             bestAlignment = alignment
-                    ICTVID = taxoTree.ICTVTree.accession2ID[bestAlignment.ref]
-                    if ICTVID in votes:
-                        votes[ICTVID] += 1
+                    ICTVName = taxoTree.getTaxoNodeFromAccession(bestAlignment.ref).ICTVName
+                    if ICTVName in votes:
+                        votes[ICTVName] += 1
                     else:
-                        votes[ICTVID] = 1
+                        votes[ICTVName] = 1
         elif (self.method == "coverage"):
             accessionVotes = dict()
             for protein in sample.proteins:
@@ -184,11 +184,11 @@ class MinimapCDNA(Module):
                     else:
                         accessionVotes[accession] = 1/len(self.c2p[accession])
             for accession, coverage in accessionVotes.items():
-                ICTVID = taxoTree.ICTVTree.accession2ID[accession]
-                if ICTVID in votes:
-                    votes[ICTVID] = max(coverage, votes[ICTVID])  # the vote is the maximum coverage for that species
+                ICTVName = taxoTree.getTaxoNodeFromAccession(accession).ICTVName
+                if ICTVName in votes:
+                    votes[ICTVName] = max(coverage, votes[ICTVName])  # the vote is the maximum coverage for that species
                 else:
-                    votes[ICTVID] = coverage
+                    votes[ICTVName] = coverage
         elif (self.method == "sum"):
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
@@ -196,11 +196,11 @@ class MinimapCDNA(Module):
                 alignments:list[CDNAAlignment] = [CDNAAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
                 alignments = [a for a in alignments if a.ref is not None]
                 for alignment in alignments:
-                    ICTVID = taxoTree.ICTVTree.accession2ID[alignment.ref]
-                    if ICTVID in votes:
-                        votes[ICTVID] += alignment.quality/60
+                    ICTVName = taxoTree.getTaxoNodeFromAccession(alignment.ref).ICTVName
+                    if ICTVName in votes:
+                        votes[ICTVName] += alignment.quality/60
                     else:
-                        votes[ICTVID] = alignment.quality/60
+                        votes[ICTVName] = alignment.quality/60
         elif (self.method.startswith("top")):
             thresh = int(self.method[3:])
             for protein in sample.proteins:
@@ -212,21 +212,21 @@ class MinimapCDNA(Module):
                 for alignment in alignments[:thresh]:
                     if (alignment.ref is None):
                         continue
-                    ICTVID = taxoTree.ICTVTree.accession2ID[alignment.ref]
-                    if ICTVID in votes:
-                        votes[ICTVID] += alignment.quality/60
+                    ICTVName = taxoTree.getTaxoNodeFromAccession(alignment.ref).ICTVName
+                    if ICTVName in votes:
+                        votes[ICTVName] += alignment.quality/60
                     else:
-                        votes[ICTVID] = alignment.quality/60
+                        votes[ICTVName] = alignment.quality/60
         if len(votes) > 0:
             totalVotes = sum(votes.values())
             winner, maxVotes = max(votes.items(), key=lambda x: x[1])
-            winnerNode = taxoTree.ICTVTree.nodes[taxoTree.ICTVTree.ID2name[winner]]
+            winnerNode = taxoTree.ICTVTree.nodes[winner]
             for n in reversed(winnerNode.path):
                 if (config.rankLevels[n.rank] <= config.rankLevels[self.threshRank] ):
                     result = PlainResult(n.name, score=maxVotes/totalVotes)
                     break
             if result is None:
-                result = PlainResult(taxoTree.ICTVTree.ID2name[winner], score=maxVotes/totalVotes)
+                result = PlainResult(winner, score=maxVotes/totalVotes)
 
         
         return result

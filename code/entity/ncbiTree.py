@@ -18,23 +18,23 @@ class NCBITree():
         self.fnaNameFile = f"{config.modelRoot}/NCBI/Assembly/{scope}/names.json"
         self.fnaFolder = f"{config.modelRoot}/NCBI/Assembly/{scope}/fna"
 
-        self.name2ID = dict()  # including synonym names
-        self.ID2name = dict()  # only include scientific names
+        self.name2ID:dict[str, str] = {}  # including synonym names
+        self.ID2name:dict[str, str] = {}  # only include scientific names
 
-        self.children = dict()   # key: parent ID. value: a list of children. Useful for iteration the whole tree
-        self.ranks = dict()  # key: ID   value: rank (e.g. species, genus, etc.)
-        self.nodes = dict()  # key: ID   value: node on the tree
+        self.children:dict[str, list[str]] = {}   # key: parent ID. value: a list of children. Useful for iteration the whole tree
+        self.ranks:dict[str, str] = {}  # key: ID   value: rank (e.g. species, genus, etc.)
+        self.nodes:dict[str, Node] = {}  # key: ID   value: node on the tree
         # self.species = dict()  # key: NCBI genome file name   value: ID
-        self.species:dict[str, list[tuple]] = dict()  # key: ID  value: a list of (fileName, filePath)
-        self.hosts = dict() # key: ID value: host IDs
+        self.species:dict[str, list[tuple]] = {}  # key: ID  value: a list of (fileName, filePath)
+        self.hosts:dict[str, list[str]] = {} # key: ID value: host IDs
         self.root = None
 
         # store lines from the dmp, to export subtree dmp file quickly
-        self.nodeLines = dict()
-        self.nameLines = dict()
+        self.nodeLines = {}
+        self.nameLines = {}
 
-        self.accession2ID = dict()  # key: accession  value: id
-        self.ID2accession = dict()  # key: ID  value: a list of accessions
+        self.accession2ID:dict[str, str] = {}  # key: accession  value: id
+        self.ID2accession:dict[str, list[str]] = {}  # key: ID  value: a list of accessions
 
         self.version = "20241225"
         IOUtils.showInfo("set NCBI genbank version to 20241225", "WARN")
@@ -125,29 +125,57 @@ class NCBITree():
             with open(accession2IDFile) as fp:
                 self.accession2ID = json.load(fp)
         else:
+            ID2accession:dict[str, set[str]] = {}
+            # refseq part:
+            species:dict[str, list[tuple]] = dict()
+            scope = "Viruses"
+            fnaNameFile = f"{config.modelRoot}/NCBI/Assembly/{scope}/names.json"
+            fnaFolder = f"{config.modelRoot}/NCBI/Assembly/{scope}/fna"
+            with open(fnaNameFile) as fp:
+                filenames:dict[str, str] = json.load(fp)
+            for filename, id in tqdm(filenames.items(), total=len(filenames), desc="loading refseq accession"):
+                path = f"{fnaFolder}/{filename}.fasta"
+                if (id not in self.nodes):
+                    IOUtils.showInfo(f"Sequence with taxID {id} has no taxo meta data. Skipped.")
+                    continue
+                
+                samples = IOUtils.loadSamples(path)
+                for sample in samples:
+                    accession = sample.id[:sample.id.rfind('.')] if "." in sample.id else sample.id
+                    self.accession2ID[accession] = id
+                    if (id not in self.ID2accession):
+                        ID2accession[id] = {accession}
+                    else:
+                        ID2accession[id].add(accession)
+
+            # genbank part:
             with open(f"{config.modelRoot}/NCBI/Nucleotide/{self.version}/genbank.accession") as fp:
                 fp.readline()
                 lines = fp.readlines()
-            for line in tqdm(lines, desc="loading Accession"):
+            for line in tqdm(lines, desc="loading genbank accession"):
                 comma = line.find(",")
                 accession = line[:comma]
                 species = line.strip()[comma + 1:]
                 if (species in self.name2ID):
                     node = self.getSpeciesNode(self.nodes[self.name2ID[species]])
                     if (node is not None):
-                        name = accession[:accession.index(".")]
-                        self.accession2ID[name] = node.name
+                        name = accession[:accession.rfind(".")]
+                        if (name not in self.accession2ID):  # if the accession is already exists (likely from Refseq), then skip this
+                            self.accession2ID[name] = node.name
                         if (node.name not in self.ID2accession):
-                            self.ID2accession[node.name] = [name]
+                            ID2accession[node.name] = {name}
                         else:
-                            self.ID2accession[node.name].append(name)
+                            ID2accession[node.name].add(name)
+
+            for k, v in ID2accession.items():
+                self.ID2accession[k] = list(v)
             
             with open(id2AccessionFile, 'wt') as fp:
                 json.dump(self.ID2accession, fp, indent=2, sort_keys=True)
             with open(accession2IDFile, 'wt') as fp:
                 json.dump(self.accession2ID, fp, indent=2, sort_keys=True)
     
-    def isValidTaxoNode(self, node):
+    def isValidTaxoNode(self, node:Node):
         acceptableRanks = set(config.evaluationRanks)
         for n in node.path:
             if n.rank not in acceptableRanks:
@@ -180,7 +208,7 @@ class NCBITree():
 
     # usage: for nodes below species rank (e.g. subspecies, norank, etc.), use this function to get the corresponding species node
     # if the input node is above species rank, then return None
-    def getSpeciesNode(self, node):
+    def getSpeciesNode(self, node:Node)->Node:
         result = None
         for n in reversed(node.path):
             if (n.rank == 'species'):
