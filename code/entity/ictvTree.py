@@ -15,16 +15,16 @@ class ICTVTree():
         # self.taxoFile = f"{config.modelRoot}/VMRv4/VMRv4_names.json"
         self.taxoFile = f"{config.modelRoot}/VMRv4/VMR_MSL39.v4_20241106.csv"
 
-        self.ranks = dict()    # key: label  value: rank (e.g. species, genus, etc.)
-        self.nodes = dict()    # key: label  value: node on the tree
-        self.species = dict()  # key: species ID  value: node on the tree
+        self.ranks:dict[str, str] = {}    # key: label  value: rank (e.g. species, genus, etc.)
+        self.nodes:dict[str, Node] = {}    # key: label  value: node on the tree
+        self.species:dict[str, Node] = {}  # key: species ID  value: node on the tree
         self.root = Node("Viruses", rank="superkingdom")
         self.nodes["Viruses"] = self.root
-        self.name2ID = dict()
-        self.ID2name = dict()
+        self.name2ID:dict[str, str] = {}
+        self.ID2name:dict[str, str] = {}
 
-        self.accession2ID = dict()  # key: accession  value: ID
-        self.ID2accession = dict()  # key: ID  value: a list of accessions
+        self.accession2ID:dict[str, str] = {}  # key: accession  value: ID
+        self.ID2accession:dict[str, list[str]] = {}  # key: ID  value: a list of accessions
 
         self.rankLevels = [
             "realm",     # the clade in NCBI tree is equal to the realm in the ICTV tree
