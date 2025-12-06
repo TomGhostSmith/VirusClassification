@@ -282,6 +282,21 @@ class Marker(Module):
                             result = PlainResult(winner, score=maxVotes / (len(sample.proteins)))
                             break
                 # else, if in no rank maxVote is higher than thresh, then keep result=None
+            elif (self.threshRank == "bottomup_ratio"):
+                newVotes = {r: {} for r in reversed(config.resultRanks)}
+                for name, vote in votes.items():
+                    for n in taxoTree.ICTVTree.nodes[name].path:
+                        if n.rank in newVotes:
+                            if (n.name not in newVotes[n.rank]):
+                                newVotes[n.rank][n.name] = vote
+                            else:
+                                newVotes[n.rank][n.name] += vote
+                for rank, rankVotes in newVotes.items():
+                    if (len(rankVotes) > 1):
+                        (top1Name, top1Votes), (top2Name, top2Votes) = sorted(list(rankVotes.items()), key=lambda x:x[1], reverse=True)[:2]
+                        if (top1Votes > top2Votes * self.thresh):
+                            result = PlainResult(top1Name, score=top1Votes / (len(sample.proteins)))
+                            break
             else:
                 totalVotes = sum(votes.values())
                 winner, maxVotes = max(votes.items(), key=lambda x: x[1])
