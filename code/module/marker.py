@@ -149,7 +149,7 @@ class Marker(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], keepVotes=False):
         samplesToRun:list[Sample] = list()
         NucleotideUtils.extractProtein(samples)
 
@@ -179,16 +179,16 @@ class Marker(Module):
             self.LCAs = json.load(fp)
 
         cachedResultFP = open(self.cacheFile)
-        results = [self.getResult(sample, cachedResultFP) for sample in samples]
+        results = [self.getResult(sample, cachedResultFP, keepVotes) for sample in samples]
         cachedResultFP.close()
 
         return results
     
-    def getResult(self, sample:Sample, cachedResultFP)->PlainResult:
+    def getResult(self, sample:Sample, cachedResultFP, keepVotes)->PlainResult:
         # note: result of basename is not available
         result = None
         
-        votes:dict[str, int] = dict()
+        votes:dict[str, int] = {}
         if (self.method == "vote"):
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
@@ -295,7 +295,7 @@ class Marker(Module):
                     if (len(rankVotes) > 1):
                         (top1Name, top1Votes), (top2Name, top2Votes) = sorted(list(rankVotes.items()), key=lambda x:x[1], reverse=True)[:2]
                         if (top1Votes > top2Votes * self.thresh):
-                            result = PlainResult(top1Name, score=top1Votes / (len(sample.proteins)))
+                            result = PlainResult(top1Name, score=top1Votes / len(sample.proteins))
                             break
             else:
                 totalVotes = sum(votes.values())
@@ -308,6 +308,8 @@ class Marker(Module):
                 if result is None:
                     result = PlainResult(winner, score=maxVotes/totalVotes)
 
+        if (keepVotes):
+            sample.info[f"{self.moduleName}_votes"] = votes
         
         return result
     

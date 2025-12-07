@@ -5,7 +5,5 @@ fasta_path="/Data/VirusClassification/dataset/refseq_2024_test/phylum/refseq_202
 model_path="/Data/ICTVPublish2/model"
 output_path="/Data/ICTVPublish2/results"
 batch_size=128
-ML_strategy="bottomup"
-restrict="genus"
 
-python ./code/main.py --input $fasta_path --model $model_path --output $output_path --ML $ML_strategy --restrict $restrict --batchsize $batch_size
+python ./code/main.py --input $fasta_path --model $model_path --output $output_path --batchsize $batch_size

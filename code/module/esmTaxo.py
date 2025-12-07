@@ -55,7 +55,7 @@ class ESMTaxo(Module):
         
         self.class_names = names
 
-    def run(self, samples:list[Sample], keepProb=False)->list[PlainResult]:
+    def run(self, samples:list[Sample], keepProb=False, keepVotes=False)->list[PlainResult]:
         NucleotideUtils.extractProtein(samples)
         proteinsToRun:list[ProteinSample] = list()
         for sample in samples:
@@ -71,14 +71,14 @@ class ESMTaxo(Module):
             p.info[key] = r
 
 
-        results = [self.getResult(sample) for sample in samples]
+        results = [self.getResult(sample, keepVotes) for sample in samples]
 
         if (not keepProb):
             for p in proteinsToRun:
                 p.info.pop(key, None)
         return results
     
-    def getResult(self, sample:Sample):
+    def getResult(self, sample:Sample, keepVotes):
         if (self.pooling == "sum"):
             votes = {n: 0 for n in self.class_names if "Unknown" not in n}
             for protein in sample.proteins:
@@ -101,6 +101,8 @@ class ESMTaxo(Module):
                             votes[taxo] = score
 
         totalVotes = sum(votes.values())    # If pooling method == "sum", the totalVotes will be 1 * len(proteins) (not considering "Unknown" labels)
+        if (keepVotes):
+            sample.info[f"{self.moduleName}_votes"] = votes
         if (len(votes) > 0 and totalVotes > 0):
             winner, maxVotes = max(votes.items(), key=lambda x:x[1])
             return PlainResult(winner, maxVotes/totalVotes)

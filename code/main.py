@@ -4,7 +4,7 @@ import argparse
 import os
 import shutil
 
-def main(MLstrategy, lowestRank, fastaPath):
+def main(input, output):
     from module.pipeline import Pipeline
     from module.virusPredModule import VirusPred
     from module.minimapMLMergeModule import MinimapMLMergeModule
@@ -14,40 +14,57 @@ def main(MLstrategy, lowestRank, fastaPath):
     from module.esm import ESM
     from entity.sample import Sample
     from entity.modelRunnder import ModelRunnder
-    from entity.dataset import Dataset
+    from module.mergeModule import MergeModule
+    from module.markerML import MarkerML
 
-    thRank = {
-        "": "f",
-        "pos": "g",
-        "60": "g",
-        "cm": "g",
-        "sa": "g",
-        "sa_cm": "g",
-        "pos_sa": "g",
-        "60_sa": "g",
-        "pos_cm": "g",
-        "pos_cm_sa": "g",
-        "60_cm": lowestRank[0],
-        "60_cm_sa": lowestRank[0]
-    }
+    # thRank = {
+    #     "": "f",
+    #     "pos": "g",
+    #     "60": "g",
+    #     "cm": "g",
+    #     "sa": "g",
+    #     "sa_cm": "g",
+    #     "pos_sa": "g",
+    #     "60_sa": "g",
+    #     "pos_cm": "g",
+    #     "pos_cm_sa": "g",
+    #     "60_cm": lowestRank[0],
+    #     "60_cm_sa": lowestRank[0]
+    # }
+    # pipeline = Pipeline(
+    #     VirusPred([
+    #         MinimapThresholdModule('VMRv4', factors=['60', 'completeMatch']), 
+    #         ESM()]),
+    #         # MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
+    #     MinimapMLMergeModule(
+    #         MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
+    #         # MLModule('topdown', 0.45, '1111000')
+    #         MLModule(MLstrategy, 0.45, '1011000')
+    #         )
+    #     )
+
     pipeline = Pipeline(
-        VirusPred([
-            MinimapThresholdModule('VMRv4', factors=['60', 'completeMatch']), 
-            ESM()]),
-            # MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
-        MinimapMLMergeModule(
-            MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
-            # MLModule('topdown', 0.45, '1111000')
-            MLModule(MLstrategy, 0.45, '1011000')
-            )
-        )
+    VirusPred([
+        MinimapThresholdModule('VMRv4', factors=['60', 'completeMatch']), 
+        ESM()]),
+        # MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
+        # MLModule('bottomup', 0.45, '1011000')
+        MergeModule([
+            MinimapThresholdModule(reference="VMRv4", factors=["60", "completeMatch"]),
+            MarkerML("VMRv4", "bottomup", 0.45, "1022124")], 
+            basicMerge, "pipeline_0.45")
+    )
     
     # evaluator = ModelRunnder([pipeline], Dataset("refseq_2024_test"))
     # evaluator = ModelRunnder([pipeline], Dataset("genbank_2024_test"))
     # evaluator = ModelRunnder([pipeline], Dataset("Challenge"))
-    evaluator = ModelRunnder([pipeline], fastaPath)
-    evaluator.run()
+    evaluator = ModelRunnder(pipeline)
+    evaluator.run(input, f"{output}/result.tsv")
 
+
+def basicMerge(sample, modelNames, currentModelIndex):
+    res = sample.results[modelNames[currentModelIndex]]
+    return res
             
 
 
@@ -57,15 +74,13 @@ if (__name__ == '__main__'):
     parser.add_argument('--model', help='the model folder', required=True)
     parser.add_argument('--output', help='the result folder', required=True)
     # parser.add_argument('--model', help='the model folder')
-    parser.add_argument('--ML', help="machine learning model strategy", default='highest')
-    parser.add_argument('--restrict', help="restrict lowest prediction rank", default='genus')
+    # parser.add_argument('--ML', help="machine learning model strategy", default='bottomup')
+    # parser.add_argument('--restrict', help="restrict lowest prediction rank", default='species')
     parser.add_argument('--batchsize', help="batchsize for machine learning models", type=int, default=64)
     args = parser.parse_args()
     input = args.input
     model = args.model
-    result = args.output
-    ML = args.ML
-    restrict = args.restrict
+    output = args.output
     batchsize = int(args.batchsize)
     # batchsize = args.batchsize
     
@@ -75,20 +90,13 @@ if (__name__ == '__main__'):
     if (not os.path.isdir(model)):
         raise ValueError('The model path should be a folder')
     
-    if (ML not in ['highest', 'bottomup']):
-        raise ValueError('The ML strategy should be either "highest" or "bottomup"')
     
-    if (restrict not in ['genus', 'species']):
-        raise ValueError('The restrict rank should be either "genus" or "species"')
 
-    fileName = os.path.splitext(os.path.basename(input))[0]
-    config.outputName = fileName + '.tsv'
     config.modelRoot = model
-    config.resultRoot = result
     config.esmBatchSize = batchsize
     config.mlBatchSize = batchsize
-    config.updatePath()
+    config.setPath(modelRoot=model, outputRoot=output, queryFile=input)
 
-    main(ML, restrict, input)
+    main(input, output)
 
-    shutil.rmtree(config.tempFolder)
+    # shutil.rmtree(config.cacheFolder)
