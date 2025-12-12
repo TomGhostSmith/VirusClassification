@@ -11,7 +11,7 @@ def main(input, output):
     from module.minimapThreshRankModule import MinimapThreshRankModule
     from module.minimapThresholdModule import MinimapThresholdModule
     from module.mlModule import MLModule
-    from module.esm import ESM
+    from module.esmIdentify import esmIdentify
     from entity.sample import Sample
     from entity.modelRunnder import ModelRunnder
     from module.mergeModule import MergeModule
@@ -46,7 +46,7 @@ def main(input, output):
     pipeline = Pipeline(
     VirusPred([
         MinimapThresholdModule('VMRv4', factors=['60', 'completeMatch']), 
-        ESM()]),
+        esmIdentify()]),
         # MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
         # MLModule('bottomup', 0.45, '1011000')
         MergeModule([

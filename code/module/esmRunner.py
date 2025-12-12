@@ -177,14 +177,6 @@ class ESMRunner():
         fp_cls.close()
         fp_ave.close()
 
-        for protein in proteins:
-            if (protein.id not in self.cachedSamples_prob):
-                self.cachedSamples_prob[protein.id] = -1
-            if (protein.id not in self.cachedSamples_cls):
-                self.cachedSamples_cls[protein.id] = -1
-            if (protein.id not in self.cachedSamples_ave):
-                self.cachedSamples_ave[protein.id] = -1
-
         
     def run(self, proteins:list[ProteinSample], getProb=False, getCls=False, getAve=False):
         essentialFiles = [self.cacheProbFile, self.cacheCLSEmbFile, self.cacheAveEmbFile, self.cacheProbIndex, self.cacheCLSEmbIndex, self.cacheAveEmbIndex]
@@ -212,6 +204,14 @@ class ESMRunner():
         if (len(proteinsToRun) > 0):
             IOUtils.showInfo(f"run {len(proteinsToRun)} proteins on ESM {self.modelName}")
             self.esm(proteinsToRun)
+
+            for protein in proteinsToRun:
+                if (protein.id not in self.cachedSamples_prob):
+                    self.cachedSamples_prob[protein.id] = -1
+                if (protein.id not in self.cachedSamples_cls):
+                    self.cachedSamples_cls[protein.id] = -1
+                if (protein.id not in self.cachedSamples_ave):
+                    self.cachedSamples_ave[protein.id] = -1
 
             with open(self.cacheProbIndex, 'wt') as fp:
                 json.dump(self.cachedSamples_prob, fp, indent=2)
