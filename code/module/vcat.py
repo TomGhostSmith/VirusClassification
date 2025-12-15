@@ -14,60 +14,36 @@ from moduleResult.plainResult import PlainResult
 
 
 class VCAT(Module):
-    def __init__(self, trainset):
-        super().__init__(f"Virgo-{trainset}")
-        if (trainset not in ["VMRv4", "VMRv4_ML_train"]):
-            raise ValueError("Unsupported Virgo training set")
+    def __init__(self):
+        super().__init__(f"VCAT_VMRv4_MSL39")
         self.cacheResult = f"{config.cacheResultFolder}/{self.moduleName}.json"
-        self.trainset = trainset
         self.cachedSamples:dict[str, str] = dict()
     
 
-    def virgo(self, samples:list[Sample])->None:
+    def vcat(self, samples:list[Sample])->None:
 
-        cacheFolder = f"{config.cacheFolder}/virgo"
-        inputFolder = f"{cacheFolder}/input/"
+        cacheFolder = f"{config.cacheFolder}/vcat"
+        inputFile = f"{cacheFolder}/input.fasta"
         outputFolder = f"{cacheFolder}/output/"
-        resultFile = f"{outputFolder}/results.csv"
+        resultFile = f"{outputFolder}/input_fasta.tsv"
 
-        IOUtils.showInfo(f"Begin Virgo on {len(samples)} samples")
+        IOUtils.showInfo(f"Begin Vcat on {len(samples)} samples")
 
-
-        # re-collect former results:
-        if (os.path.exists(resultFile)):
-            modifiedResult = 0
-            with open(resultFile) as fp:
-                for line in fp:
-                    terms = line.strip().split('\t')
-                    id = terms[1]
-                    self.cachedSamples[id] = line
-                    modifiedResult += 1
-            with open(self.cacheResult, 'wt') as fp:
-                json.dump(self.cachedSamples, fp, indent=2)
-            IOUtils.showInfo(f"Found and saved previous {modifiedResult} results. Please re-run the command")
-            shutil.rmtree(cacheFolder)
-            exit(0)
-
-        os.makedirs(inputFolder)
-        for sample in samples:
-            IOUtils.writeSampleFasta([sample], f"{inputFolder}/{sample.id}.fasta")
+        os.makedirs(cacheFolder, exist_ok=True)
+        IOUtils.writeSampleFasta(samples, inputFile)
         time.sleep(1)
-        cwd = "/Software/Virgo"
-        command = f"conda run -n virgo --no-capture-output python src/virgo.py -i {inputFolder} -o {outputFolder} -d database/{self.trainset}/"
-        print(command)
-        print(len(os.listdir(inputFolder)))
+        command = f"conda run -n vcat --no-capture-output vcat contigs -i {inputFile} -o {outputFolder}"
 
-        subprocess.run(command, shell=True, cwd=cwd)
+        subprocess.run(command, shell=True)
 
         with open(resultFile) as fp:
             fp.readline()
             for line in fp:
-                terms = line.strip().split(',')
+                terms = line.strip('\n').split('\t')
                 id = terms[0]
                 self.cachedSamples[id] = line
         
         shutil.rmtree(cacheFolder)
-
 
         for sample in samples:
             if sample.id not in self.cachedSamples:
@@ -88,7 +64,7 @@ class VCAT(Module):
             samplesToRun = samples
         
         if (len(samplesToRun) > 0):
-            self.virgo(samplesToRun)
+            self.vcat(samplesToRun)
         
             with open(self.cacheResult, 'wt') as fp:
                 json.dump(self.cachedSamples, fp, indent=2)
@@ -101,10 +77,11 @@ class VCAT(Module):
         res = self.cachedSamples[sample.id]
         result = None
         if (res != "N/A"):
-            terms = res.split(",")
+            terms = res.split("\t")
             taxo = None
-            score = float(terms[8])
-            for i in reversed(range(1, 7)):
+            score = float(terms[2])
+            method = terms[3]
+            for i in reversed(range(4, len(terms))):
                 if (terms[i]):
                     taxo = terms[i]
                     result = PlainResult(taxo, score)
