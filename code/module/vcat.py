@@ -34,7 +34,7 @@ class VCAT(Module):
         time.sleep(1)
         command = f"conda run -n vcat --no-capture-output vcat contigs -i {inputFile} -o {outputFolder}"
 
-        subprocess.run(command, shell=True)
+        subprocess.run(command, shell=True, cwd=cacheFolder)
 
         with open(resultFile) as fp:
             fp.readline()
