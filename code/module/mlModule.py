@@ -32,11 +32,13 @@ class MLModule(Module):
 
         realmParams = [
             ("realm_esm2_t33_256", 256, f"{config.modelRoot}/realm/esm2_t33_256"),
-            ("realm_esm2_t33_512", 512, f"{config.modelRoot}/realm/esm2_t33_512")
+            ("realm_esm2_t33_512", 512, f"{config.modelRoot}/realm/esm2_t33_512"),
+            ("realm_esm2_t33_1022", 1022, f"{config.modelRoot}/realm/esm2_t33_1022")
         ]
         kingdomParams = [
             ("kingdom_esm2_t33_256", 256, f"{config.modelRoot}/kingdom/esm2_t33_256"),
-            ("kingdom_esm2_t33_512", 512, f"{config.modelRoot}/kingdom/esm2_t33_512")
+            ("kingdom_esm2_t33_512", 512, f"{config.modelRoot}/kingdom/esm2_t33_512"),
+            ("kingdom_esm2_t33_1022", 1022, f"{config.modelRoot}/kingdom/esm2_t33_1022")
         ]
         phylumParams = [
             ("phylum_esm2_t33_256", 256, f"{config.modelRoot}/phylum/esm2_t33_256"),
@@ -150,7 +152,6 @@ class MLModule(Module):
         model = ESMTaxo(*self.modelParams[rank][:-1], rank=rank, pooling=self.pooling)  # currently we do not need to pass n_class
         mName = model.moduleName
         model.getResults(samples)
-        results = {}
         
         for sample in samples:
             res:PlainResult = sample.results[mName]

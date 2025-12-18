@@ -18,9 +18,11 @@ from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
 class Marker(Module):
-    def __init__(self, reference, method, threads=multiprocessing.cpu_count(), threshRank='species', coverage=None, identity=50, thresh=0.5):
+    def __init__(self, reference, method, threads=multiprocessing.cpu_count(), threshRank='species', coverage=None, identity=50, thresh=0.5, queryMethod="sensitive"):
         if (method not in ["sum", "vote"] and not method.startswith("top")):
             raise ValueError("Unsupported pooling method")
+        if (queryMethod not in ["sensitive", "coverage_identity"]):
+            raise ValueError("Unsupported query method")
         self.method = method
         self.reference=reference
         self.threshRank = threshRank
@@ -28,8 +30,9 @@ class Marker(Module):
         self.coverage = coverage
         self.threads = threads
         self.thresh = thresh
-        super().__init__(f'marker-ref={self.reference};coverage={coverage};identity={identity};method={self.method};thresh={self.threshRank}_{self.thresh}')
-        self.baseName = f'marker-ref={self.reference};coverage={coverage};identity={identity}'  # do not use 'self.moduleName' in code directly, in case of subClass!
+        self.queryMethod = queryMethod
+        super().__init__(f'marker-ref={self.reference};coverage={coverage};identity={identity};queryMethod={queryMethod};method={self.method};thresh={self.threshRank}_{self.thresh}')
+        self.baseName = f'marker-ref={self.reference};coverage={coverage};identity={identity};queryMethod={queryMethod}'  # do not use 'self.moduleName' in code directly, in case of subClass!
 
         self.cacheFile = f"{config.cacheResultFolder}/{self.baseName}.tmp"
         self.cacheIndex = f"{config.cacheResultFolder}/{self.baseName}.json"
@@ -320,7 +323,12 @@ class Marker(Module):
         return command
     
     def getBlastCommandForQuery(self, queryFile, resultFile):
-        command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20 --more-sensitive --evalue 1e-3"
+        if (self.queryMethod == "sensitive"):
+            command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20 --more-sensitive --evalue 1e-3"
+        else:
+            identityTh = f" --id {self.identity}"
+            coverageTh = f" --query-cover {self.coverage} --subject-cover {self.coverage}" if self.coverage else ""
+            command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20 {identityTh}{coverageTh}"
         return command
     
     def getLCAs(self):

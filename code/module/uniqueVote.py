@@ -42,6 +42,8 @@ class UniqueVote(Module):
             "family_esm2_t33_512_enlarge": (512, f"{config.modelRoot}/family/esm2_t33_512_enlarge", "facebook/esm2_t33_650M_UR50D", 1129),
             "genus_esm2_t33_256": (256, f"{config.modelRoot}/genus/esm2_t33_256_order_family_finetune", "facebook/esm2_t33_650M_UR50D", 3523),
             "genus_esm2_t33_256_enlarge": (256, f"{config.modelRoot}/genus/esm2_t33_256_enlarge_genus", "facebook/esm2_t33_650M_UR50D", 3523),
+            "genus_esm2_t33_1022": (1022, f"{config.modelRoot}/genus/esm2_t33_650M_UR50D_MAXLEN_1022_bs2x4_accum2_lr3e-5_ep10", "facebook/esm2_t33_650M_UR50D", 3523),
+            "genus_esm2_t33_1022_enlarge": (1022, f"{config.modelRoot}/genus/esm2_t33_650M_UR50D_MAX_LENGTH_1022_per_device_batch_size_2_num_train_epochs_10_save_steps_10000_lr_3e-5_save_steps_10000", "facebook/esm2_t33_650M_UR50D", 3523),
         }
         if (mlModel not in modelParams):
             raise ValueError("Unsupported mlModel")
