@@ -13,6 +13,7 @@ from datasets import Dataset
 from tqdm import tqdm
 import torch
 import json
+import subprocess
 import os
 
 from entity.proteinSample import ProteinSample
@@ -203,8 +204,20 @@ class ESMRunner():
 
         if (len(proteinsToRun) > 0):
             IOUtils.showInfo(f"run {len(proteinsToRun)} proteins on ESM {self.modelName}")
-            self.esm(proteinsToRun)
+            # self.esm(proteinsToRun)
 
+            cmds = ["python", "code/tools/esm.py", self.modelFolder, self.baseModelFolder, self.cacheProbFile, self.cacheCLSEmbFile, self.cacheAveEmbFile, str(self.maxLen), str(self.batchSize), str(self.n_class), str(self.nextOffset_prob), str(self.nextOffset_cls), str(self.nextOffset_ave)]
+            p = subprocess.Popen(cmds, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)  # do not use shell=True here, because we are using list params
+
+            for line in IOUtils.dumpProteinSamples(proteinsToRun):
+                p.stdin.write(line + "\n")
+
+            p.stdin.close()
+
+            self.cachedSamples_prob.update(json.loads(p.stdout.readline().strip()))
+            self.cachedSamples_ave.update(json.loads(p.stdout.readline().strip()))
+            self.cachedSamples_cls.update(json.loads(p.stdout.readline().strip()))
+            # return
             for protein in proteinsToRun:
                 if (protein.id not in self.cachedSamples_prob):
                     self.cachedSamples_prob[protein.id] = -1

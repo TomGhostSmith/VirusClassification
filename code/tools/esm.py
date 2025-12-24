@@ -152,28 +152,17 @@ def runESM(test_loader, model, device, cacheProbFile, cacheCLSEmbFile, cacheAveE
 
 
 def main():
-    # modelFolder = sys.argv[1]
-    # baseModelFolder = sys.argv[2]
-    # cacheProbFile   = sys.argv[3]
-    # cacheCLSEmbFile = sys.argv[4]
-    # cacheAveEmbFile = sys.argv[5]
-    # maxLen = int(sys.argv[6])
-    # batchSize = int(sys.argv[7])
-    # n_class = int(sys.argv[8])
-    # nextOffset_prob = int(sys.argv[9])
-    # nextOffset_cls  = int(sys.argv[10])
-    # nextOffset_ave  = int(sys.argv[11])
-    modelFolder = "/Data/VirusClassification/model/genus/esm2_t33_256_enlarge_genus"
-    baseModelFolder = "facebook/esm2_t33_650M_UR50D"
-    cacheProbFile   = f"/Data/VirusClassification/cache/CachedResults/ESM_taxo_esm2_t33_256_enlarge_genus_prob.tmp"
-    cacheCLSEmbFile = f"/Data/VirusClassification/cache/CachedResults/ESM_taxo_esm2_t33_256_enlarge_genus_cls_emb.tmp"
-    cacheAveEmbFile = f"/Data/VirusClassification/cache/CachedResults/ESM_taxo_esm2_t33_256_enlarge_genus_ave_emb.tmp"
-    maxLen = 256
-    batchSize = 64
-    n_class = 3523
-    nextOffset_prob = 0
-    nextOffset_cls  = 0
-    nextOffset_ave  = 0
+    modelFolder = sys.argv[1]
+    baseModelFolder = sys.argv[2]
+    cacheProbFile   = sys.argv[3]
+    cacheCLSEmbFile = sys.argv[4]
+    cacheAveEmbFile = sys.argv[5]
+    maxLen = int(sys.argv[6])
+    batchSize = int(sys.argv[7])
+    n_class = int(sys.argv[8])
+    nextOffset_prob = int(sys.argv[9])
+    nextOffset_cls  = int(sys.argv[10])
+    nextOffset_ave  = int(sys.argv[11])
 
     tokenizer = AutoTokenizer.from_pretrained(
         modelFolder,
