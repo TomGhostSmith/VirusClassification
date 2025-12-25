@@ -158,3 +158,35 @@ def loadSharedMemory(name, shape, dtype):
 
 def closeSharedMemory(shm):
     shm.close()
+
+
+def dumpSamples(samples:list[Sample], withProtein=False):
+    for sample in samples:
+        obj = {
+            "id": sample.id,
+            "seq": str(sample.seq.seq),
+        }
+
+        # should we pass the results? how?
+        yield json.dumps(obj)
+
+def dumpProteinSamples(samples:list[ProteinSample]):
+    for sample in samples:
+        obj = {
+            "id": sample.id,
+            "seq": str(sample.seq.seq)
+        }
+        yield json.dumps(obj)
+
+def readSamples(stdin, sampleType:type):
+    for line in stdin:
+        line = line.strip()
+        if not line:
+            continue
+        s = json.loads(line)
+        sample = sampleType(SeqRecord(
+            Seq(s["seq"]), 
+            id=s["id"], 
+            description=s["id"]))
+
+        yield sample

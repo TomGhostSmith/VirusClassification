@@ -1,5 +1,6 @@
 #This file is modified from https://github.com/ChengPENG-wolf/ViraLM/blob/main/viralm.py
 import sys
+sys.path.append("code")
 import json
 from transformers import AutoTokenizer
 from datasets import Dataset
@@ -12,22 +13,21 @@ from torch.nn import Softmax
 from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from entity.proteinSample import ProteinSample
+
+from utils import parallelUtils
 
 
 def loadDataset(stdin, tokenizer, batchSize):
-    labels = []
+    accessions = []
     sequences = []
 
-    for line in stdin:
-        line = line.strip()
-        if not line:
-            continue
-        s = json.loads(line)
-        labels.append(s["label"])
-        sequences.append(s["seq"])
+    for sample in IOUtils.readSamples(stdin, ProteinSample):
+        accessions.append(sample.id)
+        sequences.append(str(sample.seq.seq))
 
     testset = Dataset.from_dict({
-        "accession": labels,
+        "accession": accessions,
         "sequence": sequences
     })
 
@@ -36,63 +36,60 @@ def loadDataset(stdin, tokenizer, batchSize):
         return tokenizer(examples["sequence"], truncation=True)
     
     def collateData(batch):
-        input_ids, labels = tuple([instance[key] for instance in batch] for key in ("input_ids", "accession"))
+        input_ids, accessions = tuple([instance[key] for instance in batch] for key in ("input_ids", "accession"))
         input_ids = torch.nn.utils.rnn.pad_sequence(
             input_ids, batch_first=True, padding_value=tokenizer.pad_token_id
         )
-        labels = labels
         return dict(
             input_ids=input_ids,
-            labels=labels,
+            accessions=accessions,
             attention_mask=input_ids.ne(tokenizer.pad_token_id),
         )
+    
+    l = parallelUtils.acquire_lock(parallelUtils.CPULock)
 
     tokenized_datasets = testset.map(tokenize_function, 
                                     batched=True, 
                                     batch_size=batchSize,
                                     remove_columns=["sequence"], 
                                     num_proc=multiprocessing.cpu_count()).with_format("torch")
+    
+    parallelUtils.release_lock(l)
 
     test_loader = DataLoader(tokenized_datasets, batch_size=batchSize, collate_fn=collateData)
 
     return test_loader
 
 def loadModel(baseModelFolder, modelFolder, n_class, device):
-    # load models
+    if (device  != "auto"):
+        device = {"": device}
     model = transformers.AutoModelForSequenceClassification.from_pretrained(baseModelFolder,
                                                                             num_labels=n_class,
                                                                             trust_remote_code=True,
                                                                             torch_dtype=torch.float16,
+                                                                            device_map=device
                                                                             )
 
     model.load_state_dict(torch.load(f"{modelFolder}/pytorch_model.bin", map_location=torch.device('cpu')), strict=False)
 
-    if torch.cuda.device_count() > 1:
-        # print(f'\nRunning on {torch.cuda.device_count()} GPUs.')
-        model = nn.DataParallel(model)
-    else:
-        # print(f'\nRunning on {device}.')
-        pass
-    
-    model.to(device)
+    return model
 
-def runESM(test_loader, model, device, cacheProbFile, cacheCLSEmbFile, cacheAveEmbFile, nextOffset_prob, nextOffset_cls, nextOffset_ave):
+def runESM(test_loader, model, device):
     softmax = Softmax(dim=0)
-    
-    probLines = []
-    clsLines = []
-    aveLines = []
-
-    cachedSamples_prob = {}
-    cachedSamples_cls  = {}
-    cachedSamples_ave  = {}
 
     with torch.no_grad():
-        for batch in tqdm(test_loader, total=len(test_loader)):
-            labels = batch['labels']
-            batch = {k: v.to(device) for k, v in batch.items() if k != "labels"}
+        # for batch in tqdm(test_loader, total=len(test_loader)):
+        for batch in test_loader:
+            accessions = batch['accessions']
+            if (device.startswith("cuda")):
+                batch = {k: v.to(device) for k, v in batch.items() if k != "accessions"}
+            elif (device == "auto"):
+                batch = {k: v.to(model.device) for k, v in batch.items() if k != "accessions"}
+            else:
+                batch = {k: v for k, v in batch.items() if k != "accessions"}
 
             outputs = model(**batch, output_hidden_states=True)
+            
             last_hidden_state = outputs.hidden_states[-1]
             cls_embedding = last_hidden_state[:, 0, :]
             # ave_embedding = torch.mean(last_hidden_state, dim=1)  # note: this won't work because there are padding
@@ -106,63 +103,21 @@ def runESM(test_loader, model, device, cacheProbFile, cacheCLSEmbFile, cacheAveE
 
             logits = outputs.logits.cpu().numpy()
 
-            for i in torch.arange(len(labels)):
+            for i in torch.arange(len(accessions)):
                 probabilities = softmax(torch.tensor(logits[i])).numpy()
-                # embedding_str = base64.b64encode(embedding.tobytes()).decode('ascii')
-                # embedding = numpy.frombuffer(base64.b64decode(embedding_str), dtype=numpy.float16)  # note: we are using float16
-                seq_name = labels[i]
+                seq_name = accessions[i]
 
-                cachedSamples_prob[seq_name] = nextOffset_prob
-                cachedSamples_cls[seq_name] = nextOffset_cls
-                cachedSamples_ave[seq_name] = nextOffset_ave
+                sys.stdout.write(f"{seq_name}\t{IOUtils.encodeBase64(probabilities)}\t{IOUtils.encodeBase64(cls_embeddings[i])}\t{IOUtils.encodeBase64(ave_embeddings[i])}\n")
 
-                probText = f"{seq_name}\t{IOUtils.encodeBase64(probabilities)}\n"
-                clsText = f"{seq_name}\t{IOUtils.encodeBase64(cls_embeddings[i])}\n"
-                aveText = f"{seq_name}\t{IOUtils.encodeBase64(ave_embeddings[i])}\n"
-
-                probLines.append(probText)
-                clsLines.append(clsText)
-                aveLines.append(aveText)
-
-                nextOffset_prob += len(probText)
-                nextOffset_cls += len(clsText)
-                nextOffset_ave += len(aveText)
-
-    cachedSamples_prob["nextOffset"] = nextOffset_prob
-    cachedSamples_cls["nextOffset"] = nextOffset_cls
-    cachedSamples_ave["nextOffset"] = nextOffset_ave
-
-    # write results at the end to avoid interruption and offset not updated
-
-    fp_prob = open(cacheProbFile, 'at')
-    fp_cls  = open(cacheCLSEmbFile, 'at')
-    fp_ave  = open(cacheAveEmbFile, 'at')
-
-    fp_prob.writelines(probLines)
-    fp_cls.writelines(clsLines)
-    fp_ave.writelines(aveLines)
-
-    fp_prob.close()
-    fp_cls.close()
-    fp_ave.close()
-
-    sys.stdout.write(json.dumps(cachedSamples_prob) + "\n")
-    sys.stdout.write(json.dumps(cachedSamples_cls) + "\n")
-    sys.stdout.write(json.dumps(cachedSamples_ave) + "\n")
 
 
 def main():
     modelFolder = sys.argv[1]
     baseModelFolder = sys.argv[2]
-    cacheProbFile   = sys.argv[3]
-    cacheCLSEmbFile = sys.argv[4]
-    cacheAveEmbFile = sys.argv[5]
-    maxLen = int(sys.argv[6])
-    batchSize = int(sys.argv[7])
-    n_class = int(sys.argv[8])
-    nextOffset_prob = int(sys.argv[9])
-    nextOffset_cls  = int(sys.argv[10])
-    nextOffset_ave  = int(sys.argv[11])
+    maxLen = int(sys.argv[3])
+    batchSize = int(sys.argv[4])
+    n_class = int(sys.argv[5])
+    device = sys.argv[6]
 
     tokenizer = AutoTokenizer.from_pretrained(
         modelFolder,
@@ -172,16 +127,11 @@ def main():
         trust_remote_code=True
     )
 
-    # run tokenizer with multiprocessing in an separate function to avoid inheret huge cache
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-    else:
-        device = torch.device("cpu")
     test_loader = loadDataset(sys.stdin, tokenizer, batchSize)
     model = loadModel(baseModelFolder, modelFolder, n_class, device)
     model.eval()
 
-    runESM(test_loader, model, device, cacheProbFile, cacheCLSEmbFile, cacheAveEmbFile, nextOffset_prob, nextOffset_cls, nextOffset_ave)        
+    runESM(test_loader, model, device)
 
 if (__name__ == "__main__"):
     main()

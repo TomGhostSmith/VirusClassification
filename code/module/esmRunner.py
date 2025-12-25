@@ -19,6 +19,7 @@ import os
 from entity.proteinSample import ProteinSample
 from config import config
 from utils import IOUtils
+from utils.parallelUtils import WorkerPool
 
 class ESMRunner():
     def __init__(self, modelName, maxLen, modelFolder, baseModelFolder, n_class, batchSize=None):
@@ -206,18 +207,74 @@ class ESMRunner():
             IOUtils.showInfo(f"run {len(proteinsToRun)} proteins on ESM {self.modelName}")
             # self.esm(proteinsToRun)
 
-            cmds = ["python", "code/tools/esm.py", self.modelFolder, self.baseModelFolder, self.cacheProbFile, self.cacheCLSEmbFile, self.cacheAveEmbFile, str(self.maxLen), str(self.batchSize), str(self.n_class), str(self.nextOffset_prob), str(self.nextOffset_cls), str(self.nextOffset_ave)]
-            p = subprocess.Popen(cmds, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)  # do not use shell=True here, because we are using list params
+            # cmds = ["python", "code/tools/esm.py", self.modelFolder, self.baseModelFolder, self.cacheProbFile, self.cacheCLSEmbFile, self.cacheAveEmbFile, str(self.maxLen), str(self.batchSize), str(self.n_class), str(self.nextOffset_prob), str(self.nextOffset_cls), str(self.nextOffset_ave)]
+            if (not torch.cuda.is_available()):
+                devices = ["cpu"]
+            elif (config.modelParallel):
+                devices = ["auto"]
+            else:
+                devices = [f"cuda:{i}" for i in range(torch.cuda.device_count())]
+                
+            cmds = [["python", "code/tools/esm.py", self.modelFolder, self.baseModelFolder, str(self.maxLen), str(self.batchSize), str(self.n_class), device] for device in devices]
 
-            for line in IOUtils.dumpProteinSamples(proteinsToRun):
-                p.stdin.write(line + "\n")
+            pool = WorkerPool(cmds, desc="ESM")
+            lines = pool.run(proteinsToRun)
 
-            p.stdin.close()
+            probLines = []
+            clsLines = []
+            aveLines = []
 
-            self.cachedSamples_prob.update(json.loads(p.stdout.readline().strip()))
-            self.cachedSamples_ave.update(json.loads(p.stdout.readline().strip()))
-            self.cachedSamples_cls.update(json.loads(p.stdout.readline().strip()))
-            # return
+            for p, line in zip(proteinsToRun, lines):
+                seq_name, probText, clsText, aveText = line.split("\t")
+                probText = f"{seq_name}\t{probText}\n"
+                clsText = f"{seq_name}\t{clsText}\n"
+                aveText = f"{seq_name}\t{aveText}\n"
+                # if (p.id != seq_name):
+                #     IOUtils.showInfo(f"pID: {p.id}, seqName: {seq_name}")
+                # assert(p.id == seq_name)
+
+                self.cachedSamples_prob[seq_name] = self.nextOffset_prob
+                self.cachedSamples_cls[seq_name] = self.nextOffset_cls
+                self.cachedSamples_ave[seq_name] = self.nextOffset_ave
+
+
+                probLines.append(probText)
+                clsLines.append(clsText)
+                aveLines.append(aveText)
+
+                self.nextOffset_prob += len(probText)
+                self.nextOffset_cls += len(clsText)
+                self.nextOffset_ave += len(aveText)
+
+            self.cachedSamples_prob["nextOffset"] = self.nextOffset_prob
+            self.cachedSamples_cls["nextOffset"] = self.nextOffset_cls
+            self.cachedSamples_ave["nextOffset"] = self.nextOffset_ave
+
+
+            fp_prob = open(self.cacheProbFile, 'at')
+            fp_cls  = open(self.cacheCLSEmbFile, 'at')
+            fp_ave  = open(self.cacheAveEmbFile, 'at')
+
+            fp_prob.writelines(probLines)
+            fp_cls.writelines(clsLines)
+            fp_ave.writelines(aveLines)
+
+            fp_prob.close()
+            fp_cls.close()
+            fp_ave.close()
+            
+
+            # p = subprocess.Popen(cmds, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)  # do not use shell=True here, because we are using list params
+
+            # for line in IOUtils.dumpProteinSamples(proteinsToRun):
+            #     p.stdin.write(line + "\n")
+
+            # p.stdin.close()
+
+            # self.cachedSamples_prob.update(json.loads(p.stdout.readline().strip()))
+            # self.cachedSamples_ave.update(json.loads(p.stdout.readline().strip()))
+            # self.cachedSamples_cls.update(json.loads(p.stdout.readline().strip()))
+            
             for protein in proteinsToRun:
                 if (protein.id not in self.cachedSamples_prob):
                     self.cachedSamples_prob[protein.id] = -1
