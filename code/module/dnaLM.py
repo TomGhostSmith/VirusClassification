@@ -555,6 +555,7 @@ def runSingle(clusters, samples:list[Sample], indexs, pooling, embedding, strate
             #     embeddings = numpy.array([sample.info[f"{self.model}_CLSemb"]])
             if (embedding == 'ave'):
                 if (f"{model}_aveemb" not in sample.info):
+                    bar.update(1)
                     res.append((None, index))
                     continue
                 embeddings = numpy.array([sample.info[f"{model}_aveemb"]])

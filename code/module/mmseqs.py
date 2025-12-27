@@ -20,8 +20,8 @@ class MMseqs(Module):
         self.coverage = coverage
         self.identity = identity
         self.threads = threads
-        super().__init__(f'mmseqs-ref={self.reference};s{sensitivity}')
-        self.baseName = self.moduleName  # do not use 'self.moduleName' in code directly, in case of subClass!
+        super().__init__(f'mmseqs-ref={self.reference};s{sensitivity};c{coverage};i{identity}')
+        self.baseName = f'mmseqs-ref={self.reference};s{sensitivity}'  # do not use 'self.moduleName' in code directly, in case of subClass!
 
         self.cacheFile = f"{config.cacheResultFolder}/{self.baseName}.tmp"
         self.cacheIndex = f"{config.cacheResultFolder}/{self.baseName}.json"

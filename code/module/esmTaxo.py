@@ -63,13 +63,9 @@ class ESMTaxo(Module):
                 protein.info[f"{self.rank}_labels"] = self.class_names
                 proteinsToRun.append(protein)
 
-        with ProcessPoolExecutor() as ex:
-            results = ex.submit(getProbs, self.name, self.maxLen, self.modelFolder, self.baseModelFolder, len(self.class_names), self.batchSize, proteinsToRun).result()  # note: ex.submit() do not unpack params
-            key = f"{self.name}_prob"
-        
-        for r, p in zip(results, proteinsToRun):
-            p.info[key] = r
-
+        model = ESMRunner(self.name, self.maxLen, self.modelFolder, self.baseModelFolder, len(self.class_names), self.batchSize)
+        model.run(proteinsToRun, getProb=True)
+        key = f"{self.name}_prob"
 
         results = [self.getResult(sample, keepVotes) for sample in samples]
 
