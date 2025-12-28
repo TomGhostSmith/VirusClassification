@@ -17,31 +17,6 @@ def main(input, output):
     from module.mergeModule import MergeModule
     from module.markerML import MarkerML
 
-    # thRank = {
-    #     "": "f",
-    #     "pos": "g",
-    #     "60": "g",
-    #     "cm": "g",
-    #     "sa": "g",
-    #     "sa_cm": "g",
-    #     "pos_sa": "g",
-    #     "60_sa": "g",
-    #     "pos_cm": "g",
-    #     "pos_cm_sa": "g",
-    #     "60_cm": lowestRank[0],
-    #     "60_cm_sa": lowestRank[0]
-    # }
-    # pipeline = Pipeline(
-    #     VirusPred([
-    #         MinimapThresholdModule('VMRv4', factors=['60', 'completeMatch']), 
-    #         ESM()]),
-    #         # MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
-    #     MinimapMLMergeModule(
-    #         MinimapThreshRankModule('VMRv4', limitOutputDict=thRank),
-    #         # MLModule('topdown', 0.45, '1111000')
-    #         MLModule(MLstrategy, 0.45, '1011000')
-    #         )
-    #     )
 
     pipeline = Pipeline(
     VirusPred([
@@ -55,9 +30,6 @@ def main(input, output):
             basicMerge, "pipeline_0.45")
     )
     
-    # evaluator = ModelRunnder([pipeline], Dataset("refseq_2024_test"))
-    # evaluator = ModelRunnder([pipeline], Dataset("genbank_2024_test"))
-    # evaluator = ModelRunnder([pipeline], Dataset("Challenge"))
     evaluator = ModelRunnder(pipeline)
     evaluator.run(input, f"{output}/result.tsv")
 

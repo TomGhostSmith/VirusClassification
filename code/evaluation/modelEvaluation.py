@@ -329,8 +329,7 @@ def testModelVirusIdentity(models:dict[str, Module], dataset):
 
     IOUtils.showInfo('Done')
 
-def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subset='all', missingLabel="Unknown", analyseList:list[tuple[str, str]]=[]):
-    additionalInfo = set()
+def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subset='all', missingLabel="Unknown", analyseList:list[tuple[str, str]]=[], additionalInfo=set()):
     if (analyseList is not None):
         for pair in analyseList:
             if (len(pair) == 2):
@@ -498,7 +497,21 @@ def analysis(modelDict, analyseList, summaryDF, dataset, subset, outputName="ana
             "overPredict": -hasPred / noGT if noGT > 0 else 0
             })
     
-    rankLevels = list()
+    def getGTCount(series):
+        correct = (series == "correct").sum()
+        error = (series == "wrong").sum()
+        noPred = (series == "No_pred has_GT").sum()
+        hasGT = correct + error + noPred
+        hasPred = (series == "has_pred No_GT").sum()
+        leave = (series == "No_pred No_GT").sum()
+        noGT = hasPred + leave
+        return pandas.Series({
+            "hasGT": hasGT,
+            "noGT": noGT
+            })
+    
+    rankLevels = []
+    rankLabels = []
     for r in config.resultRanks:
         if (not r.startswith('sub')):
             rankLevels.append(r)
@@ -507,6 +520,22 @@ def analysis(modelDict, analyseList, summaryDF, dataset, subset, outputName="ana
     x = numpy.arange(len(rankLevels))
     width = 2 / (len(modelDict) + 2)
     pattern_handles = []
+
+    # get GT counts
+    tmpDF = pandas.DataFrame(modelRankResults[list(modelDict.keys())[0]])
+    tmpDF = tmpDF[rankLevels]
+    metrics = tmpDF.apply(getGTCount)
+    hasGTCount = metrics.loc["hasGT"].values
+    noGTCount = metrics.loc["noGT"].values
+
+    for r, has, no in zip(rankLevels, hasGTCount, noGTCount):
+        rankLabels.append(f"{r}\nw/ GT={has}\nw/o GT={no}")
+
+    for y in numpy.arange(-0.8, 1.1, 0.2):
+        plt.axhline(y=y, color='gray', linestyle='--', linewidth=0.5, zorder=0)
+    for y in numpy.arange(-0.9, 1.0, 0.2):
+        plt.axhline(y=y, color='lightgray', linestyle='--', linewidth=0.5, zorder=0)
+
     for idx, model in enumerate(modelDict.keys()):
         tmpDF = pandas.DataFrame(modelRankResults[model])
         tmpDF = tmpDF[rankLevels]
@@ -519,6 +548,8 @@ def analysis(modelDict, analyseList, summaryDF, dataset, subset, outputName="ana
         ax.bar(x*2 + idx*width, overPredicts, width, color='white', hatch='....', edgecolor=availableColors[idx])
         pattern_handles.append(Patch(facecolor=availableColors[idx], label=model))
 
+    
+
     pattern_handles += [
         Line2D([0], [0], color='white', linewidth=1),
         Patch(facecolor='gray', edgecolor='gray', label='Correct prediction'),
@@ -528,7 +559,7 @@ def analysis(modelDict, analyseList, summaryDF, dataset, subset, outputName="ana
     # ax.legend(handles=pattern_handles, title="Prediction Type", loc='upper right')
 
     ax.set_xticks(x*2 + width * (len(modelDict) - 1)/2)
-    ax.set_xticklabels(rankLevels)
+    ax.set_xticklabels(rankLabels)
     ax.legend(handles=pattern_handles, loc="upper left", bbox_to_anchor=(1, 1))
     ax.set_xlabel("rank")
     ax.axhline(0, color="black", linewidth=1)

@@ -76,7 +76,9 @@ class Config():
 
         self.esmBatchSize = 64
         self.mlBatchSize = 64
-        self.DNABatchSize = 1
+        self.DNABatchSize = 6
+        self.proteinBatchSize = 12
+        self.modelParallel = False
 
         # self.updatePath()
 
