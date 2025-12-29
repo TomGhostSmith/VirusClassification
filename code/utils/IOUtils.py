@@ -2,6 +2,7 @@ import multiprocessing.shared_memory
 import os
 import sys
 import math
+import json
 import gzip
 import numpy
 import base64
@@ -11,6 +12,9 @@ import subprocess
 import multiprocessing
 from tqdm import tqdm
 from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from prototype.result import Result
 from entity.sample import Sample
 from entity.proteinSample import ProteinSample
 
