@@ -25,7 +25,7 @@ class ANIResult(Result):
     def calcTaxoNode(self):
         if (self.node is None):
             targetRankLevel = config.rankLevels[self.rank]
-            node = taxoTree.getTaxoNodeFromICTV(ICTVID=self.bestAlignment.ref)
+            node = taxoTree.getTaxoNodeFromAccession(self.bestAlignment.ref)
             # align60Counts = 0
             # for alignment in self.alignments:
             #     if alignment.quality == 60:
@@ -51,7 +51,7 @@ class ANIResult(Result):
                     break
     
     def __copy__(self):
-        obj = MinimapResult()
+        obj = ANIResult()
         obj.alignments = self.alignments        # shallow copy, alignments are read only
         obj.bestAlignment = self.bestAlignment  # shallow copy, alignments are read only
         obj.rank = self.rank                    # a string, which will generate a new object

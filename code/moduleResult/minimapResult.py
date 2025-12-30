@@ -25,7 +25,7 @@ class MinimapResult(Result):
     def calcTaxoNode(self):
         if (self.node is None):
             targetRankLevel = config.rankLevels[self.rank]
-            node = taxoTree.getTaxoNodeFromICTV(ICTVID=self.bestAlignment.ref)
+            node = taxoTree.getTaxoNodeFromAccession(self.bestAlignment.ref)
             align60Counts = 0
             for alignment in self.alignments:
                 if alignment.quality == 60:

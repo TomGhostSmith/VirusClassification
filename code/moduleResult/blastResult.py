@@ -24,7 +24,7 @@ class BlastResult(Result):
     def calcTaxoNode(self):
         if (self.node is None):
             targetRankLevel = config.rankLevels[self.rank]
-            node = taxoTree.getTaxoNodeFromICTV(ICTVID=self.bestAlignment.ref)
+            node = taxoTree.getTaxoNodeFromAccession(self.bestAlignment.ref)
                 
             for n in reversed(node.ICTVNode.path):
                 if config.rankLevels[n.rank] <= targetRankLevel:
