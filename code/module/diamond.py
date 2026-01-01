@@ -18,15 +18,18 @@ from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
 class Diamond(Module):
-    def __init__(self, reference, method, threads=multiprocessing.cpu_count(), threshRank='species'):
+    def __init__(self, reference, method, threads=multiprocessing.cpu_count(), threshRank='species', tool="diamond"):
         if (method not in ["sum", "vote", "coverage"] and not method.startswith("top")):
             raise ValueError("Unsupported pooling method")
+        if (tool not in ["diamond", "mmseqs"]):
+            raise ValueError("Unsupported tool")
+        self.tool = tool
         self.method = method
         self.reference=reference
         self.threshRank = threshRank
         self.threads = threads
-        super().__init__(f'diamond-ref={self.reference};method={self.method};thresh={self.threshRank}')
-        self.baseName = f'diamond-ref={self.reference}'  # do not use 'self.moduleName' in code directly, in case of subClass!
+        super().__init__(f'diamond-ref={self.reference};tool={self.tool};method={self.method};thresh={self.threshRank}')
+        self.baseName = f'diamond-ref={self.reference};tool={self.tool}'  # do not use 'self.moduleName' in code directly, in case of subClass!
 
         self.cacheFile = f"{config.cacheResultFolder}/{self.baseName}.tmp"
         self.cacheIndex = f"{config.cacheResultFolder}/{self.baseName}.json"
@@ -35,7 +38,10 @@ class Diamond(Module):
         self.cachedSampleNameFile = f"{config.cacheResultFolder}/{self.baseName}.names"
         self.cachedSampleNames = set()
 
-        self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_diamonddb.dmnd"
+        if (self.tool == "diamond"):
+            self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_diamonddb.dmnd"
+        elif (self.tool == "mmseqs"):
+            self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_prot_mmseqdb"
     
     def buildDB(self):
         IOUtils.showInfo(f"Making diamond database for {self.reference}")
@@ -44,8 +50,11 @@ class Diamond(Module):
         refSamples = IOUtils.loadSamples(referenceFasta)
         NucleotideUtils.extractProtein(refSamples)
         IOUtils.writeSampleProteinFasta(refSamples, referenceProteinFasta)
-        subprocess.run(f"diamond makedb --in {referenceProteinFasta} -d {self.referenceDB}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
+        if (self.tool == "diamond"):
+            cmd = f"diamond makedb --in {referenceProteinFasta} -d {self.referenceDB}"
+        else:
+            cmd = f"mmseqs createdb {referenceProteinFasta} {self.referenceDB}"
+        subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
     def diamond(self, samples:list[Sample]):
@@ -214,6 +223,8 @@ class Diamond(Module):
                     break
             if result is None:
                 result = PlainResult(winner, score=maxVotes/totalVotes)
+        else:
+            maxVotes = 0
 
 
         proteinCount = len(sample.proteins)
@@ -221,6 +232,9 @@ class Diamond(Module):
             proteinCount = 0.5
             
         sample.info["protein_count_match"] = proteinCount
+        sample.info["protein_count"] = len(sample.proteins)
+        sample.info["protein_match_ratio"] = maxVotes / len(sample.proteins) if len(sample.proteins) > 0 else 0
+
         
         return result
     
@@ -229,5 +243,8 @@ class Diamond(Module):
 
         # cline = NcbiblastnCommandline(query=queryFile, db=referenceDB, evalue=1e-3, outfmt=5, out=resultFile)
         # stdout, stderr = cline()
-        command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20"
+        if (self.tool == "diamond"):
+            command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20"
+        elif (self.tool == "mmseqs"):
+            command = f"mmseqs easy-search {queryFile} {self.referenceDB} {resultFile} /tmp --threads {self.threads} -s 10 --search-type 0"
         return command

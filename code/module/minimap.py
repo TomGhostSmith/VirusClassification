@@ -10,6 +10,7 @@ from prototype.module import Module
 from moduleResult.minimapResult import MinimapResult
 from moduleResult.alignment import Alignment
 from entity.sample import Sample
+from entity.taxoTree import taxoTree
 
 from utils import IOUtils
 
@@ -118,11 +119,24 @@ class Minimap(Module):
             if (alignment.ref is not None):
                 result.addAlignment(alignment)
 
+        sample.info["length"] = sample.length
+
         if (result.bestAlignment is None):
             result = None
             sample.info["mapQ"] = -1
+            sample.info["alignments"] = 0
+            sample.info["queryCoverage"] = 0
+            sample.info["refCoverage"] = 0
+            sample.info["alignmentsLCA"] = 0
         else:
             sample.info["mapQ"] = result.bestAlignment.quality
+            sample.info["alignments"] = len(result.alignments)
+            sample.info["queryCoverage"] = result.bestAlignment.queryCoverLength/sample.length
+            sample.info["refCoverage"] = result.bestAlignment.refCoverLength/sample.length
+            nodes = [taxoTree.getTaxoNodeFromAccession(ali.ref).ICTVNode for ali in result.alignments]
+            lca = taxoTree.ICTVTree.findLCA(nodes)
+            sample.info["alignmentsLCA"] = config.rankLevels[lca.rank]
+
         sample.results[self.baseName] = result
         return result
     
