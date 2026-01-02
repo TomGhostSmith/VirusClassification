@@ -117,7 +117,7 @@ class Vcontact(Module):
     def getResult(self, sample:Sample)->PlainResult:
         res = self.cachedSamples[sample.id]
         if (res != "N/A"):
-            result = PlainResult(res)
+            result = [PlainResult(res)]
         else:
             result = None
 

@@ -119,7 +119,7 @@ class VITAP(Module):
     def getResult(self, sample:Sample)->VitapResult:
         res = self.cachedSamples[sample.id]
         if (res != "N/A"):
-            result = VitapResult(res)
+            result = [VitapResult(res)]
         else:
             result = None
 

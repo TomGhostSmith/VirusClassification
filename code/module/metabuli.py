@@ -98,7 +98,7 @@ class Metabuli(Module):
             else:
                 taxo = terms[6].split(';')
                 term = taxo[-1].split('_')[1]
-                result = PlainResult(term)
+                result = [PlainResult(term)]
         else:
             result = None
 

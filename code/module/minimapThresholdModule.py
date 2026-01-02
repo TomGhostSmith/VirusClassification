@@ -17,6 +17,7 @@ class MinimapThresholdModule(Minimap):
         self.moduleName = f'minimapThresh-ref={self.reference};mode={self.mode};thresh-{"_".join(self.factors)}'
 
     def run(self, samples):
+        raise NotImplementedError("not reconstruct for multi-result")
         results = super().run(samples)
         return [self.extractResult(sample, result) for sample, result in zip(samples, results)]
     

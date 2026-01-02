@@ -124,7 +124,7 @@ class MLModule(Module):
         results = list()
         for sample in samples:
             if (self.resultDict[sample.id].res is not None):
-                results.append(self.resultDict[sample.id])
+                results.append([self.resultDict[sample.id]])
             else:
                 results.append(None)
         
@@ -154,9 +154,9 @@ class MLModule(Module):
         model.getResults(samples)
         
         for sample in samples:
-            res:PlainResult = sample.results[mName]
+            res:list[PlainResult] = sample.results[mName]
             if (res):
-                self.resultDict[sample.id].addResult(res.pred, res.score)
+                self.resultDict[sample.id].addResult(res[0].pred, res[0].score)
 
             if not (self.resultDict[sample.id].terminate):
                 unTerminatedSamples.append(sample)

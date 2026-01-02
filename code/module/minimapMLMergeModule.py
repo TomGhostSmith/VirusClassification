@@ -15,6 +15,7 @@ class MinimapMLMergeModule(Module):
         super().__init__(f"{self.minimap.moduleName}.{self.mlModule.moduleName}.minimapML-{'_'.join(self.factors)}")
 
     def run(self, samples:list[Sample]):
+        raise NotImplementedError("not reconstruct for multi-result")
         resultDict = dict()
 
         # 1. use minimapThrank with merge condition

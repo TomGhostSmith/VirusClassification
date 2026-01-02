@@ -102,9 +102,9 @@ class Kraken(Module):
     def getResult(self, sample:Sample, cachedResultFP)->KrakenResult:
         offset = self.cachedSamples[sample.id]
         cachedResultFP.seek(offset)
-        result = KrakenResult(cachedResultFP.readline())
+        result = [KrakenResult(cachedResultFP.readline())]
 
-        if (result.finalSpecies is None):
+        if (result[0].finalSpecies is None):
             result = None
         return result
     

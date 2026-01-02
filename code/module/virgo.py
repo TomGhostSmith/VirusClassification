@@ -107,7 +107,7 @@ class Virgo(Module):
             for i in reversed(range(1, 7)):
                 if (terms[i]):
                     taxo = terms[i]
-                    result = PlainResult(taxo, score)
+                    result = [PlainResult(taxo, score)]
                     break
 
         return result

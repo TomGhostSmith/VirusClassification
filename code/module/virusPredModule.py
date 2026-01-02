@@ -31,7 +31,7 @@ class VirusPred(Module):
         results = list()
         for sample in samples:
             if sample.id in virus:
-                results.append(VirusPredictionResult())
+                results.append([VirusPredictionResult()])
             else:
                 results.append(None)
 

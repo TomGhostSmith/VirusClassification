@@ -144,7 +144,7 @@ class MarkerML(Module):
         results = list()
         for sample in samples:
             if (self.resultDict[sample.id].res is not None):
-                results.append(self.resultDict[sample.id])
+                results.append([self.resultDict[sample.id]])
             else:
                 results.append(None)
         

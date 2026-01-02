@@ -112,6 +112,7 @@ class MinimapCDNA(Module):
 
 
     def run(self, samples:list[Sample]):
+        raise NotImplementedError("not reconstruct for multi-result")
         samplesToRun:list[Sample] = list()
         NucleotideUtils.extractProtein(samples)
 

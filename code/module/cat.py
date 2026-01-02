@@ -312,4 +312,4 @@ class CAT(Module):
                 taxoRes = list(zip(taxos, scores))
                 result = CatResult(taxoRes)
                 
-        return result
+        return [result]

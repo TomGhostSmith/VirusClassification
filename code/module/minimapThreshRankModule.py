@@ -23,6 +23,7 @@ class MinimapThreshRankModule(Minimap):
         self.moduleName = f"minimapThRank-ref={self.reference};mode={self.mode};thRank-{self.code}"
 
     def run(self, samples):
+        raise NotImplementedError("not reconstruct for multi-result")
         results = super().run(samples)
         return [self.extractResult(sample, res) for sample, res in zip(samples, results)]
         

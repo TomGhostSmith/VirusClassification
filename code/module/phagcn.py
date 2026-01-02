@@ -186,7 +186,7 @@ class PhaGCN(Module):
         res = self.cachedSamples[sample.id]
         if (res != "N/A"):
             term = res.split("\t")[0]
-            result = PlainResult(term)
+            result = [PlainResult(term)]
         else:
             result = None
 

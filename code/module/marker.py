@@ -153,6 +153,7 @@ class Marker(Module):
 
 
     def run(self, samples:list[Sample], keepVotes=False):
+        IOUtils.showInfo("Currently only return 1 result", "WARN")
         samplesToRun:list[Sample] = list()
         NucleotideUtils.extractProtein(samples)
 
@@ -254,7 +255,7 @@ class Marker(Module):
                             highestNode = node
                             
                     if (highestNode is not None):  # if there is already some node above thresh, then return
-                        result = PlainResult(highestNode.name, score=highestScore)
+                        result = [PlainResult(highestNode.name, score=highestScore)]
                         return result
 
 
@@ -282,7 +283,7 @@ class Marker(Module):
                     if (len(rankVotes) > 0):
                         winner, maxVotes = max(rankVotes.items(), key=lambda x: x[1])
                         if (maxVotes > self.thresh * len(sample.proteins)):
-                            result = PlainResult(winner, score=maxVotes / (len(sample.proteins)))
+                            result = [PlainResult(winner, score=maxVotes / (len(sample.proteins)))]
                             break
                 # else, if in no rank maxVote is higher than thresh, then keep result=None
             elif (self.threshRank == "bottomup_ratio"):
@@ -298,7 +299,7 @@ class Marker(Module):
                     if (len(rankVotes) > 1):
                         (top1Name, top1Votes), (top2Name, top2Votes) = sorted(list(rankVotes.items()), key=lambda x:x[1], reverse=True)[:2]
                         if (top1Votes > top2Votes * self.thresh):
-                            result = PlainResult(top1Name, score=top1Votes / len(sample.proteins))
+                            result = [PlainResult(top1Name, score=top1Votes / len(sample.proteins))]
                             break
             else:
                 totalVotes = sum(votes.values())
@@ -306,10 +307,10 @@ class Marker(Module):
                 winnerNode = taxoTree.ICTVTree.nodes[winner]
                 for n in reversed(winnerNode.path):
                     if (config.rankLevels[n.rank] <= config.rankLevels[self.threshRank] ):
-                        result = PlainResult(n.name, score=maxVotes/totalVotes)
+                        result = [PlainResult(n.name, score=maxVotes/totalVotes)]
                         break
                 if result is None:
-                    result = PlainResult(winner, score=maxVotes/totalVotes)
+                    result = [PlainResult(winner, score=maxVotes/totalVotes)]
 
         if (keepVotes):
             sample.info[f"{self.moduleName}_votes"] = votes

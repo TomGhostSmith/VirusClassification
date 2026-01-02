@@ -109,20 +109,24 @@ class MMseqs(Module):
         offset, alignmentCount = self.cachedSamples[sample.id]
         cachedResultFP.seek(offset)
         alignments:list[BlastAlignment] = [BlastAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+        alignments = sorted(alignments, key=lambda x:x.similarity, reverse=True)
         
-        result = BlastResult()
+        results:list[BlastResult] = []
         targetLen = sample.length * self.coverage / 100
         for alignment in alignments:
             if (alignment.ref is not None and alignment.queryCoverLength >= targetLen and alignment.similarity >= self.identity/100):
-                result.addAlignment(alignment)
+                r = BlastResult()
+                r.addAlignment(alignment)
+                results.append(r)
+                # result.addAlignment(alignment)
 
-        if (result.bestAlignment is None):
-            result = None
+        if (len(results) == 0):
+            results = None
             sample.info["mmseq"] = 0
         else:
-            sample.info["mmseq"] = result.bestAlignment.similarity
-        sample.results[self.baseName] = result
-        return result
+            sample.info["mmseq"] = results[0].bestAlignment.similarity
+        sample.results[self.baseName] = results
+        return results
     
     def getMMseqsCommand(self, queryFile, resultFile):
         # first check if the reference fasta is made a database

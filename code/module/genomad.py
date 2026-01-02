@@ -89,7 +89,7 @@ class Genomad(Module):
         offset = self.cachedSamples[sample.id]
         if offset != -1:
             cachedResultFP.seek(offset)
-            result = GenomadResult(cachedResultFP.readline())
+            result = [GenomadResult(cachedResultFP.readline())]
         else:
             result = None
         return result

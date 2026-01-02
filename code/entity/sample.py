@@ -13,13 +13,14 @@ class Sample():
         #     self.stdResult = taxoTree.getTaxoNodeFromICTV(ICTVName=stdResult)
         # else:
         #     self.stdResult = None
-        self.results:dict[str, Result] = dict()
-        self.info = dict()
+        self.results:dict[str, list[Result]] = {}
+        self.info = {}
         self.proteins:list[ProteinSample] = None
         self.cDNAs:list[ProteinSample] = None
 
-    def addResult(self, name:str, result:Result):
-        if result is not None:
-            result.calcTaxoNode()
+    def addResult(self, name:str, results:list[Result]):
+        if results is not None:
+            for result in results:
+                result.calcTaxoNode()
         
-        self.results[name] = result
+        self.results[name] = results

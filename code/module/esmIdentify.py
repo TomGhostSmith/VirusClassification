@@ -53,7 +53,7 @@ class esmIdentify(Module):
             
             if (validProteinCount > 0):
                 if (totalScore/validProteinCount > 0.5):
-                    results.append(VirusPredictionResult())
+                    results.append([VirusPredictionResult()])
                 else:
                     results.append(None)
             else:

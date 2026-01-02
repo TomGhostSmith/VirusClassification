@@ -100,8 +100,9 @@ class ESMTaxo(Module):
         if (keepVotes):
             sample.info[f"{self.moduleName}_votes"] = votes
         if (len(votes) > 0 and totalVotes > 0):
-            winner, maxVotes = max(votes.items(), key=lambda x:x[1])
-            return PlainResult(winner, maxVotes/totalVotes)
+            vs = sorted(votes.items(), key=lambda x: x[1], reverse=True)
+            results = [PlainResult(n, v/totalVotes) for n, v in vs]
+            return results
         else:
             return None
         

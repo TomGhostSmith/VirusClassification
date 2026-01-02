@@ -153,7 +153,6 @@ class Diamond(Module):
     
     def getResult(self, sample:Sample, cachedResultFP)->PlainResult:
         # note: result of basename is not available
-        result = None
         
         votes:dict[str, int] = dict()
         if (self.method == "vote"):
@@ -213,22 +212,29 @@ class Diamond(Module):
                         votes[ICTVName] += alignment.similarity
                     else:
                         votes[ICTVName] = alignment.similarity
+
+        results = []
         if len(votes) > 0:
             totalVotes = sum(votes.values())
-            winner, maxVotes = max(votes.items(), key=lambda x: x[1])
-            winnerNode = taxoTree.ICTVTree.nodes[winner]
-            for n in reversed(winnerNode.path):
-                if (config.rankLevels[n.rank] <= config.rankLevels[self.threshRank] ):
-                    result = PlainResult(n.name, score=maxVotes/totalVotes)
-                    break
-            if result is None:
-                result = PlainResult(winner, score=maxVotes/totalVotes)
+            vs = sorted(votes.items(), key=lambda x: x[1], reverse=True)
+            maxVotes = vs[0][1]
+            for name, v in vs:
+                r = None
+                node = taxoTree.ICTVTree.nodes[name]
+                for n in reversed(node.path):
+                    if (config.rankLevels[n.rank] <= config.rankLevels[self.threshRank]):
+                        r = PlainResult(n.name, score=v/totalVotes)
+                        break
+                if r is None:
+                    r = PlainResult(name, score=v/totalVotes)
+                results.append(r)
+
         else:
             maxVotes = 0
 
 
         proteinCount = len(sample.proteins)
-        if (proteinCount == 1 and result is None):
+        if (proteinCount == 1 and len(results) == 0):
             proteinCount = 0.5
             
         sample.info["protein_count_match"] = proteinCount
@@ -236,7 +242,7 @@ class Diamond(Module):
         sample.info["protein_match_ratio"] = maxVotes / len(sample.proteins) if len(sample.proteins) > 0 else 0
 
         
-        return result
+        return results
     
     def getBlastCommand(self, queryFile, resultFile):
         # first check if the reference fasta is made a database

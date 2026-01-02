@@ -113,7 +113,7 @@ class UniqueVote(Module):
             totalVotes = sum(votes.values())
             if (len(votes) > 0 and totalVotes > 0):
                 winner, maxVotes = max(votes.items(), key=lambda x:x[1])
-                results.append(PlainResult(winner, maxVotes/totalVotes))
+                results.append([PlainResult(winner, maxVotes/totalVotes)])
             else:
                 results.append(None)
 

@@ -80,7 +80,7 @@ class ViTax(Module):
             terms = res.split("\t")
             ans = terms[1].split("_")[0]
             score = float(terms[2])
-            result = PlainResult(ans, score)
+            result = [PlainResult(ans, score)]
         else:
             result = None
 

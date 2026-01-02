@@ -222,6 +222,7 @@ class DNALM(Module):
                 fp.write(f"{name}\t{IOUtils.encodeBase64(mu)}\t{IOUtils.encodeBase64(var)}\t{IOUtils.encodeBase64(distances)}\n")
         
     def run(self, samples:list[Sample]):
+        IOUtils.showInfo("Currently only return 1 result", "WARN")
         if (not os.path.exists(self.cacheClusterFile) and self.strategy != "individual"):
             self.train()
 
@@ -247,8 +248,12 @@ class DNALM(Module):
 
         if (self.threads == 1):
             res = runSingle(clusters, samples, list(range(len(samples))), self.pooling, self.embedding, self.strategy, self.model, self.invStdVar, self.refEmbeddings, self.ref_sq, self.inverse_indicies, self.uniqueNames)
-            r, i = zip(*res)
-            results = r
+            results = []
+            for r, i in zip(*res):
+                if (r is None):
+                    results.append(None)
+                else:
+                    results.append([r])
         else:
             samplePerThread = math.ceil(len(samples)/self.threads)
             jobs = []
@@ -290,7 +295,8 @@ class DNALM(Module):
                         if asyncResult.ready():
                             res = asyncResult.get()
                             for r, idx in res:
-                                results[idx] = r
+                                if (r is not None):
+                                    results[idx] = [r]
                             asyncResults.remove(asyncResult)
                     time.sleep(1)
                 pool.join()

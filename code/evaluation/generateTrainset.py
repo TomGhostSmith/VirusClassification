@@ -21,7 +21,7 @@ config.setPath(modelRoot=modelRoot, outputRoot=outputRoot, queryFile=queryFilePa
 from module.pipeline import Pipeline
 from module.virusPredModule import VirusPred
 from module.minimapThresholdModule import MinimapThresholdModule
-from module.esm import ESM
+from module.esmIdentify import esmIdentify
 from module.minimapMLMergeModule import MinimapMLMergeModule
 from module.minimapThreshRankModule import MinimapThreshRankModule
 from module.mlModule import MLModule

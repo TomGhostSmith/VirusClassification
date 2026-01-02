@@ -2,6 +2,7 @@ from prototype.module import Module
 from utils import trainUtils
 from entity.taxoNode import TaxoNode
 from entity.taxoTree import taxoTree
+from prototype.result import Result
 from config import config
 
 from sklearn.model_selection import GridSearchCV
@@ -10,11 +11,11 @@ import pandas
 import json
 import os
 
-class XGBoost(Module):
+class XGBoostRouter(Module):
     def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], features:list[str]):
         moduleNames = "+".join([module.moduleName for module in modules])
         featureNames = "+".join(features)
-        super().__init__(f"XGBoost-train={trainset};modules={moduleNames};features={featureNames}")
+        super().__init__(f"XGBoostRouter-train={trainset};modules={moduleNames};features={featureNames}")
         self.trainset = trainset
         self.evalMethod = evalMethod
         self.modules = modules
@@ -22,10 +23,10 @@ class XGBoost(Module):
         self.modules = modules
         self.features = features
 
-        self.modelListFile = f"{config.modelRoot}/XGBoost/names.json"
+        self.modelListFile = f"{config.modelRoot}/XGBoostRouter/names.json"
         self.moduleListMap = {"nextOffset": 0}
-        if (os.path.exists(self.modelListMapFile)):
-            with open(self.modelListMapFile) as fp:
+        if (os.path.exists(self.modelListFile)):
+            with open(self.modelListFile) as fp:
                 self.moduleListMap = json.load(fp)
 
     def getFeatures(self, samples):
@@ -55,10 +56,10 @@ class XGBoost(Module):
             if (stdNode is None or stdNode.ICTVNode is None):
                 continue
             for idx, module in enumerate(self.modules):
-                predNode:TaxoNode = sample.results[module.moduleName]
-                if (predNode is None or predNode.ICTVNode is None):
+                pred = sample.results[module.moduleName]
+                if (pred is None or pred[0].node.ICTVNode is None):
                     continue
-                lca = taxoTree.ICTVTree.findLCA([stdNode.ICTVNode, predNode.ICTVNode])
+                lca = taxoTree.ICTVTree.findLCA([stdNode.ICTVNode, pred[0].node.ICTVNode])
                 rank = config.rankLevels[lca.rank]
                 if (rank > bestRank):
                     bestRank = rank
@@ -92,13 +93,13 @@ class XGBoost(Module):
             mainModel = self.train()
         else:
             mainModelName, rankModelName = self.moduleListMap[self.moduleName]
-            if (not os.path.exists(f"{config.modelRoot}/XGBoost/{mainModelName}")):
+            if (not os.path.exists(f"{config.modelRoot}/XGBoostRouter/{mainModelName}")):
                 mainModel = self.train()
-            # elif (not os.path.exists(f"{config.modelRoot}/XGBoost/{rankModelName}")):
+            # elif (not os.path.exists(f"{config.modelRoot}/XGBoostRouter/{rankModelName}")):
             #     mainModel = self.train()
             else:
                 mainModel = xgboost.XGBClassifier()
-                mainModel.load_model(f"{config.modelRoot}/XGBoost/{mainModelName}")
+                mainModel.load_model(f"{config.modelRoot}/XGBoostRouter/{mainModelName}")
         return mainModel            
 
     def run(self, samples):
@@ -119,7 +120,7 @@ class XGBoost(Module):
         results = []
 
         for modelIndex, sample in zip(modelIndexes, samples):
-            results.append(sample.results[self.modules[modelIndex]])
+            results.append([sample.results[self.modules[modelIndex].moduleName]])
         
         return results
 
@@ -152,7 +153,7 @@ def trainMainXGBoost(features, targets, n_class, saveFile):
 
     # Save to file
     os.makedirs(f"{config.modelRoot}/XGBoost", exist_ok=True)
-    best_model.save_model(f"{config.modelRoot}/XGBoost/{saveFile}")   # JSON is human-readable
+    best_model.save_model(f"{config.modelRoot}/XGBoostRouter/{saveFile}")   # JSON is human-readable
     return best_model
 
 def trainRankXGBoost(features, targets, n_class, saveFile):
@@ -184,12 +185,11 @@ def trainRankXGBoost(features, targets, n_class, saveFile):
 
     # Save to file
     os.makedirs(f"{config.modelRoot}/XGBoost", exist_ok=True)
-    best_model.save_model(f"{config.modelRoot}/XGBoost/{saveFile}")   # JSON is human-readable
+    best_model.save_model(f"{config.modelRoot}/XGBoostRouter/{saveFile}")   # JSON is human-readable
     return best_model
 
 
 def runXGBoost(model:xgboost.XGBClassifier, features):
-    booster = model.get_booster()
     preds = model.predict_proba(features)
     index = preds.argmax(axis=1)
     return index

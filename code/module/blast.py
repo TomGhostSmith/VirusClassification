@@ -107,19 +107,22 @@ class Blast(Module):
         offset, alignmentCount = self.cachedSamples[sample.id]
         cachedResultFP.seek(offset)
         alignments:list[BlastAlignment] = [BlastAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+        alignments = sorted(alignments, key=lambda x:x.similarity, reverse=True)
         
-        result = BlastResult()
+        results:list[BlastResult] = []
         for alignment in alignments:
             if (alignment.ref is not None):
-                result.addAlignment(alignment)
+                r = BlastResult()
+                r.addAlignment(alignment)
+                results.append(r)
 
-        if (result.bestAlignment is None):
-            result = None
+        if (len(results) == 0):
+            results = None
             sample.info["blast"] = 0
         else:
-            sample.info["blast"] = result.bestAlignment.similarity
-        sample.results[self.baseName] = result
-        return result
+            sample.info["blast"] = results[0].bestAlignment.similarity
+        sample.results[self.baseName] = results
+        return results
     
     def getBlastCommand(self, queryFile, resultFile):
         # first check if the reference fasta is made a database

@@ -111,23 +111,28 @@ class ANI(Module):
         if (self.baseName in sample.results):
             return sample.results[self.baseName]
         
-        result = ANIResult()
+        # result = ANIResult()
+        results:list[ANIResult] = []
         resultIndex = self.cachedSamples[sample.id]
         if (resultIndex != "N/A"):
             offset, alignmentCount = resultIndex
             cachedResultFP.seek(offset)
             alignments:list[ANIAlignment] = [ANIAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+            alignments = sorted(alignments, key=lambda x:x.overallIdentity, reverse=True)
             
             for alignment in alignments:
                 if (alignment.ref is not None):
-                    result.addAlignment(alignment)
+                    r = ANIResult()
+                    r.addAlignment(alignment)
+                    results.append(r)
+                    # result.addAlignment(alignment)
 
-        if (result.bestAlignment is None):
-            result = None
+        if (len(results) == 0):
+            results = None
             sample.info["ANI"] = 0
             sample.info["Overall ANI"] = 0
         else:
-            sample.info["ANI"] = result.bestAlignment.identity
-            sample.info["Overall ANI"] = result.bestAlignment.overallIdentity
-        sample.results[self.baseName] = result
-        return result
+            sample.info["ANI"] = results[0].bestAlignment.identity
+            sample.info["Overall ANI"] = results[0].bestAlignment.overallIdentity
+        sample.results[self.baseName] = results
+        return results

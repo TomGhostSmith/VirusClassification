@@ -24,8 +24,8 @@ class VCAT(Module):
 
         cacheFolder = f"{config.cacheFolder}/vcat"
         inputFile = f"{cacheFolder}/input.fasta"
-        outputFolder = f"{cacheFolder}/output/"
-        resultFile = f"{outputFolder}/input_fasta.tsv"
+        outputFolder = f"{cacheFolder}/output"
+        resultFile = f"{outputFolder}/results/input_fasta.tsv"
 
         IOUtils.showInfo(f"Begin Vcat on {len(samples)} samples")
 
@@ -41,7 +41,7 @@ class VCAT(Module):
             for line in fp:
                 terms = line.strip('\n').split('\t')
                 id = terms[0]
-                self.cachedSamples[id] = line
+                self.cachedSamples[id] = line.strip('\n')
         
         shutil.rmtree(cacheFolder)
 
@@ -77,14 +77,14 @@ class VCAT(Module):
         res = self.cachedSamples[sample.id]
         result = None
         if (res != "N/A"):
-            terms = res.split("\t")
+            terms = res.strip('\n').split("\t")
             taxo = None
             score = float(terms[2])
             method = terms[3]
             for i in reversed(range(4, len(terms))):
                 if (terms[i]):
                     taxo = terms[i]
-                    result = PlainResult(taxo, score)
+                    result = [PlainResult(taxo, score)]
                     break
 
         return result

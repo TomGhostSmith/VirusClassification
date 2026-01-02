@@ -113,7 +113,7 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
             for sample in samples:
                 res = sample.results[model.moduleName]
                 if (res is not None):
-                    preds[sample.id] = res.node
+                    preds[sample.id] = res[0].node
                 else:
                     preds[sample.id] = None
             df, _ = analyseStatistics(preds, GTs, missingLabel)
@@ -309,7 +309,7 @@ def testModelVirusIdentity(models:dict[str, Module], dataset):
         TP, TN, FP, FN = 0, 0, 0, 0
         for sample in samples:
             res = sample.results[model.moduleName]
-            if (res is not None and res.node is not None):
+            if (res is not None and res[0].node is not None):
                 if (stdResults[sample.id] == True):
                     TP += 1
                 else:
@@ -415,8 +415,8 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
 
         for modelDesc, model in models.items():
             pred = sample.results[model.moduleName]
-            if (pred is not None and pred.node is not None):
-                pred = pred.node.ICTVNode
+            if (pred is not None and pred[0].node is not None):
+                pred = pred[0].node.ICTVNode
                 if (stdNode is not None):
                     LCANode = taxoTree.ICTVTree.findLCA([pred, stdNode])
                     modelResults[model.moduleName].append((pred.name, pred.rank, LCANode.name, LCANode.rank))

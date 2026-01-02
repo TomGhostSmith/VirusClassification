@@ -109,7 +109,7 @@ class VISTA(Module):
                 ans = terms[5]
             else:  # use family
                 ans = terms[4]
-            result = PlainResult(ans)
+            result = [PlainResult(ans)]
         else:
             result = None
 

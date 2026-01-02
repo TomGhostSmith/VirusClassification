@@ -113,32 +113,36 @@ class Minimap(Module):
         offset, alignmentCount = self.cachedSamples[sample.id]
         cachedResultFP.seek(offset)
         alignments:list[Alignment] = [Alignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+        alignments = sorted(alignments, key=lambda x:x.quality, reverse=True)
         
-        result = MinimapResult()
+        results:list[MinimapResult] = []
         for alignment in alignments:
             if (alignment.ref is not None):
-                result.addAlignment(alignment)
+                r = MinimapResult()
+                r.addAlignment(alignment)
+                results.append(r)
+                # result.addAlignment(alignment)
 
         sample.info["length"] = sample.length
 
-        if (result.bestAlignment is None):
-            result = None
+        if len(results) == 0:
+            results = None
             sample.info["mapQ"] = -1
             sample.info["alignments"] = 0
             sample.info["queryCoverage"] = 0
             sample.info["refCoverage"] = 0
             sample.info["alignmentsLCA"] = 0
         else:
-            sample.info["mapQ"] = result.bestAlignment.quality
-            sample.info["alignments"] = len(result.alignments)
-            sample.info["queryCoverage"] = result.bestAlignment.queryCoverLength/sample.length
-            sample.info["refCoverage"] = result.bestAlignment.refCoverLength/sample.length
-            nodes = [taxoTree.getTaxoNodeFromAccession(ali.ref).ICTVNode for ali in result.alignments]
+            sample.info["mapQ"] = results[0].bestAlignment.quality
+            sample.info["alignments"] = len(results)
+            sample.info["queryCoverage"] = results[0].bestAlignment.queryCoverLength/sample.length
+            sample.info["refCoverage"] = results[0].bestAlignment.refCoverLength/sample.length
+            nodes = [taxoTree.getTaxoNodeFromAccession(r.bestAlignment.ref).ICTVNode for r in results]
             lca = taxoTree.ICTVTree.findLCA(nodes)
             sample.info["alignmentsLCA"] = config.rankLevels[lca.rank]
 
-        sample.results[self.baseName] = result
-        return result
+        sample.results[self.baseName] = results
+        return results
     
     def getMinimapCommand(self, queryFile):
         referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
