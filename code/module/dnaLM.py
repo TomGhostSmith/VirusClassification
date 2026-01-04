@@ -249,11 +249,8 @@ class DNALM(Module):
         if (self.threads == 1):
             res = runSingle(clusters, samples, list(range(len(samples))), self.pooling, self.embedding, self.strategy, self.model, self.invStdVar, self.refEmbeddings, self.ref_sq, self.inverse_indicies, self.uniqueNames)
             results = []
-            for r, i in zip(*res):
-                if (r is None):
-                    results.append(None)
-                else:
-                    results.append([r])
+            for r, i in res:
+                results.append(r)
         else:
             samplePerThread = math.ceil(len(samples)/self.threads)
             jobs = []
@@ -295,8 +292,7 @@ class DNALM(Module):
                         if asyncResult.ready():
                             res = asyncResult.get()
                             for r, idx in res:
-                                if (r is not None):
-                                    results[idx] = [r]
+                                results[idx] = r
                             asyncResults.remove(asyncResult)
                     time.sleep(1)
                 pool.join()
@@ -515,12 +511,12 @@ def extractWeightMatrix(clusters:list[tuple[str, list[numpy.ndarray]]], embeddin
 def extractPrediction(scores, inverse_indicies, uniqueNames):
     votes = numpy.bincount(inverse_indicies, weights=scores)
     total = sum(votes)
-    idx = numpy.argmax(votes)
-    if (total == 0):
-        res = 0
+
+    if (total > 0):
+        predictions = [PlainResult(n, s/total) for n, s in sorted(zip(uniqueNames, votes), key=lambda x:x[1], reverse=True)]
     else:
-        res = votes[idx]/total
-    return uniqueNames[idx], res
+        predictions = None
+    return predictions
 
 
 def runSingle(clusters, samples:list[Sample], indexs, pooling, embedding, strategy, model, isv, ref, refsq, ind, uniqueNames, t=0, queue=None):
@@ -569,9 +565,7 @@ def runSingle(clusters, samples:list[Sample], indexs, pooling, embedding, strate
             weights = extractWeightMatrix(clusters, embeddings, strategy, invStdVar, refEmbeddings, ref_sq)
             weights = weights.squeeze(1)
 
-            pred, score = extractPrediction(weights, inverse_indicies, uniqueNames)
-
-            res.append((PlainResult(pred, score), index))
+            res.append((extractPrediction(weights, inverse_indicies, uniqueNames), index))
 
         else:
             if (len(sample.cDNAs) == 0):
@@ -588,9 +582,7 @@ def runSingle(clusters, samples:list[Sample], indexs, pooling, embedding, strate
                 weights = extractWeightMatrix(clusters, aveEmbedding, strategy, invStdVar, refEmbeddings, ref_sq)
                 weights = weights.squeeze(1)
 
-                pred, score = extractPrediction(weights, inverse_indicies, uniqueNames)
-
-                res.append((PlainResult(pred, score), index))
+                res.append((extractPrediction(weights, inverse_indicies, uniqueNames), index))
 
             else:
                 weights = extractWeightMatrix(clusters, embeddings, strategy, invStdVar, refEmbeddings, ref_sq)
@@ -607,9 +599,7 @@ def runSingle(clusters, samples:list[Sample], indexs, pooling, embedding, strate
                     # IOUtils.showInfo("s4")
                     votes = numpy.sum(weights, axis=1)
 
-                pred, score = extractPrediction(votes, inverse_indicies, uniqueNames)
-
-                res.append((PlainResult(pred, score), index))
+                res.append((extractPrediction(votes, inverse_indicies, uniqueNames), index))
         
         if (queue is None):
             bar.update(1)
