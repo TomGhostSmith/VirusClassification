@@ -16,5 +16,6 @@ class CatResult(Result):
         if (self.node is None):
             if self.finalResult is not None:
                 self.node = taxoTree.getTaxoNodeFromNode(NCBINode=self.finalResult)
+                self.score = min(self.scores.values())
             else:
                 self.node = None

@@ -43,6 +43,8 @@ class ANIResult(Result):
             for n in self.node.ICTVNode.path:
                 self.scores[n.rank] = self.bestAlignment.overallIdentity
 
+            self.score = self.bestAlignment.overallIdentity
+
         elif (config.rankLevels[self.node.ICTVNode.rank] > config.rankLevels[self.rank]):
             targetRankLevel = config.rankLevels[self.rank]
             for n in reversed(self.node.ICTVNode.path):

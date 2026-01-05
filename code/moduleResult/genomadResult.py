@@ -17,6 +17,7 @@ class GenomadResult(Result):
         self.virusScore = float(terms[6])
         self.hallmarks = int(terms[8])
         self.markerEnrichment = float(terms[9])
+        self.score = self.virusScore
 
     def calcTaxoNode(self):
         if (self.finalSpecies in taxoTree.viralNCBITree.name2ID):

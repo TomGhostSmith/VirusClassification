@@ -34,6 +34,7 @@ class BlastResult(Result):
             score = 1
             for n in self.node.ICTVNode.path:
                 self.scores[n.rank] = score
+            self.score = score
 
         elif (config.rankLevels[self.node.ICTVNode.rank] > config.rankLevels[self.rank]):
             targetRankLevel = config.rankLevels[self.rank]

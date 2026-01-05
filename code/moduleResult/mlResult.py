@@ -60,3 +60,4 @@ class MLResult(Result):
                 self.res = taxoTree.ICTVTree.nodes["Viruses"]
             
             self.node = taxoTree.getTaxoNodeFromNode(ICTVNode=self.res)
+            self.score = min(self.scores.values())
