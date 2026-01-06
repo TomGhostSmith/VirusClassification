@@ -231,10 +231,11 @@ class Diamond(Module):
 
         else:
             maxVotes = 0
+            results = None
 
 
         proteinCount = len(sample.proteins)
-        if (proteinCount == 1 and len(results) == 0):
+        if (proteinCount == 1 and results is None):
             proteinCount = 0.5
             
         sample.info["protein_count_match"] = proteinCount

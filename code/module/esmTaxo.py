@@ -29,7 +29,7 @@ class ESMTaxo(Module):
         self.batchSize = batchSize
         self.rank = rank
 
-        cachedMapping = f"{config.cacheResultFolder}/ESM_mapping_{self.name}.json"
+        cachedMapping = f"{config.cacheResultFolder}/ESM_mapping_{self.rank}.json"
         if (os.path.exists(cachedMapping)):
             with open(cachedMapping) as fp:
                 id2Name = json.load(fp)

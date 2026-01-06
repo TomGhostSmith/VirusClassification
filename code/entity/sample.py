@@ -20,6 +20,7 @@ class Sample():
 
     def addResult(self, name:str, results:list[Result]):
         if results is not None:
+            results = results[:10]  # at most store 10 results
             for result in results:
                 result.calcTaxoNode()
         

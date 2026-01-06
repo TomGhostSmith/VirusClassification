@@ -37,7 +37,6 @@ def main(input, output):
 def basicMerge(sample, modelNames, currentModelIndex):
     res = sample.results[modelNames[currentModelIndex]]
     return res
-            
 
 
 if (__name__ == '__main__'):

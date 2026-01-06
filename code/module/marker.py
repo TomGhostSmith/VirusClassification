@@ -153,7 +153,6 @@ class Marker(Module):
 
 
     def run(self, samples:list[Sample], keepVotes=False):
-        IOUtils.showInfo("Currently only return 1 result", "WARN")
         samplesToRun:list[Sample] = list()
         NucleotideUtils.extractProtein(samples)
 
@@ -303,14 +302,16 @@ class Marker(Module):
                             break
             else:
                 totalVotes = sum(votes.values())
-                winner, maxVotes = max(votes.items(), key=lambda x: x[1])
-                winnerNode = taxoTree.ICTVTree.nodes[winner]
-                for n in reversed(winnerNode.path):
-                    if (config.rankLevels[n.rank] <= config.rankLevels[self.threshRank] ):
-                        result = [PlainResult(n.name, score=maxVotes/totalVotes)]
-                        break
-                if result is None:
-                    result = [PlainResult(winner, score=maxVotes/totalVotes)]
+                pairs = sorted(votes.items(), key=lambda x:x[1], reverse=True)
+                result = []
+                for name, v in pairs:
+                    winnerNode = taxoTree.ICTVTree.nodes[name]
+                    for n in reversed(winnerNode.path):
+                        if (config.rankLevels[n.rank] <= config.rankLevels[self.threshRank] ):
+                            result.append(PlainResult(n.name, score=v/totalVotes))
+                            break
+                if (len(result) == 0):
+                    result = None
 
         if (keepVotes):
             sample.info[f"{self.moduleName}_votes"] = votes

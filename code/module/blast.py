@@ -14,14 +14,17 @@ from entity.sample import Sample
 from utils import IOUtils
 
 class Blast(Module):
-    def __init__(self, reference, threads=multiprocessing.cpu_count()):
+    def __init__(self, reference, threads=multiprocessing.cpu_count(), mode="blastn", evalue=1e-3):
         self.reference=reference
         self.threads = threads
-        super().__init__(f'blast-ref={self.reference}')
+        super().__init__(f'blast-ref={self.reference};mode={mode};evalue={evalue}')
         self.baseName = self.moduleName  # do not use 'self.moduleName' in code directly, in case of subClass!
 
         self.cacheFile = f"{config.cacheResultFolder}/{self.baseName}.tmp"
         self.cacheIndex = f"{config.cacheResultFolder}/{self.baseName}.json"
+
+        self.mode = mode
+        self.evalue = evalue
 
         self.cachedSamples:dict[str, tuple[int, int]] = dict()
 
@@ -140,5 +143,5 @@ class Blast(Module):
 
         # cline = NcbiblastnCommandline(query=queryFile, db=referenceDB, evalue=1e-3, outfmt=5, out=resultFile)
         # stdout, stderr = cline()
-        command = f"blastn -query {queryFile} -db {referenceDB} -evalue 0.001 -outfmt 6 -out {resultFile} -num_threads {self.threads}"
+        command = f"blastn -query {queryFile} -db {referenceDB} -evalue {self.evalue} -outfmt 6 -out {resultFile} -num_threads {self.threads} -task {self.mode}"
         return command

@@ -120,16 +120,16 @@ class XGBoostRouter(Module):
         results = []
 
         for modelIndex, sample in zip(modelIndexes, samples):
-            results.append([sample.results[self.modules[modelIndex].moduleName]])
+            results.append(sample.results[self.modules[modelIndex].moduleName])
         
         return results
 
 def trainMainXGBoost(features, targets, n_class, saveFile):
     param_grid = {
-        "max_depth": [4, 6, 8, 10],
+        "max_depth": [3, 4, 6, 8, 10],
         "subsample": [0.7, 0.8, 1.0],
         "colsample_bytree": [0.7, 0.8, 1.0],
-        "n_estimators": [100, 200, 500, 1000]
+        "n_estimators": [50, 100, 200, 500]
     }
 
     grid = GridSearchCV(
@@ -142,7 +142,7 @@ def trainMainXGBoost(features, targets, n_class, saveFile):
         ),
         param_grid=param_grid,
         scoring="accuracy",
-        cv=3,
+        cv=5,
         verbose=1,
         n_jobs=-1
     )
@@ -152,16 +152,16 @@ def trainMainXGBoost(features, targets, n_class, saveFile):
     best_model = grid.best_estimator_
 
     # Save to file
-    os.makedirs(f"{config.modelRoot}/XGBoost", exist_ok=True)
+    os.makedirs(f"{config.modelRoot}/XGBoostRouter", exist_ok=True)
     best_model.save_model(f"{config.modelRoot}/XGBoostRouter/{saveFile}")   # JSON is human-readable
     return best_model
 
 def trainRankXGBoost(features, targets, n_class, saveFile):
     param_grid = {
-        "max_depth": [4, 6, 8, 10],
+        "max_depth": [3, 4, 6, 8, 10],
         "subsample": [0.7, 0.8, 1.0],
         "colsample_bytree": [0.7, 0.8, 1.0],
-        "n_estimators": [100, 200, 500, 1000]
+        "n_estimators": [50, 100, 200, 500]
     }
 
     grid = GridSearchCV(
@@ -174,7 +174,7 @@ def trainRankXGBoost(features, targets, n_class, saveFile):
         ),
         param_grid=param_grid,
         scoring="accuracy",
-        cv=3,
+        cv=5,
         verbose=1,
         n_jobs=-1
     )
@@ -184,7 +184,7 @@ def trainRankXGBoost(features, targets, n_class, saveFile):
     best_model = grid.best_estimator_
 
     # Save to file
-    os.makedirs(f"{config.modelRoot}/XGBoost", exist_ok=True)
+    os.makedirs(f"{config.modelRoot}/XGBoostRouter", exist_ok=True)
     best_model.save_model(f"{config.modelRoot}/XGBoostRouter/{saveFile}")   # JSON is human-readable
     return best_model
 
