@@ -456,7 +456,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     with pandas.ExcelWriter(fileName) as writer:
         summaryDF.to_excel(writer, sheet_name="raw results", index=False)
 
-    analysis(models, analyseList, summaryDF, dataset, subset, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")
+    analysis(models, analyseList, summaryDF, dataset, subset, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}", evaluationMethod)
 
 
 # input: 
@@ -466,7 +466,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
 #   - constraint can be a function f(row)->bool to focus on specific samples
 # - summaryDF is the data frame with all information needed
 # - outputname is the file name for output. If exists, it will add number behind it
-def analysis(modelDict, analyseList, summaryDF, dataset, subset, outputName="analysis"):
+def analysis(modelDict, analyseList, summaryDF, dataset, subset, outputName="analysis", evaluationMethod=None):
     for field in ["id", "length", "protein_count", "protein_length", "ground_truth"]:
         if field not in summaryDF:
             raise ValueError(f"Required field {field} is missing")
@@ -578,6 +578,7 @@ def analysis(modelDict, analyseList, summaryDF, dataset, subset, outputName="ana
 
     ax.text(-2, 0.5, "samples w/ ground truth", ha="left", va="center", fontsize=10, rotation=90)
     ax.text(-2, -0.5, "samples w/o ground truth", ha="left", va="center", fontsize=10, rotation=90)
+    ax.set_title(f"Performance of {len(modelDict)} models on {dataset}_{subset}. GroundTruths are obtained from {evaluationMethod}")
 
 
     fileNamePrefix = f"{config.analysisFolder}/figure/newPerformance_{dataset}_{subset}"
@@ -1062,4 +1063,4 @@ def reAnalysis(models, dataset, evaluationMethod, subset='all', missingLabel="Un
     prefix = "samples" if rawResult else "sampleAnalysis" 
     fileName = f"{config.analysisFolder}/samplewise/{prefix}_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{idx}.xlsx"
     df = pandas.read_excel(fileName, sheet_name="raw results", keep_default_na=False)
-    analysis(models, analyseList, df, dataset, subset, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}")
+    analysis(models, analyseList, df, dataset, subset, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}", evaluationMethod)

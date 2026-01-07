@@ -17,20 +17,25 @@ class MinimapThresholdModule(Minimap):
         self.moduleName = f'minimapThresh-ref={self.reference};mode={self.mode};thresh-{"_".join(self.factors)}'
 
     def run(self, samples):
-        raise NotImplementedError("not reconstruct for multi-result")
         results = super().run(samples)
         return [self.extractResult(sample, result) for sample, result in zip(samples, results)]
     
     
     def extractResult(self, sample, result):
         if (result is not None):
-            if ("positive" in self.factors and result.bestAlignment.quality == 0):
-                result = None
-            elif ("60" in self.factors and result.bestAlignment.quality < 60):
-                result = None
-            elif ("completeMatch" in self.factors and result.bestAlignment.queryCoverLength < sample.length):
-                result = None
-            elif ("singleAlignment" in self.factors and len(result.alignments) > 1):
-                result = None
-        
-        return result
+            if ("singleAlignment" in self.factors and len(result) > 1):
+                return None
+            else:
+                results = []
+                for r in result:
+                    if ("positive" in self.factors and r.bestAlignment.quality == 0):
+                        continue
+                    elif ("60" in self.factors and r.bestAlignment.quality < 60):
+                        continue
+                    elif ("completeMatch" in self.factors and r.bestAlignment.queryCoverLength < sample.length):
+                        continue
+                    else:
+                        results.append(r)
+                return results if len(results) > 0 else None
+        else:
+            return None
