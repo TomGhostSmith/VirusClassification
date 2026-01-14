@@ -189,7 +189,13 @@ def trainRankXGBoost(features, targets, n_class, saveFile):
     return best_model
 
 
-def runXGBoost(model:xgboost.XGBClassifier, features):
+def runXGBoost(model:xgboost.XGBClassifier, features:pandas.DataFrame):
     preds = model.predict_proba(features)
     index = preds.argmax(axis=1)
+
+    # for debug
+    # f = features.copy()
+    # f["result"] = index
+    # f.to_csv("working/XGBRouter.csv")
+    
     return index

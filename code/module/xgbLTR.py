@@ -13,10 +13,12 @@ import json
 import os
 
 class XGBoostLTR(Module):
-    def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], features:list[str], tops:int, limitOutput=True):
+    def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], features:list[str], tops:int, candidateFeatures:list[str]=[], limitOutput=True):
         moduleNames = "+".join([module.moduleName for module in modules])
         featureNames = "+".join(features)
-        self.baseName = f"XGBoostLTR-train={trainset};modules={moduleNames};features={featureNames};tops={tops}"
+        candidateFeatureNames = "+".join(candidateFeatures)
+        self.candidateFeatures = candidateFeatures
+        self.baseName = f"XGBoostLTR-train={trainset};modules={moduleNames};features={featureNames};tops={tops};candidateFeatures={candidateFeatureNames}"
         super().__init__(f"{self.baseName};limitOutput={limitOutput}")
         self.trainset = trainset
         self.evalMethod = evalMethod
@@ -43,30 +45,45 @@ class XGBoostLTR(Module):
         for i in range(len(self.modules)):
             titles.append(f"model_{i} rank")
             titles.append(f"model_{i} score")
+        titles += self.candidateFeatures
         # for f in self.features:
         #     results = [sample.info.get(f) for sample in samples]
         #     features[f] = results
 
+        candidateFeatureSet = set(self.candidateFeatures)
+
 
         for sample in samples:
-            rankMaps = []
-            scoreMaps = []
+            rankMaps:list[dict[str, int]] = []
+            scoreMaps:list[dict[str, float]] = []
+            candidateInfos:dict[TaxoNode, dict] = {}
             basicFeatures = [sample.info.get(f) for f in self.features]
 
             # get all top x results from all modules
             # calculate the union set of all the potential predictions
-            candidates:set[TaxoNode] = set()
+            candidates:dict[str:TaxoNode] = {}
             for module in self.modules:
-                rankMap = {}
-                scoreMap = {}
+                rankMap:dict[str, int] = {}
+                scoreMap:dict[str, float] = {}
                 res = sample.results[module.moduleName]
                 if (res is not None):
-                    for idx, r in enumerate(res[:self.tops]):
+                    idx = 0
+                    for r in res:
+                        if idx == self.tops:
+                            break
                         if r.node is None:
                             continue
-                        candidates.add(r.node)
-                        rankMap[r.node] = idx
-                        scoreMap[r.node] = r.score
+                        if r.node.ICTVName in rankMap:
+                            continue
+                        idx += 1
+                        candidates[r.node.ICTVName] = r.node
+                        rankMap[r.node.ICTVName] = idx
+                        scoreMap[r.node.ICTVName] = r.score
+                        if r.node not in candidateInfos:
+                            candidateInfos[r.node.ICTVName] = {k: None for k in self.candidateFeatures}
+                        for k, v in r.info.items():
+                            if k in candidateFeatureSet:
+                                candidateInfos[r.node.ICTVName][k] = v
                 rankMaps.append(rankMap)
                 scoreMaps.append(scoreMap)
 
@@ -77,13 +94,14 @@ class XGBoostLTR(Module):
             candidateRanges.append((start, end))
 
             # for each candidate option, generate its features
-            for c in candidates:
+            for name, node in candidates.items():
                 candidateFeature = basicFeatures.copy()
                 for rankMap, scoreMap in zip(rankMaps, scoreMaps):
-                    candidateFeature.append(rankMap.get(c))
-                    candidateFeature.append(scoreMap.get(c))
+                    candidateFeature.append(rankMap.get(name))
+                    candidateFeature.append(scoreMap.get(name))
+                candidateFeature += list(candidateInfos[name].values())
                 candidateFeatures.append(candidateFeature)
-                candidateList.append(c)
+                candidateList.append(node)
                 
         features = {k: v for k, v in zip(titles, zip(*candidateFeatures))}
 
@@ -147,6 +165,12 @@ class XGBoostLTR(Module):
         mainModel = self.loadModel()  
         features, candidateList, candidateRanges = self.getFeatures(samples)
         scores:list[float] = mainModel.predict(features)
+
+        # for debug
+        # f = features.copy()
+        # f["result"] = scores
+        # f["candidate"] = [n.ICTVName for n in candidateList]
+        # f.to_csv("working/XGBLTR.csv")
 
         results = [self.getResult(sample, candidateList[start:end], scores[start:end]) for sample, (start, end) in zip(samples, candidateRanges)]
 

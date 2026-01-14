@@ -31,7 +31,7 @@ class BlastResult(Result):
                     self.node = taxoTree.getTaxoNodeFromNode(ICTVNode=n)
                     break
             
-            score = 1
+            score = self.bestAlignment.similarity / 100
             for n in self.node.ICTVNode.path:
                 self.scores[n.rank] = score
             self.score = score

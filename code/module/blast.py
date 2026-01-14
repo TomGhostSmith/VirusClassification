@@ -1,6 +1,7 @@
 # reconstructing
 import os
 import json
+import math
 import subprocess
 from Bio.Blast import NCBIXML
 import multiprocessing
@@ -117,13 +118,21 @@ class Blast(Module):
             if (alignment.ref is not None):
                 r = BlastResult()
                 r.addAlignment(alignment)
+                r.info["bitscore"] = alignment.bitscore
+                r.info["blastSimilarity"] = alignment.similarity
+                r.info["blastLogE"] = math.log10(alignment.evalue) if alignment.evalue > 1e-300 else -300
+                r.info["bitscoreByLength"] = alignment.bitscore / alignment.length
+                r.info["bitscoreByRefCov"] = alignment.bitscore / alignment.refCoverLength
+                r.info["bitscoreByQueryCov"] = alignment.bitscore / alignment.queryCoverLength
+                r.info["blastRefCov"] = alignment.refCoverLength / sample.length
+                r.info["blastQueryCov"] = alignment.queryCoverLength / sample.length
                 results.append(r)
 
         if (len(results) == 0):
             results = None
-            sample.info["blast"] = 0
+            sample.info["bestBlast"] = 0
         else:
-            sample.info["blast"] = results[0].bestAlignment.similarity
+            sample.info["bestBlast"] = results[0].bestAlignment.similarity
         sample.results[self.baseName] = results
         return results
     

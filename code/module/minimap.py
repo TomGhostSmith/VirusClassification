@@ -120,6 +120,10 @@ class Minimap(Module):
             if (alignment.ref is not None):
                 r = MinimapResult()
                 r.addAlignment(alignment)
+                r.info["mapQ"] = alignment.quality
+                r.info["minimapRefCov"] = alignment.refCoverLength / sample.length
+                r.info["minimapQueryCov"] = alignment.queryCoverLength / sample.length
+                
                 results.append(r)
                 # result.addAlignment(alignment)
 
@@ -127,16 +131,16 @@ class Minimap(Module):
 
         if len(results) == 0:
             results = None
-            sample.info["mapQ"] = -1
+            sample.info["bestmapQ"] = -1
             sample.info["alignments"] = 0
-            sample.info["queryCoverage"] = 0
-            sample.info["refCoverage"] = 0
+            sample.info["bestQueryCoverage"] = 0
+            sample.info["bestRefCoverage"] = 0
             sample.info["alignmentsLCA"] = 0
         else:
-            sample.info["mapQ"] = results[0].bestAlignment.quality
+            sample.info["bestmapQ"] = results[0].bestAlignment.quality
             sample.info["alignments"] = len(results)
-            sample.info["queryCoverage"] = results[0].bestAlignment.queryCoverLength/sample.length
-            sample.info["refCoverage"] = results[0].bestAlignment.refCoverLength/sample.length
+            sample.info["bestQueryCoverage"] = results[0].bestAlignment.queryCoverLength/sample.length
+            sample.info["bestRefCoverage"] = results[0].bestAlignment.refCoverLength/sample.length
             nodes = [taxoTree.getTaxoNodeFromAccession(r.bestAlignment.ref).ICTVNode for r in results]
             lca = taxoTree.ICTVTree.findLCA(nodes)
             sample.info["alignmentsLCA"] = config.rankLevels[lca.rank]

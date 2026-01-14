@@ -238,9 +238,9 @@ class Diamond(Module):
         if (proteinCount == 1 and results is None):
             proteinCount = 0.5
             
-        sample.info["protein_count_match"] = proteinCount
-        sample.info["protein_count"] = len(sample.proteins)
-        sample.info["protein_match_ratio"] = maxVotes / len(sample.proteins) if len(sample.proteins) > 0 else 0
+        sample.info[f"protein_count"] = len(sample.proteins)
+        sample.info[f"protein_count_match_{self.tool}"] = proteinCount
+        sample.info[f"protein_match_ratio_{self.tool}"] = maxVotes / len(sample.proteins) if len(sample.proteins) > 0 else 0
 
         
         return results
