@@ -83,10 +83,10 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
 
     # check and get a valid name
     analysisIndex = 0
-    fileName = f"{config.analysisFolder}/table/{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
-    while (os.path.exists(fileName)):
+    xlsxFileName = f"{config.analysisFolder}/table/{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
+    while (os.path.exists(xlsxFileName)):
         analysisIndex += 1
-        fileName = f"{config.analysisFolder}/table/{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
+        xlsxFileName = f"{config.analysisFolder}/table/{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.xlsx"
 
 
     withSubRank = False
@@ -105,7 +105,13 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
     availableColors = numpy.vstack((plt.get_cmap('tab20').colors, plt.get_cmap('tab20b').colors, plt.get_cmap('tab20c').colors))
     # availableColors = numpy.vstack((availableColors[::2], availableColors[1::2]))
 
-    with pandas.ExcelWriter(fileName) as writer:
+    corrects = []
+    errors = []
+    no_pred_has_GTs = []
+    has_pred_no_GTs = []
+    no_pred_no_GTs = []
+
+    with pandas.ExcelWriter(xlsxFileName) as writer:
     # for _ in range(1):
     #     writer = pandas.ExcelWriter(fileName)
         for idx, (modelDesc, model) in tqdm(list(enumerate(list(models.items()))), desc="evaluate", unit="model"):
@@ -120,6 +126,18 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
             # df.to_csv(f"{config.analysisFolder}/kraken-refseq-performance.csv")
             # df.to_csv(f"{config.analysisFolder}/model-{idx}-{dataset}-performance_{evaluationMethod}.csv")
             df.to_excel(writer, sheet_name=f"model-{idx}", index=False)
+
+
+            corrects.append(df.iloc[12, 16])
+            errors.append(df.iloc[12, 17])
+            no_pred_has_GTs.append(df.iloc[12, 18])
+            has_pred_no_GTs.append(df.iloc[12, 19])
+            no_pred_no_GTs.append(df.iloc[12, 20])
+            # corrects.append(df.loc["Genus", "correct"])
+            # errors.append(df.loc["Genus", "error"])
+            # no_pred_has_GTs.append(df.loc["Genus", "no_pred_has_GT"])
+            # has_pred_no_GTs.append(df.loc["Genus", "has_pred_no_GT"])
+            # no_pred_no_GTs.append(df.loc["Genus", "no_pred_no_GT"])
 
             summaryDict["index"].append(idx)
             summaryDict["model"].append(model.moduleName)
@@ -190,6 +208,17 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
         
         pandas.DataFrame(summaryDict).to_excel(writer, sheet_name='summary', index=False)
         pandas.DataFrame(analysisDict).to_excel(writer, sheet_name='analysis', index=False)
+
+        modelNames = summaryDict["model"]
+
+        pandas.DataFrame({
+            "model": modelNames,
+            "correct": corrects,
+            "error": errors,
+            "no_pred_has_GT": no_pred_has_GTs,
+            "has_pred_no_GT": has_pred_no_GTs,
+            "no_pred_no_GT": no_pred_no_GTs
+        }).to_excel(writer, sheet_name="genus_result", index=False)
         
     ax.set_xlabel("rank")
     ax.set_ylabel("Proportion")
@@ -267,7 +296,7 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
     
 
     IOUtils.showInfo('Done')
-    return samples
+    return samples, xlsxFileName
 
 def testModelVirusIdentity(models:dict[str, Module], dataset):
     queryFilePath = f"{datasetRoot}/{dataset}/{dataset}.fasta"
@@ -354,7 +383,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             if (isinstance(factor2, str) and factor2 not in models):
                 raise ValueError(f"Unknown model name '{factor2}'")
         
-    samples = testModel(models, dataset, evaluationMethod, subset, missingLabel)
+    samples, xlsxFileName = testModel(models, dataset, evaluationMethod, subset, missingLabel)
 
     NucleotideUtils.extractProtein(samples)
     
@@ -365,7 +394,7 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     sampleProteinLengths = list()
     stdResults = list()
     stdResultRank = list()
-    modelResults:dict[str, list[tuple[str, str, str, str]]] = {model.moduleName: list() for model in models.values()} # for each model, provide a list of (model_result, model_result_rank, LCA_rank)
+    modelResults:dict[str, list[tuple[str, str, str, str, str, str]]] = {model.moduleName: [] for model in models.values()} # for each model, provide a list of (model_result, model_result_rank, LCA_rank)
 
     summaryDict = {
         "id": [],
@@ -412,18 +441,31 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
             for r in config.resultRanks:
                 taxoCounts[r].append(0)
 
+        genusRank = config.rankLevels["genus"]
 
         for modelDesc, model in models.items():
             pred = sample.results[model.moduleName]
             if (pred is not None and pred[0].node is not None):
-                pred = pred[0].node.ICTVNode
+                predNode = pred[0].node.ICTVNode
                 if (stdNode is not None):
-                    LCANode = taxoTree.ICTVTree.findLCA([pred, stdNode])
-                    modelResults[model.moduleName].append((pred.name, pred.rank, LCANode.name, LCANode.rank))
+                    LCANode = taxoTree.ICTVTree.findLCA([predNode, stdNode])
+                    if (config.rankLevels[stdNode.rank] >= genusRank):
+                        tops = "N/P"
+                        for idx, p in enumerate(pred):
+                            lca = taxoTree.ICTVTree.findLCA([p.node.ICTVNode, stdNode])
+                            if (config.rankLevels[lca.rank] >= genusRank):
+                                tops = idx + 1
+                                break
+                    else:
+                        tops = "N/A"
+                    modelResults[model.moduleName].append((predNode.name, predNode.rank, LCANode.name, LCANode.rank, tops))
                 else:
-                    modelResults[model.moduleName].append((pred.name, pred.rank, "N/A", "N/A"))
+                    modelResults[model.moduleName].append((predNode.name, predNode.rank, "N/A", "N/A", "N/A"))
             else:
-                modelResults[model.moduleName].append(("N/A", "N/A", "N/A", "N/A"))
+                if (stdNode is not None and config.rankLevels[stdNode.rank] >= genusRank):
+                    modelResults[model.moduleName].append(("N/A", "N/A", "N/A", "N/A", "N/P"))
+                else:
+                    modelResults[model.moduleName].append(("N/A", "N/A", "N/A", "N/A", "N/A"))
 
 
     summaryDict["id"] = sampleIDs
@@ -436,15 +478,46 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     for r, taxonCountList in taxoCounts.items():
         summaryDict[f"{r}_count_in_train"] = taxonCountList
 
+    moduleNames = []
+    top1 = []
+    top3 = []
+    top5 = []
+    top10 = []
+    top20 = []
+    MRR = []
+
     for modelDesc, model in models.items():
-        preds, predRanks, LCAs, LCARanks = zip(*modelResults[model.moduleName])
+        preds, predRanks, LCAs, LCARanks, tops = zip(*modelResults[model.moduleName])
         summaryDict[f"{modelDesc}_pred"] = preds
         summaryDict[f"{modelDesc}_pred_rank"] = predRanks
         summaryDict[f"{modelDesc}_LCA"] = LCAs
         summaryDict[f"{modelDesc}_LCA_rank"] = LCARanks
+        summaryDict[f"{modelDesc}_genus_tops"] = tops
+
+        tps = [(t if t != "N/P" else numpy.inf) for t in tops if t != "N/A" ]
+        
+        moduleNames.append(model.moduleName)
+        top1.append(sum([1 if t <= 1 else 0 for t in tps])/len(tps))
+        top3.append(sum([1 if t <= 3 else 0 for t in tps])/len(tps))
+        top5.append(sum([1 if t <= 5 else 0 for t in tps])/len(tps))
+        top10.append(sum([1 if t <= 10 else 0 for t in tps])/len(tps))
+        top20.append(sum([1 if t <= 20 else 0 for t in tps])/len(tps))
+        MRR.append(sum([1/t for t in tps])/len(tps))
 
     # for (k, v) in summaryDict.items():
     #     IOUtils.showInfo(f"{k}: {len(v)}")
+
+    # update the analysis xlsx
+    with pandas.ExcelWriter(xlsxFileName, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+        pandas.DataFrame({
+            "model": moduleNames,
+            "top1": top1,
+            "top3": top3,
+            "top5": top5,
+            "top10": top10,
+            "top20": top20,
+            "MRR": MRR,
+        }).to_excel(writer, sheet_name="genus_tops", index=False)
     
     summaryDF = pandas.DataFrame(summaryDict)
     analysisIndex = 0
