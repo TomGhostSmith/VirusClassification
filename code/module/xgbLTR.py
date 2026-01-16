@@ -31,9 +31,6 @@ class XGBoostLTR(Module):
 
         self.modelListFile = f"{config.modelRoot}/XGBoostLTR/names.json"
         self.moduleListMap = {"nextOffset": 0}
-        if (os.path.exists(self.modelListFile)):
-            with open(self.modelListFile) as fp:
-                self.moduleListMap = json.load(fp)
 
     def getFeatures(self, samples:list[Sample]):
         features = {}
@@ -158,6 +155,9 @@ class XGBoostLTR(Module):
         return mainModel            
 
     def run(self, samples):
+        if (os.path.exists(self.modelListFile)):
+            with open(self.modelListFile) as fp:
+                self.moduleListMap = json.load(fp)
         for module in self.featureModules:
             module.getResults(samples)
         for module in self.modules:

@@ -25,9 +25,6 @@ class XGBoostRouter(Module):
 
         self.modelListFile = f"{config.modelRoot}/XGBoostRouter/names.json"
         self.moduleListMap = {"nextOffset": 0}
-        if (os.path.exists(self.modelListFile)):
-            with open(self.modelListFile) as fp:
-                self.moduleListMap = json.load(fp)
 
     def getFeatures(self, samples):
         features = {}
@@ -103,6 +100,9 @@ class XGBoostRouter(Module):
         return mainModel            
 
     def run(self, samples):
+        if (os.path.exists(self.modelListFile)):
+            with open(self.modelListFile) as fp:
+                self.moduleListMap = json.load(fp)
         for module in self.featureModules:
             module.getResults(samples)
         mainModel = self.loadModel()  

@@ -1,11 +1,13 @@
+from anytree import Node
+
 class TaxoNode():
     def __init__(self) -> None:
         self.ICTVID = None
         self.NCBIID = None
-        self.ICTVName = None
-        self.NCBIName = None
-        self.ICTVNode = None
-        self.NCBINode = None
+        self.ICTVName:str = None
+        self.NCBIName:str = None
+        self.ICTVNode:Node = None
+        self.NCBINode:Node = None
         self.origin = None
 
         # note:

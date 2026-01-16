@@ -160,11 +160,10 @@ class Diamond(Module):
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
+                protein.results[self.baseName] = alignments
                 if (len(alignments) > 0):
                     bestAlignment = alignments[0]
-                    for alignment in alignments[1:]:
-                        if alignment.betterThan(bestAlignment):
-                            bestAlignment = alignment
                     ICTVName = taxoTree.getTaxoNodeFromAccession(bestAlignment.refContig).ICTVName
                     if ICTVName in votes:
                         votes[ICTVName] += 1
@@ -176,6 +175,8 @@ class Diamond(Module):
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
+                protein.results[self.baseName] = alignments
                 for alignment in alignments:
                     accession = alignment.refContig
                     if (accession in accessionVotes):
@@ -188,24 +189,17 @@ class Diamond(Module):
                     votes[ICTVName] = max(coverage, votes[ICTVName])  # the vote is the maximum coverage for that species
                 else:
                     votes[ICTVName] = coverage
-        elif (self.method == "sum"):
-            for protein in sample.proteins:
-                offset, alignmentCount = self.cachedSamples[protein.id]
-                cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
-                for alignment in alignments:
-                    ICTVName = taxoTree.getTaxoNodeFromAccession(alignment.refContig).ICTVName
-                    if ICTVName in votes:
-                        votes[ICTVName] += alignment.similarity
-                    else:
-                        votes[ICTVName] = alignment.similarity
-        elif (self.method.startswith("top")):
-            thresh = int(self.method[3:])
+        elif (self.method == "sum" or self.method.startswith("top")):
+            if (self.method.startswith("top")):
+                thresh = int(self.method[3:])
+            else:
+                thresh = None
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
+                protein.results[self.baseName] = alignments
                 for alignment in alignments[:thresh]:
                     ICTVName = taxoTree.getTaxoNodeFromAccession(alignment.refContig).ICTVName
                     if ICTVName in votes:

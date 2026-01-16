@@ -197,33 +197,21 @@ class Marker(Module):
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
                 protein.results[self.baseName] = alignments
                 if (len(alignments) > 0):
                     bestAlignment = alignments[0]
-                    for alignment in alignments[1:]:
-                        if alignment.betterThan(bestAlignment):
-                            bestAlignment = alignment
                     ICTVName = self.LCAs[bestAlignment.ref]
                     if ICTVName in votes:
                         votes[ICTVName] += 1
                     else:
                         votes[ICTVName] = 1
             
-        elif (self.method == "sum"):
-            for protein in sample.proteins:
-                offset, alignmentCount = self.cachedSamples[protein.id]
-                cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
-                alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
-                protein.results[self.baseName] = alignments
-                for alignment in alignments:
-                    ICTVName = self.LCAs[alignment.ref]
-                    if ICTVName in votes:
-                        votes[ICTVName] += alignment.similarity/100
-                    else:
-                        votes[ICTVName] = alignment.similarity/100
-        elif (self.method.startswith("top")):
-            thresh = int(self.method[3:])
+        elif (self.method == "sum" or self.method.startswith("top")):
+            if (self.method.startswith("top")):
+                thresh = int(self.method[3:])
+            else:
+                thresh = None
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)

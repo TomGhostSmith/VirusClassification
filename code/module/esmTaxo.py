@@ -19,7 +19,7 @@ class ESMTaxo(Module):
     def __init__(self, modelName, maxLen, modelFolder, baseModelFolder, rank, pooling, batchSize=None):
         super().__init__(f"ESM_taxo_{modelName}_{pooling}")
         self.name = modelName
-        if (pooling not in ["sum"] and not pooling.startswith("top")):
+        if (pooling not in ["vote", "sum"] and not pooling.startswith("top")):
             raise ValueError("Unsupported pooling method")
         self.pooling = pooling
         self.maxLen = maxLen
@@ -75,31 +75,33 @@ class ESMTaxo(Module):
         return results
     
     def getResult(self, sample:Sample, keepVotes):
-        if (self.pooling == "sum"):
+        if (self.pooling == "vote"):
             votes = {n: 0 for n in self.class_names if "Unknown" not in n}
             for protein in sample.proteins:
                 scores = protein.info[f"{self.name}_prob"]
-                for taxo, score in zip(self.class_names, scores):
-                    if ("Unknown" not in taxo):
-                        votes[taxo] += score
-        elif (self.pooling.startswith("top")):
-            thresh = int(self.pooling[3:])
-            votes = {}
+                rawScores = [(taxo, score) for taxo, score in zip(self.class_names, scores)]
+                tops = sorted(rawScores, key=lambda x:x[1], reverse=True)
+                bestTaxo = tops[0][0]
+                if ("Unknown" not in bestTaxo):
+                    votes[bestTaxo] += 1
+        elif (self.pooling == "sum" or self.pooling.startswith("top")):
+            if self.pooling.startswith("top"):
+                thresh = int(self.pooling[3:])
+            else:
+                thresh = None
+            votes = {n: 0 for n in self.class_names if "Unknown" not in n}
             for protein in sample.proteins:
                 scores = protein.info[f"{self.name}_prob"].tolist()
-                rawScores = {taxo: score for taxo, score in zip(self.class_names, scores)}
-                tops = sorted(list(rawScores.items()), key=lambda x:x[1], reverse=True)
+                rawScores = [(taxo, score) for taxo, score in zip(self.class_names, scores)]
+                tops = sorted(rawScores, key=lambda x:x[1], reverse=True)
                 for taxo, score in tops[:thresh]:
                     if ("Unknown" not in taxo):
-                        if (taxo in votes):
-                            votes[taxo] += score
-                        else:
-                            votes[taxo] = score
+                        votes[taxo] += score
 
         totalVotes = sum(votes.values())    # If pooling method == "sum", the totalVotes will be 1 * len(proteins) (not considering "Unknown" labels)
         if (keepVotes):
             sample.info[f"{self.moduleName}_votes"] = votes
-        if (len(votes) > 0 and totalVotes > 0):
+        if (totalVotes > 0):
             vs = sorted(votes.items(), key=lambda x: x[1], reverse=True)
             results = [PlainResult(n, v/totalVotes) for n, v in vs]
             return results
