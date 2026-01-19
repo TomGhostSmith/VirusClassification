@@ -10,7 +10,7 @@ class DiamondAlignment():
 
         self.ref = terms[1]
         self.refContig = terms[1].rsplit('_', 1)[0]
-        self.similarity = float(terms[2])
+        self.similarity = float(terms[2])  # note: diamond(blastp) 0-100, mmseqs 0-1
         self.length = int(terms[3])
         self.mismatch = int(terms[4])
         self.gapopen = int(terms[5])

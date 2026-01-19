@@ -15,16 +15,31 @@ from moduleResult.plainResult import PlainResult
 from module.marker import Marker
 from module.mlModule import MLModule
 from module.esmTaxo import ESMTaxo
+from module.diamond import Diamond
 from moduleResult.diamondAlignment import DiamondAlignment
 
 
 class UniqueVote(Module):
-    def __init__(self, trainset, strategy, mlModel):
-        super().__init__(f"UniqueVote-{trainset}-{strategy}-{mlModel}")
+    def __init__(self, trainset:str, strategy:str, mlModel:str, alignmentMethod:str, pooling:str):
+        super().__init__(f"UniqueVote-{trainset}-{strategy}-{mlModel}-{alignmentMethod}-{pooling}")
         if (trainset not in ["VMRv4", "VMRv4_ML_train"]):
             raise ValueError("Unsupported training set")
         self.trainset = trainset
-        if (strategy not in ["both", "ml", "marker"]):   # full_ml: voting with marker + ml. ml: use ml only when marker is not available
+
+        if (alignmentMethod not in ["marker", "diamond"]):
+            raise ValueError("Unsupported alignment method")
+        self.alignmentMethod = alignmentMethod
+
+        if (pooling not in ["vote", "sum"] and not pooling.startswith("top")):
+            raise ValueError("Unsupported pooling method")
+        self.pooling = pooling
+
+        # strategy: add which to votes when the protein is aligned in this rank
+        # 0: do not add any votes
+        # 1: add ml to votes
+        # 2: add alignment to votes
+        # 3: add ml and alignment to votes
+        if len(strategy) != 9:
             raise ValueError("Unsupported strategy")
         self.strategy = strategy
 
@@ -51,70 +66,93 @@ class UniqueVote(Module):
         self.mlName = mlModel
         self.rank = mlModel[:mlModel.find("_")]
 
+
     def run(self, samples):
-        markerModule = Marker(self.trainset, "vote", coverage=80, identity=50)
-        markerModule.getResults(samples)
+        if (self.alignmentMethod == "diamond"):
+            alignmentModel = Diamond(self.trainset, "vote")
+            self.getNode = self.getDiamondNode
+        elif (self.alignmentMethod == "marker"):
+            alignmentModel = Marker(self.trainset, "vote", coverage=80, identity=50)
+            self.markerLCAs = alignmentModel.getLCAs()
+            self.getNode = self.getMarkerNode
+        self.alignmentModelName = alignmentModel.baseName
+        alignmentModel.getResults(samples)
 
         esmTaxo = ESMTaxo(*self.params[:-1], pooling="sum", rank=self.rank)
         esmTaxo.run(samples, keepProb=True)  # should not use getResults because we want to get prob
+        self.taxoLabels = esmTaxo.class_names
 
-        taxoLabels = esmTaxo.class_names
-        targetRankLevel = config.rankLevels[self.rank]
-
-        results = []
-
-        thresh = 3
-
-        markerLCAs = markerModule.getLCAs()
-        key = f"{self.mlName}_prob"
-
-        for sample in samples:
-            votes = {taxo: 0 for taxo in taxoLabels}
-            for protein in sample.proteins:
-                markerPred:list[DiamondAlignment] = protein.results[markerModule.baseName]
-                aligned = False
-                for alignment in markerPred[:thresh]:
-                    taxo = markerLCAs[alignment.ref]
-                    node = taxoTree.ICTVTree.nodes[taxo]
-                    thisRankLevel = config.rankLevels[node.rank]
-                    if thisRankLevel > targetRankLevel:  # species
-                        for n in node.path:
-                            if config.rankLevels[n.rank] == targetRankLevel:
-                                pred = n.name
-                        aligned = True
-                        break
-                    elif thisRankLevel == targetRankLevel:   # genus
-                        pred = taxo
-                        aligned = True
-                        break
-                    elif (self.strategy != "ml"):  # family or above
-                        pred = taxo
-                        if (pred in votes):
-                            votes[pred] += alignment.similarity/100
-                        else:
-                            votes[pred] = alignment.similarity/100
-                    
-
-                if (aligned == True and self.strategy != "marker"):  # add ml voting
-                    scores = protein.info[f"{self.mlName}_prob"].tolist()
-                    rawScores = {taxo: score for taxo, score in zip(taxoLabels, scores)}
-                    tops = sorted(list(rawScores.items()), key=lambda x:x[1], reverse=True)
-                    for taxo, score in tops[:thresh]:
-                        if (taxo in votes):
-                            votes[taxo] += score
-                        else:
-                            votes[taxo] = score
-
-                protein.info.pop(key)
-
-            # print(votes)
-            # with open("working/dump.json", "wt") as fp:
-            #     json.dump(votes, fp, indent=2)
-            totalVotes = sum(votes.values())
-            if (len(votes) > 0 and totalVotes > 0):
-                winner, maxVotes = max(votes.items(), key=lambda x:x[1])
-                results.append([PlainResult(winner, maxVotes/totalVotes)])
-            else:
-                results.append(None)
-
+        results = [self.getResult(sample) for sample in samples]
         return results
+    
+    def getResult(self, sample:Sample):
+        ranks = ["realm", "kingdom", "phylum", "class", "order", "family", "genus", "species"]
+        rankLevels = [0] + [config.rankLevels[r] for r in ranks]
+
+        votes = {taxo: 0 for taxo in self.taxoLabels}
+        for protein in sample.proteins:
+            alignments:list[DiamondAlignment] = protein.results[self.alignmentModelName]
+
+            # get best alignment rank
+            maxRank = 0
+            for alignment in alignments:
+                node = self.getNode(alignment.ref, alignment.refContig)
+                thisRankLevel = config.rankLevels[node.rank]
+                if thisRankLevel > maxRank:
+                    maxRank = thisRankLevel
+            
+            # get mode
+            mode = 0
+            for idx, rankLevel in reversed(list(enumerate(rankLevels))):
+                if maxRank >= rankLevel:
+                    mode = int(self.strategy[idx])
+                    break
+            
+            useAlignment = mode & 0b10
+            useML = mode & 0b01
+
+            # get alignment candidates
+            if (useAlignment):
+                alignmentCandidates = [(self.getNode(alignment.ref, alignment.refContig).name, alignment.similarity/100) for alignment in alignments]
+                alignmentCandidates = sorted(list(alignmentCandidates), key=lambda x:x[1], reverse=True)
+                self.updateVotes(votes, alignmentCandidates)
+            
+            if (useML):
+                mlCandidates = zip(self.taxoLabels, protein.info[f"{self.mlName}_prob"].tolist())
+                mlCandidates = sorted(list(mlCandidates), key=lambda x:x[1], reverse=True)
+                self.updateVotes(votes, mlCandidates)
+
+            protein.info.pop(f"{self.mlName}_prob")
+
+        totalVotes = sum(votes.values())
+        if (len(votes) > 0 and totalVotes > 0):
+            votes = sorted(votes.items(), key=lambda x:x[1], reverse=True)
+            return [PlainResult(w, v/totalVotes) for w, v in votes]
+        else:
+            return None
+        
+    def getMarkerNode(self, ref:str, refContig:str):
+        return taxoTree.ICTVTree.nodes[self.markerLCAs[ref]]
+    
+    def getDiamondNode(self, ref:str, refContig:str):
+        return taxoTree.getTaxoNodeFromAccession(refContig).ICTVNode
+
+    def updateVotes(self, votes, candidates):
+        if (self.pooling == "vote"):
+            if (len(candidates) > 0):
+                bestName, _ = candidates[0]
+                if bestName in votes:
+                    votes[bestName] += 1
+                else:
+                    votes[bestName] = 1
+        else:
+            if (self.pooling.startswith("top")):
+                thresh = int(self.pooling[3:])
+                candidates = candidates[:thresh]
+            # else: pooling == sum, then use all of them
+
+            for name, score in candidates:
+                if name in votes:
+                    votes[name] += score
+                else:
+                    votes[name] = score
