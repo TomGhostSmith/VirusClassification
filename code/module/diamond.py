@@ -113,7 +113,7 @@ class Diamond(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], withMatch=True):
         samplesToRun:list[Sample] = list()
         NucleotideUtils.extractProtein(samples)
 
@@ -146,12 +146,12 @@ class Diamond(Module):
                 self.c2p = json.load(fp)
 
         cachedResultFP = open(self.cacheFile)
-        results = [self.getResult(sample, cachedResultFP) for sample in samples]
+        results = [self.getResult(sample, cachedResultFP, withMatch) for sample in samples]
         cachedResultFP.close()
 
         return results
     
-    def getResult(self, sample:Sample, cachedResultFP)->PlainResult:
+    def getResult(self, sample:Sample, cachedResultFP, withMatch)->PlainResult:
         # note: result of basename is not available
         
         votes:dict[str, int] = dict()
@@ -232,9 +232,10 @@ class Diamond(Module):
         if (proteinCount == 1 and results is None):
             proteinCount = 0.5
             
-        sample.info[f"protein_count"] = len(sample.proteins)
-        sample.info[f"protein_count_match_{self.tool}"] = proteinCount
-        sample.info[f"protein_match_ratio_{self.tool}"] = maxVotes / len(sample.proteins) if len(sample.proteins) > 0 else 0
+        if withMatch:
+            sample.info[f"protein_count"] = len(sample.proteins)
+            sample.info[f"protein_count_match_{self.tool}"] = proteinCount
+            sample.info[f"protein_match_ratio_{self.tool}"] = maxVotes / len(sample.proteins) if len(sample.proteins) > 0 else 0
 
         
         return results

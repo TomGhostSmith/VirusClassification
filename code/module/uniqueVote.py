@@ -71,12 +71,13 @@ class UniqueVote(Module):
         if (self.alignmentMethod == "diamond"):
             alignmentModel = Diamond(self.trainset, "vote")
             self.getNode = self.getDiamondNode
+            alignmentModel.run(samples, False)
         elif (self.alignmentMethod == "marker"):
             alignmentModel = Marker(self.trainset, "vote", coverage=80, identity=50)
             self.markerLCAs = alignmentModel.getLCAs()
             self.getNode = self.getMarkerNode
+            alignmentModel.run(samples, False)
         self.alignmentModelName = alignmentModel.baseName
-        alignmentModel.getResults(samples)
 
         esmTaxo = ESMTaxo(*self.params[:-1], pooling="sum", rank=self.rank)
         esmTaxo.run(samples, keepProb=True)  # should not use getResults because we want to get prob

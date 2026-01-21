@@ -15,7 +15,7 @@ class XGBoostRouter(Module):
     def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], features:list[str]):
         moduleNames = "+".join([module.moduleName for module in modules])
         featureNames = "+".join(features)
-        super().__init__(f"XGBoostRouter-train={trainset};modules={moduleNames};features={featureNames}")
+        super().__init__(f"XGBoostRouter-train={trainset};eval={evalMethod};modules={moduleNames};features={featureNames}")
         self.trainset = trainset
         self.evalMethod = evalMethod
         self.modules = modules
@@ -105,7 +105,7 @@ class XGBoostRouter(Module):
                 self.moduleListMap = json.load(fp)
         for module in self.featureModules:
             module.getResults(samples)
-        mainModel = self.loadModel()  
+        mainModel = self.loadModel()
         features = self.getFeatures(samples)
         modelIndexes = runXGBoost(mainModel, features)
 

@@ -18,7 +18,7 @@ class XGBoostLTR(Module):
         featureNames = "+".join(features)
         candidateFeatureNames = "+".join(candidateFeatures)
         self.candidateFeatures = candidateFeatures
-        self.baseName = f"XGBoostLTR-train={trainset};modules={moduleNames};features={featureNames};tops={tops};candidateFeatures={candidateFeatureNames}"
+        self.baseName = f"XGBoostLTR-train={trainset};eval={evalMethod};modules={moduleNames};features={featureNames};tops={tops};candidateFeatures={candidateFeatureNames}"
         super().__init__(f"{self.baseName};limitOutput={limitOutput}")
         self.trainset = trainset
         self.evalMethod = evalMethod
@@ -162,7 +162,7 @@ class XGBoostLTR(Module):
             module.getResults(samples)
         for module in self.modules:
             module.getResults(samples)
-        mainModel = self.loadModel()  
+        mainModel = self.loadModel()
         features, candidateList, candidateRanges = self.getFeatures(samples)
         scores:list[float] = mainModel.predict(features)
 
