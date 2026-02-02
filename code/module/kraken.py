@@ -72,7 +72,7 @@ class Kraken(Module):
         os.remove(resultFile)
         os.remove(queryFile)
 
-    def run(self, samples):
+    def run(self, samples, **kwargs):
 
         samplesToRun:list[Sample] = list()
 

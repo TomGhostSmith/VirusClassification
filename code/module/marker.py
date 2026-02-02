@@ -152,7 +152,7 @@ class Marker(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample], keepVotes=False):
+    def run(self, samples:list[Sample], keepVotes=False, **kwargs):
         samplesToRun:list[Sample] = list()
         NucleotideUtils.extractProtein(samples)
 

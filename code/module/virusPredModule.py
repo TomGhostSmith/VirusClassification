@@ -13,7 +13,7 @@ class VirusPred(Module):
     #     for model in self.models:
     #         model.run()
 
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         unTerminatedSamples = samples
         virus = set()
         for model in self.models:

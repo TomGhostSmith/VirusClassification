@@ -3,6 +3,8 @@ import json
 from tqdm import tqdm
 from Bio import SeqIO
 import random
+import pandas
+from anytree import Node
 from sortedcontainers import SortedList
 
 from config import config
@@ -36,11 +38,14 @@ class TaxoTree():
         # self.archaeaNCBITree.loadAnnotations()
         # self.archaeaNCBITree.loadSpecies()
 
-        self.ICTV2NCBI = dict()  # key: ICTV name   value: NCBI Node
-        self.NCBI2ICTV = dict()  # key: NCBI ID   value: ICTV Node
+        self.ICTV2NCBI:dict[str, Node] = {}  # key: ICTV name   value: NCBI Node
+        self.NCBI2ICTV:dict[str, Node] = {}  # key: NCBI ID   value: ICTV Node
+
+        self.taxaNames = {}
 
         # self.loadHosts()
         self.matchTaxoTree()
+        self.loadTaxaNames()
 
         IOUtils.showInfo("Taxo tree loaded")
 
@@ -84,6 +89,36 @@ class TaxoTree():
         
         for k, v in filtedHosts.items():
             self.viralNCBITree.hosts[k] = list(v)
+
+    def loadTaxaNames(self):
+        ranks = ["realm", "kingdom", "phylum", "class", "order", "family", "genus"]
+        for rank in ranks:
+            cachedMapping = f"{config.cacheResultFolder}/ESM_mapping_{rank}.json"
+            if (os.path.exists(cachedMapping)):
+                with open(cachedMapping) as fp:
+                    id2Name = json.load(fp)
+            else:
+                level = rank.capitalize()
+                taxamap_file = f'{config.modelRoot}/mapping/VMR_MSL39_v4.json.processed_data.json.nosub_addunknown.json{level}_mapping.csv'
+                taxamap_df = pandas.read_csv(taxamap_file)
+                id2Name = {}
+                for _, row in taxamap_df.iterrows():
+                    index = row[f"{rank.capitalize()} ID"]
+                    name = row[rank.capitalize()]
+                    if (index not in id2Name):
+                        id2Name[index] = name
+                    elif (id2Name[index] != name):
+                        IOUtils.showInfo(f"{rank} ID {index} corresponds to multiple names", "ERROR")
+                with open(cachedMapping, 'wt') as fp:
+                    json.dump(id2Name, fp, indent=2)
+            
+            # convert dict to list for better performance
+            names = [None] * len(id2Name)
+            for idx, name in id2Name.items():
+                names[int(idx)] = name
+            
+            self.taxaNames[rank] = names
+
 
     def matchTaxoTree(self):
         IOUtils.showInfo('Calculating ICTV and NCBI correspondence')

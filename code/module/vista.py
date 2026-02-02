@@ -27,7 +27,7 @@ class VISTA(Module):
         self.batchThreads = batchThreads
         self.cacheBase=cacheBase
 
-    def vista(self, samples:list[Sample])->None:
+    def vista(self, samples:list[Sample], **kwargs)->None:
 
         IOUtils.showInfo(f"Begin VISTA on {len(samples)} samples")
 

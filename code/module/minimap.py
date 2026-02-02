@@ -79,7 +79,7 @@ class Minimap(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         samplesToRun:list[Sample] = list()
 
         if (os.path.exists(self.cacheIndex)):
@@ -137,11 +137,11 @@ class Minimap(Module):
             sample.info["bestRefCoverage"] = 0
             sample.info["alignmentsLCA"] = 0
         else:
-            sample.info["bestmapQ"] = results[0].bestAlignment.quality
+            sample.info["bestmapQ"] = results[0].alignment.quality
             sample.info["alignments"] = len(results)
-            sample.info["bestQueryCoverage"] = results[0].bestAlignment.queryCoverLength/sample.length
-            sample.info["bestRefCoverage"] = results[0].bestAlignment.refCoverLength/sample.length
-            nodes = [taxoTree.getTaxoNodeFromAccession(r.bestAlignment.ref).ICTVNode for r in results]
+            sample.info["bestQueryCoverage"] = results[0].alignment.queryCoverLength/sample.length
+            sample.info["bestRefCoverage"] = results[0].alignment.refCoverLength/sample.length
+            nodes = [taxoTree.getTaxoNodeFromAccession(r.alignment.ref).ICTVNode for r in results]
             lca = taxoTree.ICTVTree.findLCA(nodes)
             sample.info["alignmentsLCA"] = config.rankLevels[lca.rank]
 

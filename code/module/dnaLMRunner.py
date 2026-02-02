@@ -78,7 +78,7 @@ class DNALMRunner():
 
     
 
-    def run(self, samples:list[Sample|ProteinSample]):  # can take both DNAs and cDNAs
+    def run(self, samples:list[Sample|ProteinSample], **kwargs):  # can take both DNAs and cDNAs
         os.environ["TOKENIZERS_PARALLELISM"] = "false"  # we have implemented parallel, and no need to use parallel in tokenizer
         labels = []
         sequences = []

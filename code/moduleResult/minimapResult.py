@@ -4,19 +4,11 @@ from entity.taxoTree import taxoTree
 from config import config
 
 class MinimapResult(Result):
-    def __init__(self):
+    def __init__(self, alignment:Alignment):
         super().__init__()
-        self.alignments:list[Alignment] = list()
-        self.bestAlignment:Alignment = None
+        self.alignment = alignment
         self.rank = 'species'
         self.scores = dict()
-
-    def addAlignment(self, alignment:Alignment):
-        self.alignments.append(alignment)
-        if (self.bestAlignment is None):
-            self.bestAlignment = alignment
-        elif (alignment.betterThan(self.bestAlignment)):
-            self.bestAlignment = alignment
 
     def setTargetRank(self, rank):
         self.rank = rank
@@ -25,7 +17,7 @@ class MinimapResult(Result):
     def calcTaxoNode(self):
         if (self.node is None):
             targetRankLevel = config.rankLevels[self.rank]
-            node = taxoTree.getTaxoNodeFromAccession(self.bestAlignment.ref)
+            node = taxoTree.getTaxoNodeFromAccession(self.alignment.ref)
             align60Counts = 0
             for alignment in self.alignments:
                 if alignment.quality == 60:
@@ -39,7 +31,7 @@ class MinimapResult(Result):
                     self.node = taxoTree.getTaxoNodeFromNode(ICTVNode=n)
                     break
             
-            score = 1 - 10 ** (-self.bestAlignment.quality/10)
+            score = 1 - 10 ** (-self.alignment.quality/10)
             for n in self.node.ICTVNode.path:
                 self.scores[n.rank] = score
             self.score = score
@@ -53,8 +45,7 @@ class MinimapResult(Result):
     
     def __copy__(self):
         obj = MinimapResult()
-        obj.alignments = self.alignments        # shallow copy, alignments are read only
-        obj.bestAlignment = self.bestAlignment  # shallow copy, alignments are read only
+        obj.alignment = self.alignment          # shallow copy, alignments are read only
         obj.rank = self.rank                    # a string, which will generate a new object
         obj.scores = self.scores.copy()         # deep copy the scores inside the list
         return obj

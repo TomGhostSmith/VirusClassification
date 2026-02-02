@@ -16,7 +16,7 @@ class Pipeline(Module):
         self.virusTaxo = virusTaxo
         super().__init__(f"pipeline_vp={virusPred.moduleName}.merge={virusTaxo.moduleName}")
 
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         IOUtils.showInfo(f'run pipeline on {len(samples)} samples')
         self.virusPred.getResults(samples)
         virus:list[Sample] = list()

@@ -67,7 +67,7 @@ class UniqueVote(Module):
         self.rank = mlModel[:mlModel.find("_")]
 
 
-    def run(self, samples):
+    def run(self, samples, **kwargs):
         if (self.alignmentMethod == "diamond"):
             alignmentModel = Diamond(self.trainset, "vote")
             self.getNode = self.getDiamondNode
@@ -81,7 +81,7 @@ class UniqueVote(Module):
 
         esmTaxo = ESMTaxo(*self.params[:-1], pooling="sum", rank=self.rank)
         esmTaxo.run(samples, keepProb=True)  # should not use getResults because we want to get prob
-        self.taxoLabels = esmTaxo.class_names
+        self.taxoLabels = taxoTree.taxaNames[self.rank]
 
         results = [self.getResult(sample) for sample in samples]
         return results

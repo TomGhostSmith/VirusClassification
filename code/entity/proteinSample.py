@@ -1,3 +1,4 @@
+from prototype.result import Result
 from Bio.SeqRecord import SeqRecord
 
 class ProteinSample():
@@ -15,5 +16,5 @@ class ProteinSample():
             self.index = 0
         self.length:int = len(seq.seq)
         self.seq:SeqRecord = seq
-        self.results = dict()
-        self.info = dict()
+        self.results:dict[str, list[Result]] = {}
+        self.info = {}

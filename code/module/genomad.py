@@ -58,7 +58,7 @@ class Genomad(Module):
         shutil.rmtree(outputFolder)  # remove the output tree in case the genomad tool always use cached sequence
         os.remove(queryFile)
 
-    def run(self, samples):
+    def run(self, samples, **kwargs):
 
         samplesToRun:list[Sample] = list()
 

@@ -101,7 +101,7 @@ class MLModule(Module):
             genusParam = genusParams[ord(gen[6]) - 48]
             self.modelParams["genus"] = (*genusParam, "facebook/esm2_t33_650M_UR50D", 3523)
         
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         NucleotideUtils.extractProtein(samples)
         for sample in samples:
             self.resultDict[sample.id] = MLResult(self.strategy, self.thresh)

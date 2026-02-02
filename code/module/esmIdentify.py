@@ -28,7 +28,7 @@ class esmIdentify(Module):
         
         super().__init__(f'esm-150M_512')
 
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         NucleotideUtils.extractProtein(samples)
         results = list()
 

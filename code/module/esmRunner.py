@@ -180,7 +180,7 @@ class ESMRunner():
         fp_ave.close()
 
         
-    def run(self, proteins:list[ProteinSample], getProb=False, getCls=False, getAve=False):
+    def run(self, proteins:list[ProteinSample], getProb=False, getCls=False, getAve=False, **kwargs):
         essentialFiles = [self.cacheProbFile, self.cacheCLSEmbFile, self.cacheAveEmbFile, self.cacheProbIndex, self.cacheCLSEmbIndex, self.cacheAveEmbIndex]
         allExists = True
         for f in essentialFiles:

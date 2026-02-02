@@ -16,7 +16,7 @@ class MinimapThresholdModule(Minimap):
         self.factors = factors if isinstance(factors, list) else [factors]
         self.moduleName = f'minimapThresh-ref={self.reference};mode={self.mode};thresh-{"_".join(self.factors)}'
 
-    def run(self, samples):
+    def run(self, samples, **kwargs):
         results = super().run(samples)
         return [self.extractResult(sample, result) for sample, result in zip(samples, results)]
     
@@ -28,11 +28,11 @@ class MinimapThresholdModule(Minimap):
             else:
                 results = []
                 for r in result:
-                    if ("positive" in self.factors and r.bestAlignment.quality == 0):
+                    if ("positive" in self.factors and r.alignment.quality == 0):
                         continue
-                    elif ("60" in self.factors and r.bestAlignment.quality < 60):
+                    elif ("60" in self.factors and r.alignment.quality < 60):
                         continue
-                    elif ("completeMatch" in self.factors and r.bestAlignment.queryCoverLength < sample.length):
+                    elif ("completeMatch" in self.factors and r.alignment.queryCoverLength < sample.length):
                         continue
                     else:
                         results.append(r)

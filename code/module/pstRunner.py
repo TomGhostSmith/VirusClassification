@@ -17,7 +17,7 @@ class PSTRunner(DNALMRunner):
         super().__init__(modelName)
         self.model = modelName
      
-    def run(self, samples:list[Sample]):  # only work for DNA whole sequence
+    def run(self, samples:list[Sample], **kwargs):  # only work for DNA whole sequence
         embeddings = {}
         NucleotideUtils.extractProtein(samples)
 

@@ -7,6 +7,7 @@ from Bio.Blast import NCBIXML
 import multiprocessing
 
 from config import config
+from entity.taxoTree import taxoTree
 from prototype.module import Module
 from moduleResult.blastResult import BlastResult
 from moduleResult.blastAlignment import BlastAlignment
@@ -77,7 +78,7 @@ class Blast(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         samplesToRun:list[Sample] = list()
 
         if (os.path.exists(self.cacheIndex)):
@@ -131,8 +132,14 @@ class Blast(Module):
         if (len(results) == 0):
             results = None
             sample.info["bestBlast"] = 0
+            sample.info["blastAlignments"] = 0
+            sample.info["blastAlignmentsLCA"] = 0
         else:
-            sample.info["bestBlast"] = results[0].bestAlignment.similarity
+            sample.info["bestBlast"] = results[0].alignment.similarity
+            sample.info["blastAlignments"] = len(results)
+            nodes = [taxoTree.getTaxoNodeFromAccession(r.alignment.ref).ICTVNode for r in results]
+            lca = taxoTree.ICTVTree.findLCA(nodes)
+            sample.info["blastAlignmentsLCA"] = config.rankLevels[lca.rank]
         sample.results[self.baseName] = results
         return results
     

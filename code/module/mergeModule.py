@@ -9,7 +9,7 @@ class MergeModule(Module):
         self.chooseMethod = chooseMethod
         super().__init__(name)
 
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         results = dict()
         remainedSamples = samples
         for idx, model in enumerate(self.modelList):

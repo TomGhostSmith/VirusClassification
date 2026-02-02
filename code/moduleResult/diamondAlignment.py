@@ -20,7 +20,6 @@ class DiamondAlignment():
         self.refend = int(terms[9])
         self.evalue = float(terms[10])
         self.bitscore = float(terms[11])
-        self.likelihood = 0
 
         self.queryCoverLength = self.qend - self.qstart
         self.refCoverLength = self.refend - self.refstart

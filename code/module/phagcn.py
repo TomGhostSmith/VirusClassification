@@ -158,7 +158,7 @@ class PhaGCN(Module):
             if sample.id not in self.cachedSamples:
                 self.cachedSamples[sample.id] = "N/A"
 
-    def run(self, samples):
+    def run(self, samples, **kwargs):
 
         samplesToRun:list[Sample] = list()
 

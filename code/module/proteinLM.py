@@ -194,7 +194,7 @@ class ProteinLM(Module):
                 var = var.astype(numpy.float32)
                 fp.write(f"{name}\t{IOUtils.encodeBase64(mu)}\t{IOUtils.encodeBase64(var)}\t{IOUtils.encodeBase64(distances)}\n")
         
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         raise NotImplementedError("not reconstruct for multi-result")
         if (not os.path.exists(self.cacheClusterFile) and self.strategy != "individual"):
             self.train()

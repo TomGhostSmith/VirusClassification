@@ -74,7 +74,7 @@ class ProteinLMRunner():
 
     
 
-    def run(self, samples:list[ProteinSample]):
+    def run(self, samples:list[ProteinSample], **kwargs):
         os.environ["TOKENIZERS_PARALLELISM"] = "false"  # we have implemented parallel, and no need to use parallel in tokenizer
         labels = []
         sequences = []

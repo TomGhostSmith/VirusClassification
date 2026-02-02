@@ -22,7 +22,7 @@ class MinimapThreshRankModule(Minimap):
         self.code = "".join([t[0] for t in self.limitOutputRanks])
         self.moduleName = f"minimapThRank-ref={self.reference};mode={self.mode};thRank-{self.code}"
 
-    def run(self, samples):
+    def run(self, samples, **kwargs):
         raise NotImplementedError("not reconstruct for multi-result")
         results = super().run(samples)
         return [self.extractResult(sample, res) for sample, res in zip(samples, results)]
@@ -31,7 +31,7 @@ class MinimapThreshRankModule(Minimap):
         if (res is not None):
             # note: since we will modify the result later, we should copy the origin result object
             res = res.__copy__()
-            alignment:Alignment = res.bestAlignment
+            alignment:Alignment = res.alignment
             key = list()
             if (alignment.quality == 60):
                 key.append("60")

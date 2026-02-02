@@ -14,7 +14,7 @@ class MinimapMLMergeModule(Module):
         self.factors = factors if isinstance(factors, list) else [factors]
         super().__init__(f"{self.minimap.moduleName}.{self.mlModule.moduleName}.minimapML-{'_'.join(self.factors)}")
 
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         raise NotImplementedError("not reconstruct for multi-result")
         resultDict = dict()
 
@@ -60,7 +60,7 @@ class MinimapMLMergeModule(Module):
         minimapResult:MinimapResult = sample.results[minimapName]
         if (minimapResult is None):
             return None
-        minimapAlignment:Alignment = minimapResult.bestAlignment
+        minimapAlignment:Alignment = minimapResult.alignment
 
         if ("positive" in self.factors and minimapAlignment.quality == 0):
             return None

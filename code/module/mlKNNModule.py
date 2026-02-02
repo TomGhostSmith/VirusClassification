@@ -289,7 +289,7 @@ class MLKNN(Module):
 
 
         
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         raise NotImplementedError("not reconstruct for multi-result")
         if (not os.path.exists(self.cacheClusterFile) and self.strategy != "individual"):
             self.train()

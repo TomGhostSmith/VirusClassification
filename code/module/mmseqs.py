@@ -75,7 +75,7 @@ class MMseqs(Module):
         os.remove(resultFile)
         os.remove(queryFile)
 
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         samplesToRun:list[Sample] = list()
 
         if (os.path.exists(self.cacheIndex)):
@@ -124,7 +124,7 @@ class MMseqs(Module):
             results = None
             sample.info["mmseq"] = 0
         else:
-            sample.info["mmseq"] = results[0].bestAlignment.similarity
+            sample.info["mmseq"] = results[0].alignment.similarity
         sample.results[self.baseName] = results
         return results
     

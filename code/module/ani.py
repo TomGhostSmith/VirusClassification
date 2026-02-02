@@ -80,7 +80,7 @@ class ANI(Module):
         os.remove(resultFile)
 
 
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         samplesToRun:list[Sample] = list()
 
         if (os.path.exists(self.cacheIndex)):
@@ -132,7 +132,7 @@ class ANI(Module):
             sample.info["ANI"] = 0
             sample.info["Overall ANI"] = 0
         else:
-            sample.info["ANI"] = results[0].bestAlignment.identity
-            sample.info["Overall ANI"] = results[0].bestAlignment.overallIdentity
+            sample.info["ANI"] = results[0].alignment.identity
+            sample.info["Overall ANI"] = results[0].alignment.overallIdentity
         sample.results[self.baseName] = results
         return results

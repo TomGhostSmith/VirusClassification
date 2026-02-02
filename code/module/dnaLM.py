@@ -221,7 +221,7 @@ class DNALM(Module):
                 var = var.astype(numpy.float32)
                 fp.write(f"{name}\t{IOUtils.encodeBase64(mu)}\t{IOUtils.encodeBase64(var)}\t{IOUtils.encodeBase64(distances)}\n")
         
-    def run(self, samples:list[Sample]):
+    def run(self, samples:list[Sample], **kwargs):
         IOUtils.showInfo("Currently only return 1 result", "WARN")
         if (not os.path.exists(self.cacheClusterFile) and self.strategy != "individual"):
             self.train()

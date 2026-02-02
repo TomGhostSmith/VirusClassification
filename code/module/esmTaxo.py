@@ -12,6 +12,7 @@ from entity.proteinSample import ProteinSample
 from module.esmRunner import ESMRunner
 from tqdm import tqdm
 
+from entity.taxoTree import taxoTree
 from utils import IOUtils
 from utils.NucleotideUtils import NucleotideUtils
 
@@ -29,38 +30,13 @@ class ESMTaxo(Module):
         self.batchSize = batchSize
         self.rank = rank
 
-        cachedMapping = f"{config.cacheResultFolder}/ESM_mapping_{self.rank}.json"
-        if (os.path.exists(cachedMapping)):
-            with open(cachedMapping) as fp:
-                id2Name = json.load(fp)
-        else:
-            level = self.rank.capitalize()
-            taxamap_file = f'{config.modelRoot}/mapping/VMR_MSL39_v4.json.processed_data.json.nosub_addunknown.json{level}_mapping.csv'
-            taxamap_df = pandas.read_csv(taxamap_file)
-            id2Name = {}
-            for _, row in taxamap_df.iterrows():
-                index = row[f"{self.rank.capitalize()} ID"]
-                name = row[self.rank.capitalize()]
-                if (index not in id2Name):
-                    id2Name[index] = name
-                elif (id2Name[index] != name):
-                    IOUtils.showInfo(f"{self.rank} ID {index} corresponds to multiple names", "ERROR")
-            with open(cachedMapping, 'wt') as fp:
-                json.dump(id2Name, fp, indent=2)
-        
-        # convert dict to list for better performance
-        names = [None] * len(id2Name)
-        for idx, name in id2Name.items():
-            names[int(idx)] = name
-        
-        self.class_names = names
+        self.class_names = taxoTree.taxaNames[self.rank]
 
-    def run(self, samples:list[Sample], keepProb=False, keepVotes=False)->list[PlainResult]:
+    def run(self, samples:list[Sample], keepProb=False, keepVotes=False, **kwargs)->list[PlainResult]:
         NucleotideUtils.extractProtein(samples)
         proteinsToRun:list[ProteinSample] = list()
         for sample in samples:
             for protein in sample.proteins:
-                protein.info[f"{self.rank}_labels"] = self.class_names
                 proteinsToRun.append(protein)
 
         model = ESMRunner(self.name, self.maxLen, self.modelFolder, self.baseModelFolder, len(self.class_names), self.batchSize)
@@ -99,9 +75,9 @@ class ESMTaxo(Module):
                         votes[taxo] += score
 
         totalVotes = sum(votes.values())    # If pooling method == "sum", the totalVotes will be 1 * len(proteins) (not considering "Unknown" labels)
-        if (keepVotes):
-            sample.info[f"{self.moduleName}_votes"] = votes
         if (totalVotes > 0):
+            if (keepVotes):
+                sample.info[f"{self.moduleName}_votes"] = {k: v/totalVotes for k, v in votes.items()}
             vs = sorted(votes.items(), key=lambda x: x[1], reverse=True)
             results = [PlainResult(n, v/totalVotes) for n, v in vs]
             return results

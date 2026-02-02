@@ -10,6 +10,7 @@ from config import config
 from prototype.module import Module
 from moduleResult.plainResult import PlainResult
 from moduleResult.diamondAlignment import DiamondAlignment
+from moduleResult.diamondResult import DiamondResult
 from entity.sample import Sample
 from entity.proteinSample import ProteinSample
 from entity.taxoTree import taxoTree
@@ -113,7 +114,7 @@ class Diamond(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample], withMatch=True):
+    def run(self, samples:list[Sample], withMatch=True, **kwargs):
         samplesToRun:list[Sample] = list()
         NucleotideUtils.extractProtein(samples)
 
