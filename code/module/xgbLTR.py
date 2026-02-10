@@ -13,12 +13,12 @@ import json
 import os
 
 class XGBoostLTR(Module):
-    def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], features:list[str], tops:int, candidateFeatures:list[str]=[], limitOutput=True):
+    def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], features:list[str], tops:int, candidateFeatures:list[str]=[], limitOutput=True, complete="no"):
         moduleNames = "+".join([module.moduleName for module in modules])
         featureNames = "+".join(features)
         candidateFeatureNames = "+".join(candidateFeatures)
         self.candidateFeatures = candidateFeatures
-        self.baseName = f"XGBoostLTR-train={trainset};eval={evalMethod};modules={moduleNames};features={featureNames};tops={tops};candidateFeatures={candidateFeatureNames}"
+        self.baseName = f"XGBoostLTR-train={trainset};eval={evalMethod};modules={moduleNames};features={featureNames};tops={tops};candidateFeatures={candidateFeatureNames};complete={complete}"
         super().__init__(f"{self.baseName};limitOutput={limitOutput}")
         self.trainset = trainset
         self.evalMethod = evalMethod
@@ -29,6 +29,11 @@ class XGBoostLTR(Module):
         self.tops = tops
         self.limitOutput = limitOutput
 
+        if (complete not in ["no", "genus", "topdown"]):
+            raise ValueError("Unsupported completion method")
+    
+        self.complete = complete
+
         self.modelListFile = f"{config.modelRoot}/XGBoostLTR/names.json"
         self.moduleListMap = {"nextOffset": 0}
 
@@ -37,6 +42,8 @@ class XGBoostLTR(Module):
         candidateFeatures = []
         candidateRanges:list[tuple[int, int]] = []
         candidateList:list[TaxoNode] = []
+
+        genusLevel = config.rankLevels["genus"]
 
         titles = self.features.copy()  # to avoid change the list "self.features"
         for i in range(len(self.modules)):
@@ -53,12 +60,13 @@ class XGBoostLTR(Module):
         for sample in samples:
             rankMaps:list[dict[str, int]] = []
             scoreMaps:list[dict[str, float]] = []
+            fullScoreMaps:list[dict[str, float]] = []
             candidateInfos:dict[TaxoNode, dict] = {}
             basicFeatures = [sample.info.get(f) for f in self.features]
 
             # get all top x results from all modules
             # calculate the union set of all the potential predictions
-            candidates:dict[str:TaxoNode] = {}
+            candidates:dict[str, TaxoNode] = {}
             for module in self.modules:
                 rankMap:dict[str, int] = {}
                 scoreMap:dict[str, float] = {}
@@ -83,6 +91,7 @@ class XGBoostLTR(Module):
                                 candidateInfos[r.node.ICTVName][k] = v
                 rankMaps.append(rankMap)
                 scoreMaps.append(scoreMap)
+                fullScoreMaps.append(sample.info.get(f"{module.moduleName}_votes"))
 
 
             # record the start/end candidate into a list
@@ -93,9 +102,26 @@ class XGBoostLTR(Module):
             # for each candidate option, generate its features
             for name, node in candidates.items():
                 candidateFeature = basicFeatures.copy()
-                for rankMap, scoreMap in zip(rankMaps, scoreMaps):
-                    candidateFeature.append(rankMap.get(name))
-                    candidateFeature.append(scoreMap.get(name))
+                genusName = name
+                if self.complete == "topdown" and config.rankLevels[node.ICTVNode.rank] > genusLevel:
+                    for n in node.ICTVNode.path:
+                        if n.rank == "genus":
+                            genusName = n.name
+                            break
+                for rankMap, scoreMap, fullScoreMap in zip(rankMaps, scoreMaps, fullScoreMaps):
+                    if (name in rankMap):
+                        candidateFeature.append(rankMap[name])
+                        candidateFeature.append(scoreMap.get(name))
+                    elif self.complete != "no" and fullScoreMap is not None and genusName in fullScoreMap: # check the whole score map
+                        score = fullScoreMap[genusName]
+                        rank = sum(x > score for x in fullScoreMap.values())
+                        candidateFeature.append(rank)
+                        candidateFeature.append(score)
+                    else:
+                        candidateFeature.append(None)
+                        candidateFeature.append(None)
+
+                        
                 candidateFeature += list(candidateInfos[name].values())
                 candidateFeatures.append(candidateFeature)
                 candidateList.append(node)

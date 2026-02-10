@@ -10,6 +10,7 @@ from config import config
 from prototype.module import Module
 from moduleResult.plainResult import PlainResult
 from moduleResult.diamondAlignment import DiamondAlignment
+from moduleResult.markerResult import MarkerResult
 from entity.sample import Sample
 from entity.proteinSample import ProteinSample
 from entity.taxoTree import taxoTree
@@ -44,7 +45,7 @@ class Marker(Module):
         self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_c{coverage}_i{identity}_marker.dmnd"
         self.markerDB = f"{config.cacheResultFolder}/{self.reference}_c{coverage}_i{identity}_marker.json"
 
-        self.LCAs = {}
+        self.LCAs:dict[str, str] = {}
     
     def buildDB(self):
         # build diamond DB
@@ -152,7 +153,7 @@ class Marker(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample], keepVotes=False, **kwargs):
+    def run(self, samples:list[Sample], keepVotes=False, keepProteinRes=False, withProteinCandidateMeta=False, **kwargs):
         samplesToRun:list[Sample] = list()
         NucleotideUtils.extractProtein(samples)
 
@@ -182,12 +183,12 @@ class Marker(Module):
             self.LCAs = json.load(fp)
 
         cachedResultFP = open(self.cacheFile)
-        results = [self.getResult(sample, cachedResultFP, keepVotes) for sample in samples]
+        results = [self.getResult(sample, cachedResultFP, keepVotes, keepProteinRes, withProteinCandidateMeta) for sample in samples]
         cachedResultFP.close()
 
         return results
     
-    def getResult(self, sample:Sample, cachedResultFP, keepVotes)->PlainResult:
+    def getResult(self, sample:Sample, cachedResultFP, keepVotes, keepProteinRes, withProteinCandidateMeta)->PlainResult:
         # note: result of basename is not available
         result = None
         
@@ -198,7 +199,18 @@ class Marker(Module):
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
-                protein.results[self.baseName] = alignments
+                if (keepProteinRes):
+                    res = []
+                    for a in alignments:
+                        markerName = self.LCAs[a.ref]
+                        r = MarkerResult(a, markerName)
+                        if (withProteinCandidateMeta):
+                            markerRank = taxoTree.ICTVTree.nodes[markerName].rank
+                            r.info["markerRank"] = config.rankLevels[markerRank]
+                        res.append(r)
+                    if (len(res) == 0):
+                        res = None
+                    protein.addResult(self.moduleName, res)
                 if (len(alignments) > 0):
                     bestAlignment = alignments[0]
                     ICTVName = self.LCAs[bestAlignment.ref]
@@ -217,13 +229,24 @@ class Marker(Module):
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
-                protein.results[self.baseName] = alignments
+                if (keepProteinRes):
+                    res = []
+                    for a in alignments:
+                        markerName = self.LCAs[a.ref]
+                        r = MarkerResult(a, markerName)
+                        if (withProteinCandidateMeta):
+                            markerRank = taxoTree.ICTVTree.nodes[markerName].rank
+                            r.info["markerRank"] = config.rankLevels[markerRank]
+                        res.append(r)
+                    if (len(res) == 0):
+                        res = None
+                    protein.addResult(self.moduleName, res)
                 for alignment in alignments[:thresh]:
                     ICTVName = self.LCAs[alignment.ref]
                     if ICTVName in votes:
-                        votes[ICTVName] += alignment.similarity/100
+                        votes[ICTVName] += alignment.similarity
                     else:
-                        votes[ICTVName] = alignment.similarity/100
+                        votes[ICTVName] = alignment.similarity
         if len(votes) > 0:
             if (self.threshRank == 'vitax'):
                 threshold = self.thresh

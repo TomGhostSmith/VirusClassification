@@ -38,6 +38,7 @@ class Diamond(Module):
         self.cachedSamples:dict[str, tuple[int, int]] = dict()  # note: the cached samples are protein-level results
         self.cachedSampleNameFile = f"{config.cacheResultFolder}/{self.baseName}.names"
         self.cachedSampleNames = set()
+        self.maxScore = 100 if tool == "diamond" else 1
 
         if (self.tool == "diamond"):
             self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_diamonddb.dmnd"
@@ -45,7 +46,7 @@ class Diamond(Module):
             self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_prot_mmseqdb"
     
     def buildDB(self):
-        IOUtils.showInfo(f"Making diamond database for {self.reference}")
+        IOUtils.showInfo(f"Making diamond database for {self.reference}") 
         referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
         referenceProteinFasta = f"{config.cacheResultFolder}/{self.reference}.faa"
         refSamples = IOUtils.loadSamples(referenceFasta)
@@ -114,7 +115,7 @@ class Diamond(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample], withMatch=True, **kwargs):
+    def run(self, samples:list[Sample], keepProteinRes=False, withMeta=False, withProteinMeta=False, withProteinCandidateMeta=False, **kwargs):
         samplesToRun:list[Sample] = list()
         NucleotideUtils.extractProtein(samples)
 
@@ -147,12 +148,12 @@ class Diamond(Module):
                 self.c2p = json.load(fp)
 
         cachedResultFP = open(self.cacheFile)
-        results = [self.getResult(sample, cachedResultFP, withMatch) for sample in samples]
+        results = [self.getResult(sample, cachedResultFP, withMeta, withProteinMeta, withProteinCandidateMeta, keepProteinRes) for sample in samples]
         cachedResultFP.close()
 
         return results
     
-    def getResult(self, sample:Sample, cachedResultFP, withMatch)->PlainResult:
+    def getResult(self, sample:Sample, cachedResultFP, withMeta, withProteinMeta, withProteinCandidateMeta, keepProteinRes)->PlainResult:
         # note: result of basename is not available
         
         votes:dict[str, int] = dict()
@@ -160,9 +161,29 @@ class Diamond(Module):
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline(), self.maxScore) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
-                protein.results[self.baseName] = alignments
+                if (keepProteinRes):
+                    res = []
+                    for a in alignments:
+                        r = DiamondResult(a)
+                        if (withProteinCandidateMeta):
+                            r.info["proteinBitscore"] = a.bitscore
+                            r.info["proteinBlastSimilarity"] = a.bitscore
+                            r.info["proteinBlastLogE"] = math.log10(a.evalue) if a.evalue > 1e-300 else -300
+                            r.info["proteinBitscoreByLength"] = a.bitscore / a.length
+                            r.info["proteinBitscoreByRefCov"] = a.bitscore / a.refCoverLength
+                            r.info["proteinBitscoreByQueryCov"] = a.bitscore / a.queryCoverLength
+                            r.info["proteinBlastRefCov"] = a.refCoverLength / protein.length
+                            r.info["proteinBlastQueryCov"] = a.queryCoverLength / protein.length
+                        res.append(r)
+                    if (len(res) == 0):
+                        res = None
+                    protein.addResult(self.moduleName, res)
+                if (withProteinMeta):
+                    protein.info["proteinAlignments"] = len(alignments)
+
+
                 if (len(alignments) > 0):
                     bestAlignment = alignments[0]
                     ICTVName = taxoTree.getTaxoNodeFromAccession(bestAlignment.refContig).ICTVName
@@ -175,9 +196,27 @@ class Diamond(Module):
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline(), self.maxScore) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
-                protein.results[self.baseName] = alignments
+                if (keepProteinRes):
+                    res = []
+                    for a in alignments:
+                        r = DiamondResult(a)
+                        if (withProteinCandidateMeta):
+                            r.info["proteinBitscore"] = a.bitscore
+                            r.info["proteinBlastSimilarity"] = a.bitscore
+                            r.info["proteinBlastLogE"] = math.log10(a.evalue) if a.evalue > 1e-300 else -300
+                            r.info["proteinBitscoreByLength"] = a.bitscore / a.length
+                            r.info["proteinBitscoreByRefCov"] = a.bitscore / a.refCoverLength
+                            r.info["proteinBitscoreByQueryCov"] = a.bitscore / a.queryCoverLength
+                            r.info["proteinBlastRefCov"] = a.refCoverLength / protein.length
+                            r.info["proteinBlastQueryCov"] = a.queryCoverLength / protein.length
+                        res.append(r)
+                    if (len(res) == 0):
+                        res = None
+                    protein.addResult(self.moduleName, res)
+                if (withProteinMeta):
+                    protein.info["proteinAlignments"] = len(alignments)
                 for alignment in alignments:
                     accession = alignment.refContig
                     if (accession in accessionVotes):
@@ -198,9 +237,27 @@ class Diamond(Module):
             for protein in sample.proteins:
                 offset, alignmentCount = self.cachedSamples[protein.id]
                 cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline(), self.maxScore) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
-                protein.results[self.baseName] = alignments
+                if (keepProteinRes):
+                    res = []
+                    for a in alignments:
+                        r = DiamondResult(a)
+                        if (withProteinCandidateMeta):
+                            r.info["proteinBitscore"] = a.bitscore
+                            r.info["proteinBlastSimilarity"] = a.bitscore
+                            r.info["proteinBlastLogE"] = math.log10(a.evalue) if a.evalue > 1e-300 else -300
+                            r.info["proteinBitscoreByLength"] = a.bitscore / a.length
+                            r.info["proteinBitscoreByRefCov"] = a.bitscore / a.refCoverLength
+                            r.info["proteinBitscoreByQueryCov"] = a.bitscore / a.queryCoverLength
+                            r.info["proteinBlastRefCov"] = a.refCoverLength / protein.length
+                            r.info["proteinBlastQueryCov"] = a.queryCoverLength / protein.length
+                        res.append(r)
+                    if (len(res) == 0):
+                        res = None
+                    protein.addResult(self.moduleName, res)
+                if (withProteinMeta):
+                    protein.info["proteinAlignments"] = len(alignments)
                 for alignment in alignments[:thresh]:
                     ICTVName = taxoTree.getTaxoNodeFromAccession(alignment.refContig).ICTVName
                     if ICTVName in votes:
@@ -233,7 +290,7 @@ class Diamond(Module):
         if (proteinCount == 1 and results is None):
             proteinCount = 0.5
             
-        if withMatch:
+        if withMeta:
             sample.info[f"protein_count"] = len(sample.proteins)
             sample.info[f"protein_count_match_{self.tool}"] = proteinCount
             sample.info[f"protein_match_ratio_{self.tool}"] = maxVotes / len(sample.proteins) if len(sample.proteins) > 0 else 0

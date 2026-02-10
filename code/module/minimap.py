@@ -79,7 +79,7 @@ class Minimap(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample], **kwargs):
+    def run(self, samples:list[Sample], withMeta=False, withCandidateMeta=False, **kwargs):
         samplesToRun:list[Sample] = list()
 
         if (os.path.exists(self.cacheIndex)):
@@ -100,12 +100,12 @@ class Minimap(Module):
                 json.dump(self.cachedSamples, fp, indent=2)
 
         cachedResultFP = open(self.cacheFile)
-        results = [self.getResult(sample, cachedResultFP) for sample in samples]
+        results = [self.getResult(sample, cachedResultFP, withMeta, withCandidateMeta) for sample in samples]
         cachedResultFP.close()
 
         return results
     
-    def getResult(self, sample:Sample, cachedResultFP)->MinimapResult:
+    def getResult(self, sample:Sample, cachedResultFP, withMeta, withCandidateMeta)->MinimapResult:
         # use baseName to cache the result in the results dict
         if (self.baseName in sample.results):
             return sample.results[self.baseName]
@@ -118,32 +118,33 @@ class Minimap(Module):
         results:list[MinimapResult] = []
         for alignment in alignments:
             if (alignment.ref is not None):
-                r = MinimapResult()
-                r.addAlignment(alignment)
-                r.info["mapQ"] = alignment.quality
-                r.info["minimapRefCov"] = alignment.refCoverLength / sample.length
-                r.info["minimapQueryCov"] = alignment.queryCoverLength / sample.length
+                r = MinimapResult(alignment)
+                if (withCandidateMeta):
+                    r.info["mapQ"] = alignment.quality
+                    r.info["minimapRefCov"] = alignment.refCoverLength / sample.length
+                    r.info["minimapQueryCov"] = alignment.queryCoverLength / sample.length
                 
                 results.append(r)
                 # result.addAlignment(alignment)
 
-        sample.info["length"] = sample.length
 
         if len(results) == 0:
             results = None
-            sample.info["bestmapQ"] = -1
-            sample.info["alignments"] = 0
-            sample.info["bestQueryCoverage"] = 0
-            sample.info["bestRefCoverage"] = 0
-            sample.info["alignmentsLCA"] = 0
-        else:
-            sample.info["bestmapQ"] = results[0].alignment.quality
-            sample.info["alignments"] = len(results)
-            sample.info["bestQueryCoverage"] = results[0].alignment.queryCoverLength/sample.length
-            sample.info["bestRefCoverage"] = results[0].alignment.refCoverLength/sample.length
-            nodes = [taxoTree.getTaxoNodeFromAccession(r.alignment.ref).ICTVNode for r in results]
-            lca = taxoTree.ICTVTree.findLCA(nodes)
-            sample.info["alignmentsLCA"] = config.rankLevels[lca.rank]
+        if withMeta:
+            if results:
+                sample.info["bestmapQ"] = results[0].alignment.quality
+                sample.info["alignments"] = len(results)
+                sample.info["bestQueryCoverage"] = results[0].alignment.queryCoverLength/sample.length
+                sample.info["bestRefCoverage"] = results[0].alignment.refCoverLength/sample.length
+                nodes = [taxoTree.getTaxoNodeFromAccession(r.alignment.ref).ICTVNode for r in results]
+                lca = taxoTree.ICTVTree.findLCA(nodes)
+                sample.info["alignmentsLCA"] = config.rankLevels[lca.rank]
+            else:
+                sample.info["bestmapQ"] = -1
+                sample.info["alignments"] = 0
+                sample.info["bestQueryCoverage"] = 0
+                sample.info["bestRefCoverage"] = 0
+                sample.info["alignmentsLCA"] = 0
 
         sample.results[self.baseName] = results
         return results

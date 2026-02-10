@@ -9,7 +9,7 @@ class BlastAlignment():
         terms = alignment.strip().split('\t')
 
         self.ref = terms[1]
-        self.similarity = float(terms[2])
+        self.similarity = float(terms[2]) / 100
         self.length = int(terms[3])
         self.mismatch = int(terms[4])
         self.gapopen = int(terms[5])

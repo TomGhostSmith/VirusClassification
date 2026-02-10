@@ -78,7 +78,7 @@ class Blast(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample], **kwargs):
+    def run(self, samples:list[Sample], withMeta=False, withCandidateMeta=False, **kwargs):
         samplesToRun:list[Sample] = list()
 
         if (os.path.exists(self.cacheIndex)):
@@ -99,12 +99,12 @@ class Blast(Module):
                 json.dump(self.cachedSamples, fp, indent=2)
 
         cachedResultFP = open(self.cacheFile)
-        results = [self.getResult(sample, cachedResultFP) for sample in samples]
+        results = [self.getResult(sample, cachedResultFP, withMeta, withCandidateMeta) for sample in samples]
         cachedResultFP.close()
 
         return results
     
-    def getResult(self, sample:Sample, cachedResultFP)->BlastResult:
+    def getResult(self, sample:Sample, cachedResultFP, withMeta, withCandidateMeta)->BlastResult:
         # use baseName to cache the result in the results dict
         if (self.baseName in sample.results):
             return sample.results[self.baseName]
@@ -117,29 +117,31 @@ class Blast(Module):
         results:list[BlastResult] = []
         for alignment in alignments:
             if (alignment.ref is not None):
-                r = BlastResult()
-                r.addAlignment(alignment)
-                r.info["bitscore"] = alignment.bitscore
-                r.info["blastSimilarity"] = alignment.similarity
-                r.info["blastLogE"] = math.log10(alignment.evalue) if alignment.evalue > 1e-300 else -300
-                r.info["bitscoreByLength"] = alignment.bitscore / alignment.length
-                r.info["bitscoreByRefCov"] = alignment.bitscore / alignment.refCoverLength
-                r.info["bitscoreByQueryCov"] = alignment.bitscore / alignment.queryCoverLength
-                r.info["blastRefCov"] = alignment.refCoverLength / sample.length
-                r.info["blastQueryCov"] = alignment.queryCoverLength / sample.length
+                r = BlastResult(alignment)
+                if (withCandidateMeta):
+                    r.info["bitscore"] = alignment.bitscore
+                    r.info["blastSimilarity"] = alignment.similarity
+                    r.info["blastLogE"] = math.log10(alignment.evalue) if alignment.evalue > 1e-300 else -300
+                    r.info["bitscoreByLength"] = alignment.bitscore / alignment.length
+                    r.info["bitscoreByRefCov"] = alignment.bitscore / alignment.refCoverLength
+                    r.info["bitscoreByQueryCov"] = alignment.bitscore / alignment.queryCoverLength
+                    r.info["blastRefCov"] = alignment.refCoverLength / sample.length
+                    r.info["blastQueryCov"] = alignment.queryCoverLength / sample.length
                 results.append(r)
 
         if (len(results) == 0):
             results = None
-            sample.info["bestBlast"] = 0
-            sample.info["blastAlignments"] = 0
-            sample.info["blastAlignmentsLCA"] = 0
-        else:
-            sample.info["bestBlast"] = results[0].alignment.similarity
-            sample.info["blastAlignments"] = len(results)
-            nodes = [taxoTree.getTaxoNodeFromAccession(r.alignment.ref).ICTVNode for r in results]
-            lca = taxoTree.ICTVTree.findLCA(nodes)
-            sample.info["blastAlignmentsLCA"] = config.rankLevels[lca.rank]
+        if withMeta:
+            if (results):
+                sample.info["bestBlast"] = results[0].alignment.similarity
+                sample.info["blastAlignments"] = len(results)
+                nodes = [taxoTree.getTaxoNodeFromAccession(r.alignment.ref).ICTVNode for r in results]
+                lca = taxoTree.ICTVTree.findLCA(nodes)
+                sample.info["blastAlignmentsLCA"] = config.rankLevels[lca.rank]
+            else:
+                sample.info["bestBlast"] = 0
+                sample.info["blastAlignments"] = 0
+                sample.info["blastAlignmentsLCA"] = 0
         sample.results[self.baseName] = results
         return results
     

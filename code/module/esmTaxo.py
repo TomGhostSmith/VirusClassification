@@ -32,7 +32,7 @@ class ESMTaxo(Module):
 
         self.class_names = taxoTree.taxaNames[self.rank]
 
-    def run(self, samples:list[Sample], keepProb=False, keepVotes=False, **kwargs)->list[PlainResult]:
+    def run(self, samples:list[Sample], keepProb=False, keepVotes=False, keepProteinRes=False, **kwargs)->list[PlainResult]:
         NucleotideUtils.extractProtein(samples)
         proteinsToRun:list[ProteinSample] = list()
         for sample in samples:
@@ -43,20 +43,25 @@ class ESMTaxo(Module):
         model.run(proteinsToRun, getProb=True)
         key = f"{self.name}_prob"
 
-        results = [self.getResult(sample, keepVotes) for sample in samples]
+        results = [self.getResult(sample, keepVotes, keepProteinRes) for sample in samples]
 
-        if (not keepProb):
+        if (keepProb):
+            for p in proteinsToRun:
+                p.info[f"{self.moduleName}_prob"] = p.info.pop(key, None)
+        else:
             for p in proteinsToRun:
                 p.info.pop(key, None)
         return results
     
-    def getResult(self, sample:Sample, keepVotes):
+    def getResult(self, sample:Sample, keepVotes, keepProteinRes):
         if (self.pooling == "vote"):
             votes = {n: 0 for n in self.class_names if "Unknown" not in n}
             for protein in sample.proteins:
                 scores = protein.info[f"{self.name}_prob"]
                 rawScores = [(taxo, score) for taxo, score in zip(self.class_names, scores)]
                 tops = sorted(rawScores, key=lambda x:x[1], reverse=True)
+                if (keepProteinRes):
+                    protein.addResult(self.moduleName, [PlainResult(p, s) for p, s in rawScores if "Unknown" not in p])
                 bestTaxo = tops[0][0]
                 if ("Unknown" not in bestTaxo):
                     votes[bestTaxo] += 1
@@ -70,6 +75,8 @@ class ESMTaxo(Module):
                 scores = protein.info[f"{self.name}_prob"].tolist()
                 rawScores = [(taxo, score) for taxo, score in zip(self.class_names, scores)]
                 tops = sorted(rawScores, key=lambda x:x[1], reverse=True)
+                if (keepProteinRes):
+                    protein.addResult(self.moduleName, [PlainResult(p, s) for p, s in rawScores if "Unknown" not in p])
                 for taxo, score in tops[:thresh]:
                     if ("Unknown" not in taxo):
                         votes[taxo] += score

@@ -16,6 +16,7 @@ from module.marker import Marker
 from module.mlModule import MLModule
 from module.esmTaxo import ESMTaxo
 from module.diamond import Diamond
+from moduleResult.diamondResult import DiamondResult
 from moduleResult.diamondAlignment import DiamondAlignment
 
 
@@ -70,17 +71,15 @@ class UniqueVote(Module):
     def run(self, samples, **kwargs):
         if (self.alignmentMethod == "diamond"):
             alignmentModel = Diamond(self.trainset, "vote")
-            self.getNode = self.getDiamondNode
-            alignmentModel.run(samples, False)
         elif (self.alignmentMethod == "marker"):
             alignmentModel = Marker(self.trainset, "vote", coverage=80, identity=50)
             self.markerLCAs = alignmentModel.getLCAs()
-            self.getNode = self.getMarkerNode
-            alignmentModel.run(samples, False)
-        self.alignmentModelName = alignmentModel.baseName
+        alignmentModel.run(samples, keepProteinRes=True)
+        self.alignmentModelName = alignmentModel.moduleName
 
         esmTaxo = ESMTaxo(*self.params[:-1], pooling="sum", rank=self.rank)
         esmTaxo.run(samples, keepProb=True)  # should not use getResults because we want to get prob
+        self.esmTaxoName = esmTaxo.moduleName
         self.taxoLabels = taxoTree.taxaNames[self.rank]
 
         results = [self.getResult(sample) for sample in samples]
@@ -92,15 +91,16 @@ class UniqueVote(Module):
 
         votes = {taxo: 0 for taxo in self.taxoLabels}
         for protein in sample.proteins:
-            alignments:list[DiamondAlignment] = protein.results[self.alignmentModelName]
+            res:list[DiamondResult] = protein.results[self.alignmentModelName]
 
             # get best alignment rank
             maxRank = 0
-            for alignment in alignments:
-                node = self.getNode(alignment.ref, alignment.refContig)
-                thisRankLevel = config.rankLevels[node.rank]
-                if thisRankLevel > maxRank:
-                    maxRank = thisRankLevel
+            if res:
+                for r in res:
+                    node = r.node
+                    thisRankLevel = config.rankLevels[node.ICTVNode.rank]
+                    if thisRankLevel > maxRank:
+                        maxRank = thisRankLevel
             
             # get mode
             mode = 0
@@ -114,16 +114,16 @@ class UniqueVote(Module):
 
             # get alignment candidates
             if (useAlignment):
-                alignmentCandidates = [(self.getNode(alignment.ref, alignment.refContig).name, alignment.similarity/100) for alignment in alignments]
+                alignmentCandidates = [(r.node.ICTVName, r.alignment.similarity) for r in res]
                 alignmentCandidates = sorted(list(alignmentCandidates), key=lambda x:x[1], reverse=True)
                 self.updateVotes(votes, alignmentCandidates)
             
             if (useML):
-                mlCandidates = zip(self.taxoLabels, protein.info[f"{self.mlName}_prob"].tolist())
+                mlCandidates = zip(self.taxoLabels, protein.info[f"{self.esmTaxoName}_prob"].tolist())
                 mlCandidates = sorted(list(mlCandidates), key=lambda x:x[1], reverse=True)
                 self.updateVotes(votes, mlCandidates)
 
-            protein.info.pop(f"{self.mlName}_prob")
+            protein.info.pop(f"{self.esmTaxoName}_prob")
 
         totalVotes = sum(votes.values())
         if (len(votes) > 0 and totalVotes > 0):
@@ -131,12 +131,6 @@ class UniqueVote(Module):
             return [PlainResult(w, v/totalVotes) for w, v in votes]
         else:
             return None
-        
-    def getMarkerNode(self, ref:str, refContig:str):
-        return taxoTree.ICTVTree.nodes[self.markerLCAs[ref]]
-    
-    def getDiamondNode(self, ref:str, refContig:str):
-        return taxoTree.getTaxoNodeFromAccession(refContig).ICTVNode
 
     def updateVotes(self, votes, candidates):
         if (self.pooling == "vote"):
