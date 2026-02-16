@@ -41,7 +41,7 @@ class DNATaxo(Module):
         line = fp.readline().strip('\n')
         probText = line[line.find('\t')+1:]
         probs = IOUtils.decodeBase64(probText)
-        predictions = [PlainResult(pred, prob) for pred, prob in sorted(zip(self.class_names, probs), key=lambda x:x[1], reverse=True) if prob > 0]
+        predictions = [PlainResult(pred, prob) for pred, prob in sorted(zip(self.class_names, probs), key=lambda x:x[1], reverse=True) if prob > 0 and "Unknown" not in pred]
         if (keepVotes):
             votes = {pred: prob for pred, prob in zip(self.class_names, probs)}
             sample.info[f"{self.moduleName}_votes"] = votes

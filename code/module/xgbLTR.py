@@ -6,19 +6,30 @@ from moduleResult.plainResult import PlainResult
 from config import config
 from entity.sample import Sample
 
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, GroupKFold, ParameterGrid
+from xgboost.callback import EarlyStopping
+from sklearn.metrics import ndcg_score, mean_squared_error
 import xgboost
 import pandas
+import numpy
 import json
 import os
 
 class XGBoostLTR(Module):
-    def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], features:list[str], tops:int, candidateFeatures:list[str]=[], limitOutput=True, complete="no"):
+    def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], features:list[str], tops:int, candidateFeatures:list[str]=[], limitOutput=True, complete="no", loss="mse"):
         moduleNames = "+".join([module.moduleName for module in modules])
         featureNames = "+".join(features)
         candidateFeatureNames = "+".join(candidateFeatures)
         self.candidateFeatures = candidateFeatures
-        self.baseName = f"XGBoostLTR-train={trainset};eval={evalMethod};modules={moduleNames};features={featureNames};tops={tops};candidateFeatures={candidateFeatureNames};complete={complete}"
+        losses = {
+            "mse": ("reg:squarederror", "rmse", xgboost.XGBRegressor, getNegMSE, False),
+            "ndcg": ("rank:ndcg", "ndcg@1", xgboost.XGBRanker, getTop1Accuracy, True),
+            "pairwise": ("rank:pairwise", "ndcg@1", xgboost.XGBRanker, getTop1Accuracy, True)
+        }
+        if loss not in losses:
+            raise ValueError("Unsupported loss function")
+        self.loss, self.eval, self.clz, self.scoreFunc, self.keepGroup = losses[loss]
+        self.baseName = f"XGBoostLTR-train={trainset};eval={evalMethod};modules={moduleNames};features={featureNames};tops={tops};candidateFeatures={candidateFeatureNames};complete={complete};loss={loss}"
         super().__init__(f"{self.baseName};limitOutput={limitOutput}")
         self.trainset = trainset
         self.evalMethod = evalMethod
@@ -38,6 +49,9 @@ class XGBoostLTR(Module):
         self.moduleListMap = {"nextOffset": 0}
 
     def getFeatures(self, samples:list[Sample]):
+        # basic feature independent on all the model
+        for sample in samples:
+            sample.info["length"] = sample.length
         features = {}
         candidateFeatures = []
         candidateRanges:list[tuple[int, int]] = []
@@ -61,7 +75,7 @@ class XGBoostLTR(Module):
             rankMaps:list[dict[str, int]] = []
             scoreMaps:list[dict[str, float]] = []
             fullScoreMaps:list[dict[str, float]] = []
-            candidateInfos:dict[TaxoNode, dict] = {}
+            candidateInfos:dict[str, dict] = {}
             basicFeatures = [sample.info.get(f) for f in self.features]
 
             # get all top x results from all modules
@@ -84,7 +98,7 @@ class XGBoostLTR(Module):
                         candidates[r.node.ICTVName] = r.node
                         rankMap[r.node.ICTVName] = idx
                         scoreMap[r.node.ICTVName] = r.score
-                        if r.node not in candidateInfos:
+                        if r.node.ICTVName not in candidateInfos:
                             candidateInfos[r.node.ICTVName] = {k: None for k in self.candidateFeatures}
                         for k, v in r.info.items():
                             if k in candidateFeatureSet:
@@ -134,10 +148,10 @@ class XGBoostLTR(Module):
         samples = trainUtils.loadTrainsetSamples(self.trainset, self.evalMethod)
 
         for module in self.featureModules:
-            module.getResults(samples, keepVotes=True)
+            module.getResults(samples, keepVotes=True, withMeta=True)
         
         for module in self.modules:
-            module.getResults(samples, keepVotes=True)
+            module.getResults(samples, keepVotes=True, withMeta=True)
 
         samplesWithGT = []
         for sample in samples:
@@ -158,7 +172,7 @@ class XGBoostLTR(Module):
         mainXGBoostName = f"model{self.moduleListMap['nextOffset']}-main.json"
         
         # train XGBoost1: learn which module to use
-        mainModel = trainMainXGBoost(features, labels, mainXGBoostName)
+        mainModel = self.trainMainXGBoost(features, numpy.array(labels), mainXGBoostName, candidateRanges)
         
         self.moduleListMap[self.baseName] = mainXGBoostName
         self.moduleListMap["nextOffset"] += 1
@@ -176,7 +190,7 @@ class XGBoostLTR(Module):
             if (not os.path.exists(f"{config.modelRoot}/XGBoostLTR/{mainModelName}")):
                 mainModel = self.train()
             else:
-                mainModel = xgboost.XGBRegressor()
+                mainModel = self.clz()
                 mainModel.load_model(f"{config.modelRoot}/XGBoostLTR/{mainModelName}")
         return mainModel            
 
@@ -185,12 +199,12 @@ class XGBoostLTR(Module):
             with open(self.modelListFile) as fp:
                 self.moduleListMap = json.load(fp)
         for module in self.featureModules:
-            module.getResults(samples, keepVotes=True)
+            module.getResults(samples, keepVotes=True, withMeta=True)
         for module in self.modules:
-            module.getResults(samples, keepVotes=True)
+            module.getResults(samples, keepVotes=True, withMeta=True)
         mainModel = self.loadModel()
         features, candidateList, candidateRanges = self.getFeatures(samples)
-        scores:list[float] = mainModel.predict(features)
+        scores:list[float] = mainModel.predict(features, )
 
         # for debug
         # f = features.copy()
@@ -221,33 +235,95 @@ class XGBoostLTR(Module):
         
         return results
 
-def trainMainXGBoost(features, targets, saveFile):
-    param_grid = {
-        "max_depth": [3, 4, 6, 8, 10],
-        "subsample": [0.7, 0.8, 1.0],
-        "colsample_bytree": [0.7, 0.8, 1.0],
-        "n_estimators": [50, 100, 200, 500]
-    }
+    def trainMainXGBoost(self, features, targets, saveFile, candidateRanges):
+        groupIDs = numpy.zeros(len(targets))
+        for idx, (s, e) in enumerate(candidateRanges):
+            groupIDs[s:e] = idx
 
-    grid = GridSearchCV(
-        estimator=xgboost.XGBRegressor(
-            random_state=42,
-            learning_rate=0.05,
-            objective="reg:squarederror",
-            eval_metric="rmse"
-        ),
-        param_grid=param_grid,
-        scoring="neg_root_mean_squared_error",
-        cv=5,
-        verbose=1,
-        n_jobs=-1
-    )
 
-    grid.fit(features, targets)
+        kfold = GroupKFold(n_splits=5)
+        splits = kfold.split(features, targets, groupIDs)
 
-    best_model = grid.best_estimator_
+        bestScore = -numpy.inf
+        bestModel = None
 
-    # Save to file
-    os.makedirs(f"{config.modelRoot}/XGBoostLTR", exist_ok=True)
-    best_model.save_model(f"{config.modelRoot}/XGBoostLTR/{saveFile}")   # JSON is human-readable
-    return best_model
+        param_grid = {
+            "max_depth": [3, 4, 6, 8, 10],
+            "subsample": [0.7, 0.8, 1.0],
+            "colsample_bytree": [0.7, 0.8, 1.0],
+            "n_estimators": [50, 100, 200, 500]
+        }
+
+        for param in list(ParameterGrid(param_grid)):
+            for train_idx, val_idx in splits:
+                x_train, x_val = features.iloc[train_idx], features.iloc[val_idx]
+                y_train, y_val = targets[train_idx], targets[val_idx]
+                gid_train, gid_val = groupIDs[train_idx], groupIDs[val_idx]
+
+                model = self.clz(
+                    objective=self.loss,
+                    random_state=42,
+                    learning_rate=0.05,
+                    eval_metric=self.eval,
+                    **param
+                )
+
+                if (self.keepGroup):
+                    model.fit(
+                        x_train, y_train, qid=gid_train,
+                        verbose=False,
+                        # eval_set=[(x_val, y_val)], eval_qid=[gid_val],
+                        # callbacks=[EarlyStopping(rounds=50, save_best=True)],
+                    )
+                else:
+                    model.fit(
+                        x_train, y_train,
+                        verbose=False,
+                        # eval_set=[(x_val, y_val)],
+                        # callbacks=[EarlyStopping(rounds=50, save_best=True)],
+                    )
+                    
+
+                # score = self.scoreFunc(model.best_score)
+                # score = self.scoreFunc(model.get_score)
+                y_pred = model.predict(x_val)
+                score = self.scoreFunc(y_val, y_pred, gid_val)
+
+                if score > bestScore:
+                    bestModel = model
+
+        # Save to file
+        os.makedirs(f"{config.modelRoot}/XGBoostLTR", exist_ok=True)
+        bestModel.save_model(f"{config.modelRoot}/XGBoostLTR/{saveFile}")   # JSON is human-readable
+        return bestModel
+
+def groupID2candidateRanges(groupIDs):
+    ranges = []
+    start = 0
+
+    for i in range(1, len(groupIDs)):
+        if groupIDs[i] != groupIDs[i - 1]:
+            ranges.append((start, i))
+            start = i
+
+    ranges.append((start, len(groupIDs)))
+    return ranges
+
+
+# def getTop1Accuracy(score):
+#     return score
+
+# def getNegMSE(score):
+#     return - score
+
+def getTop1Accuracy(y_true, y_pred, groupIDs):
+    score = 0
+    candidateRanges = groupID2candidateRanges(groupIDs)
+    for s, e in candidateRanges:
+        highestIndex = numpy.argmax(y_pred[s:e])
+        if (y_true[s:e][highestIndex] == max(y_true[s:e])):
+            score += 1
+    return score / len(candidateRanges)
+
+def getNegMSE(y_true, y_pred, groupIDs):
+    return - mean_squared_error(y_true, y_pred)

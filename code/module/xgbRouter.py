@@ -38,10 +38,10 @@ class XGBoostRouter(Module):
         samples = trainUtils.loadTrainsetSamples(self.trainset, self.evalMethod)
 
         for module in self.featureModules:
-            module.getResults(samples, keepVotes=True)
+            module.getResults(samples, withMeta=True)
         
         for module in self.modules:
-            module.getResults(samples, keepVotes=True)
+            module.getResults(samples)
         
         # get best modules and corresponding best ranks
         bestModules = []
@@ -104,9 +104,9 @@ class XGBoostRouter(Module):
             with open(self.modelListFile) as fp:
                 self.moduleListMap = json.load(fp)
         for module in self.featureModules:
-            module.getResults(samples, keepVotes=True)
+            module.getResults(samples, withMeta=True)
         mainModel = self.loadModel()
-        features = self.getFeatures(samples, keepVotes=True)
+        features = self.getFeatures(samples)
         modelIndexes = runXGBoost(mainModel, features)
 
         samplesToRun = [[] for _ in range(len(self.modules))]
