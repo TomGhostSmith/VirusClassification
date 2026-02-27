@@ -8,6 +8,10 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 from tqdm import tqdm
+
+from moduleResult.virusPredictionResult import VirusPredictionResult
+
+from sklearn.metrics import roc_auc_score, average_precision_score
 # sys.path.append('./code')
 
 from utils import IOUtils
@@ -298,7 +302,8 @@ def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all',
     IOUtils.showInfo('Done')
     return samples, xlsxFileName
 
-def testModelVirusIdentity(models:dict[str, Module], dataset):
+def testModelVirusIdentity(models:dict[str, Module], dataset, evaluationMethod="virusIdentify"):
+    IOUtils.showInfo(f"Test {len(models)} models on {dataset}")
     queryFilePath = f"{datasetRoot}/{dataset}/{dataset}.fasta"
     querySubsetFilePath = None
     modelRoot = config.modelRoot
@@ -312,17 +317,24 @@ def testModelVirusIdentity(models:dict[str, Module], dataset):
         IOUtils.showInfo(f'getting {model.moduleName} results')
         model.getResults(samples)
     IOUtils.showInfo('calculating statistics')
-    # with open(f"{datasetRoot}/{dataset}/answer_virusIdentify.json") as fp:
-    #     stdResults = json.load(fp)
+    with open(f"{datasetRoot}/{dataset}/answer_{evaluationMethod}.json") as fp:
+        stdResults = json.load(fp)
 
-    stdResults = {sample.id: False for sample in samples}
+    # stdResults = {sample.id: False for sample in samples}
 
-    summaryDict = dict()
-    summaryDict["index"] = list()
-    summaryDict["model"] = list()
-    # summaryDict["Recall"] = list()
-    summaryDict["Precision"] = list()
-    summaryDict["Accuracy"] = list()
+    summaryDict = {}
+    summaryDict["index"] = []
+    summaryDict["model"] = []
+    summaryDict["N"] = []
+    summaryDict["TP"] = []
+    summaryDict["TN"] = []
+    summaryDict["FP"] = []
+    summaryDict["FN"] = []
+    summaryDict["Recall"] = []
+    summaryDict["Precision"] = []
+    summaryDict["Accuracy"] = []
+    summaryDict["AUROC"] = []
+    summaryDict["AUPR"] = []
 
     # check and get a valid name
     analysisIndex = 0
@@ -336,9 +348,17 @@ def testModelVirusIdentity(models:dict[str, Module], dataset):
         summaryDict["index"].append(idx)
         summaryDict["model"].append(modelDesc)
         TP, TN, FP, FN = 0, 0, 0, 0
+        stds = []
+        preds = []
         for sample in samples:
-            res = sample.results[model.moduleName]
-            if (res is not None and res[0].node is not None):
+            res:list[VirusPredictionResult] = sample.results[model.moduleName]
+            if (stdResults[sample.id] == "no answer"):
+                continue
+            if (res is None):
+                continue
+            stds.append(stdResults[sample.id])
+            preds.append(res[0].score)
+            if (res[0].isVirus):
                 if (stdResults[sample.id] == True):
                     TP += 1
                 else:
@@ -348,9 +368,17 @@ def testModelVirusIdentity(models:dict[str, Module], dataset):
                     FN += 1
                 else:
                     TN += 1
-        # summaryDict["Recall"].append(TP / (TP + FN))
-        summaryDict["Precision"].append(TP / (TP + FP))
+        summaryDict["N"].append(TP+TN+FP+FN)
+        summaryDict["TP"].append(TP)
+        summaryDict["TN"].append(TN)
+        summaryDict["FP"].append(FP)
+        summaryDict["FN"].append(FN)
+        summaryDict["Recall"].append(TP / (TP + FN) if TP+FN > 0 else 0)
+        summaryDict["Precision"].append(TP / (TP + FP) if TP+FP > 0 else 0)
         summaryDict["Accuracy"].append((TP + TN) / (TP + TN + FP + FN))
+
+        summaryDict["AUROC"].append(roc_auc_score(stds, preds))
+        summaryDict["AUPR"].append(average_precision_score(stds, preds))
 
     with pandas.ExcelWriter(fileName) as writer:
         pandas.DataFrame(summaryDict).to_excel(writer, sheet_name='summary', index=False)

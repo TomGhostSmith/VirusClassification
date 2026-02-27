@@ -154,36 +154,42 @@ class Diamond(Module):
         return results
     
     def getResult(self, sample:Sample, cachedResultFP, withMeta, withProteinMeta, withProteinCandidateMeta, keepProteinRes)->PlainResult:
-        # note: result of basename is not available
-        
+        # note: result of basename is not available    
         votes:dict[str, int] = dict()
-        if (self.method == "vote"):
-            for protein in sample.proteins:
-                offset, alignmentCount = self.cachedSamples[protein.id]
-                cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline(), self.maxScore) for _ in range(alignmentCount)]
-                alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
-                if (keepProteinRes):
-                    res = []
-                    for a in alignments:
-                        r = DiamondResult(a)
-                        if (withProteinCandidateMeta):
-                            r.info["proteinBitscore"] = a.bitscore
-                            r.info["proteinBlastSimilarity"] = a.bitscore
-                            r.info["proteinBlastLogE"] = math.log10(a.evalue) if a.evalue > 1e-300 else -300
-                            r.info["proteinBitscoreByLength"] = a.bitscore / a.length
-                            r.info["proteinBitscoreByRefCov"] = a.bitscore / a.refCoverLength
-                            r.info["proteinBitscoreByQueryCov"] = a.bitscore / a.queryCoverLength
-                            r.info["proteinBlastRefCov"] = a.refCoverLength / protein.length
-                            r.info["proteinBlastQueryCov"] = a.queryCoverLength / protein.length
-                        res.append(r)
-                    if (len(res) == 0):
-                        res = None
-                    protein.addResult(self.moduleName, res)
-                if (withProteinMeta):
-                    protein.info["proteinAlignments"] = len(alignments)
+
+        if (self.method == "sum" or self.method.startswith("top")):
+            if (self.method.startswith("top")):
+                thresh = int(self.method[3:])
+            else:
+                thresh = None
+
+        for protein in sample.proteins:
+            offset, alignmentCount = self.cachedSamples[protein.id]
+            cachedResultFP.seek(offset)
+            alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline(), self.maxScore) for _ in range(alignmentCount)]
+            alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
+            if (keepProteinRes):
+                res = []
+                for a in alignments:
+                    r = DiamondResult(a)
+                    if (withProteinCandidateMeta):
+                        r.info["proteinBitscore"] = a.bitscore
+                        r.info["proteinBlastSimilarity"] = a.bitscore
+                        r.info["proteinBlastLogE"] = math.log10(a.evalue) if a.evalue > 1e-300 else -300
+                        r.info["proteinBitscoreByLength"] = a.bitscore / a.length
+                        r.info["proteinBitscoreByRefCov"] = a.bitscore / a.refCoverLength
+                        r.info["proteinBitscoreByQueryCov"] = a.bitscore / a.queryCoverLength
+                        r.info["proteinBlastRefCov"] = a.refCoverLength / protein.length
+                        r.info["proteinBlastQueryCov"] = a.queryCoverLength / protein.length
+                    res.append(r)
+                if (len(res) == 0):
+                    res = None
+                protein.addResult(self.moduleName, res)
+            if (withProteinMeta):
+                protein.info["proteinAlignments"] = len(alignments)
 
 
+            if (self.method == "vote"):
                 if (len(alignments) > 0):
                     bestAlignment = alignments[0]
                     ICTVName = taxoTree.getTaxoNodeFromAccession(bestAlignment.refContig).ICTVName
@@ -191,73 +197,15 @@ class Diamond(Module):
                         votes[ICTVName] += 1
                     else:
                         votes[ICTVName] = 1
-        elif (self.method == "coverage"):
-            accessionVotes = dict()
-            for protein in sample.proteins:
-                offset, alignmentCount = self.cachedSamples[protein.id]
-                cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline(), self.maxScore) for _ in range(alignmentCount)]
-                alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
-                if (keepProteinRes):
-                    res = []
-                    for a in alignments:
-                        r = DiamondResult(a)
-                        if (withProteinCandidateMeta):
-                            r.info["proteinBitscore"] = a.bitscore
-                            r.info["proteinBlastSimilarity"] = a.bitscore
-                            r.info["proteinBlastLogE"] = math.log10(a.evalue) if a.evalue > 1e-300 else -300
-                            r.info["proteinBitscoreByLength"] = a.bitscore / a.length
-                            r.info["proteinBitscoreByRefCov"] = a.bitscore / a.refCoverLength
-                            r.info["proteinBitscoreByQueryCov"] = a.bitscore / a.queryCoverLength
-                            r.info["proteinBlastRefCov"] = a.refCoverLength / protein.length
-                            r.info["proteinBlastQueryCov"] = a.queryCoverLength / protein.length
-                        res.append(r)
-                    if (len(res) == 0):
-                        res = None
-                    protein.addResult(self.moduleName, res)
-                if (withProteinMeta):
-                    protein.info["proteinAlignments"] = len(alignments)
+            elif (self.method == "coverage"):
+                accessionVotes = dict()
                 for alignment in alignments:
                     accession = alignment.refContig
                     if (accession in accessionVotes):
                         accessionVotes[accession] += 1/len(self.c2p[accession])
                     else:
                         accessionVotes[accession] = 1/len(self.c2p[accession])
-            for accession, coverage in accessionVotes.items():
-                ICTVName = taxoTree.getTaxoNodeFromAccession(accession).ICTVName
-                if ICTVName in votes:
-                    votes[ICTVName] = max(coverage, votes[ICTVName])  # the vote is the maximum coverage for that species
-                else:
-                    votes[ICTVName] = coverage
-        elif (self.method == "sum" or self.method.startswith("top")):
-            if (self.method.startswith("top")):
-                thresh = int(self.method[3:])
-            else:
-                thresh = None
-            for protein in sample.proteins:
-                offset, alignmentCount = self.cachedSamples[protein.id]
-                cachedResultFP.seek(offset)
-                alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline(), self.maxScore) for _ in range(alignmentCount)]
-                alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
-                if (keepProteinRes):
-                    res = []
-                    for a in alignments:
-                        r = DiamondResult(a)
-                        if (withProteinCandidateMeta):
-                            r.info["proteinBitscore"] = a.bitscore
-                            r.info["proteinBlastSimilarity"] = a.bitscore
-                            r.info["proteinBlastLogE"] = math.log10(a.evalue) if a.evalue > 1e-300 else -300
-                            r.info["proteinBitscoreByLength"] = a.bitscore / a.length
-                            r.info["proteinBitscoreByRefCov"] = a.bitscore / a.refCoverLength
-                            r.info["proteinBitscoreByQueryCov"] = a.bitscore / a.queryCoverLength
-                            r.info["proteinBlastRefCov"] = a.refCoverLength / protein.length
-                            r.info["proteinBlastQueryCov"] = a.queryCoverLength / protein.length
-                        res.append(r)
-                    if (len(res) == 0):
-                        res = None
-                    protein.addResult(self.moduleName, res)
-                if (withProteinMeta):
-                    protein.info["proteinAlignments"] = len(alignments)
+            elif (self.method == "sum" or self.method.startswith("top")):
                 for alignment in alignments[:thresh]:
                     ICTVName = taxoTree.getTaxoNodeFromAccession(alignment.refContig).ICTVName
                     if ICTVName in votes:
