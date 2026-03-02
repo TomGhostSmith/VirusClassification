@@ -5,11 +5,11 @@ from entity.taxoTree import taxoTree
 
 class BlastAlignment():
     # def __init__(self, ref, quality, cigar):
-    def __init__(self, alignment:str):
+    def __init__(self, alignment:str, maxScore=100):
         terms = alignment.strip().split('\t')
 
         self.ref = terms[1]
-        self.similarity = float(terms[2]) / 100
+        self.similarity = float(terms[2]) / maxScore
         self.length = int(terms[3])
         self.mismatch = int(terms[4])
         self.gapopen = int(terms[5])

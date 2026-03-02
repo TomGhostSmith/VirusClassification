@@ -106,7 +106,7 @@ class Blast(Module):
     
     def getResult(self, sample:Sample, cachedResultFP, withMeta, withCandidateMeta)->BlastResult:
         # use baseName to cache the result in the results dict
-        if (self.baseName in sample.results):
+        if (self.baseName in sample.results and not withMeta and not withCandidateMeta):
             return sample.results[self.baseName]
         
         offset, alignmentCount = self.cachedSamples[sample.id]
@@ -120,28 +120,32 @@ class Blast(Module):
                 r = BlastResult(alignment)
                 if (withCandidateMeta):
                     r.info["bitscore"] = alignment.bitscore
-                    r.info["blastSimilarity"] = alignment.similarity
-                    r.info["blastLogE"] = math.log10(alignment.evalue) if alignment.evalue > 1e-300 else -300
+                    # r.info["similarity_blast"] = alignment.similarity  # alignmnet.similarity == result.score
+                    r.info["logE_blast"] = math.log10(alignment.evalue) if alignment.evalue > 1e-300 else -300
                     r.info["bitscoreByLength"] = alignment.bitscore / alignment.length
                     r.info["bitscoreByRefCov"] = alignment.bitscore / alignment.refCoverLength
                     r.info["bitscoreByQueryCov"] = alignment.bitscore / alignment.queryCoverLength
-                    r.info["blastRefCov"] = alignment.refCoverLength / sample.length
-                    r.info["blastQueryCov"] = alignment.queryCoverLength / sample.length
+                    r.info["refCov_blast"] = alignment.refCoverLength / sample.length
+                    r.info["queryCov_blast"] = alignment.queryCoverLength / sample.length
                 results.append(r)
 
         if (len(results) == 0):
             results = None
         if withMeta:
             if (results):
-                sample.info["bestBlast"] = results[0].alignment.similarity
-                sample.info["blastAlignments"] = len(results)
+                sample.info["bestSimilarity_blast"] = results[0].alignment.similarity
+                sample.info["alignments_blast"] = len(results)
+                sample.info["bestQueryCoverage_blast"] = results[0].alignment.queryCoverLength / sample.length
+                sample.info["bestRefCoverage_blast"] = results[0].alignment.refCoverLength / sample.length
                 nodes = [taxoTree.getTaxoNodeFromAccession(r.alignment.ref).ICTVNode for r in results]
                 lca = taxoTree.ICTVTree.findLCA(nodes)
-                sample.info["blastAlignmentsLCA"] = config.rankLevels[lca.rank]
+                sample.info["alignmentsLCA_blast"] = config.rankLevels[lca.rank]
             else:
-                sample.info["bestBlast"] = 0
-                sample.info["blastAlignments"] = 0
-                sample.info["blastAlignmentsLCA"] = 0
+                sample.info["bestSimilarity_blast"] = 0
+                sample.info["alignments_blast"] = 0
+                sample.info["bestQueryCoverage_blast"] = 0
+                sample.info["bestRefCoverage_blast"] = 0
+                sample.info["alignmentsLCA_blast"] = 0
         sample.results[self.baseName] = results
         return results
     

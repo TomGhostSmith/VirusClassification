@@ -9,10 +9,6 @@ class Sample():
         self.isATCG:bool = None
         self.length:int = len(seq.seq)
         self.seq:SeqRecord = seq
-        # if (stdResult is not None):
-        #     self.stdResult = taxoTree.getTaxoNodeFromICTV(ICTVName=stdResult)
-        # else:
-        #     self.stdResult = None
         self.results:dict[str, list[Result]] = {}
         self.info = {}
         self.proteins:list[ProteinSample] = None

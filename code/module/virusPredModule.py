@@ -9,10 +9,6 @@ class VirusPred(Module):
         names = [model.moduleName for model in models]
         super().__init__('.'.join(names))
 
-    # def run(self):
-    #     for model in self.models:
-    #         model.run()
-
     def run(self, samples:list[Sample], **kwargs):
         unTerminatedSamples = samples
         virus = set()
@@ -21,7 +17,7 @@ class VirusPred(Module):
             model.getResults(unTerminatedSamples)
             s = list()
             for sample in unTerminatedSamples:
-                if sample.results[model.moduleName] is not None:
+                if sample.results[model.moduleName] is not None and sample.results[model.moduleName][0].score >= 0.5:
                     virus.add(sample.id)
                 else:
                     s.append(sample)
@@ -31,8 +27,8 @@ class VirusPred(Module):
         results = list()
         for sample in samples:
             if sample.id in virus:
-                results.append([VirusPredictionResult()])
+                results.append([VirusPredictionResult(1, True)])
             else:
-                results.append(None)
+                results.append([VirusPredictionResult(0, False)])
 
         return results

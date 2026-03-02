@@ -153,7 +153,7 @@ class Marker(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample], keepVotes=False, keepProteinRes=False, withProteinCandidateMeta=False, **kwargs):
+    def run(self, samples:list[Sample], keepVotes=False, keepProteinRes=False, withProteinMeta=False, withProteinCandidateMeta=False, **kwargs):
         samplesToRun:list[Sample] = list()
         NucleotideUtils.extractProtein(samples)
 
@@ -183,12 +183,12 @@ class Marker(Module):
             self.LCAs = json.load(fp)
 
         cachedResultFP = open(self.cacheFile)
-        results = [self.getResult(sample, cachedResultFP, keepVotes, keepProteinRes, withProteinCandidateMeta) for sample in samples]
+        results = [self.getResult(sample, cachedResultFP, keepVotes, keepProteinRes, withProteinMeta, withProteinCandidateMeta) for sample in samples]
         cachedResultFP.close()
 
         return results
     
-    def getResult(self, sample:Sample, cachedResultFP, keepVotes, keepProteinRes, withProteinCandidateMeta)->PlainResult:
+    def getResult(self, sample:Sample, cachedResultFP, keepVotes, keepProteinRes, withProteinMeta, withProteinCandidateMeta)->PlainResult:
         # note: result of basename is not available
         result = None
         
@@ -199,6 +199,10 @@ class Marker(Module):
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
+                if (withProteinMeta):
+                    markerName = self.LCAs[alignments[0].ref]
+                    markerRank = taxoTree.ICTVTree.nodes[markerName].rank
+                    protein.info["bestMarker"] = config.rankLevels[markerRank]
                 if (keepProteinRes):
                     res = []
                     for a in alignments:
@@ -229,6 +233,10 @@ class Marker(Module):
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
+                if (withProteinMeta):
+                    markerName = self.LCAs[alignments[0].ref]
+                    markerRank = taxoTree.ICTVTree.nodes[markerName].rank
+                    protein.info["bestMarker"] = config.rankLevels[markerRank]
                 if (keepProteinRes):
                     res = []
                     for a in alignments:

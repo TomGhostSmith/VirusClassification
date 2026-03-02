@@ -53,6 +53,7 @@ class ProteinXGBoostLTR(Module):
         # basic feature independent on all the model
         for sample in samples:
             sample.info["length"] = sample.length
+            sample.info["proteinCount"] = len(sample.proteins)
             for protein in sample.proteins:
                 protein.info["proteinLength"] = protein.length
                 protein.info["proteinIndex"] = protein.index

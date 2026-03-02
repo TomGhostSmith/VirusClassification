@@ -108,17 +108,15 @@ class MMseqs(Module):
         
         offset, alignmentCount = self.cachedSamples[sample.id]
         cachedResultFP.seek(offset)
-        alignments:list[BlastAlignment] = [BlastAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
+        alignments:list[BlastAlignment] = [BlastAlignment(cachedResultFP.readline(), 1) for _ in range(alignmentCount)]
         alignments = sorted(alignments, key=lambda x:x.similarity, reverse=True)
         
         results:list[BlastResult] = []
         targetLen = sample.length * self.coverage / 100
         for alignment in alignments:
             if (alignment.ref is not None and alignment.queryCoverLength >= targetLen and alignment.similarity >= self.identity/100):
-                r = BlastResult()
-                r.addAlignment(alignment)
+                r = BlastResult(alignment)
                 results.append(r)
-                # result.addAlignment(alignment)
 
         if (len(results) == 0):
             results = None

@@ -153,6 +153,7 @@ class Diamond(Module):
 
         return results
     
+
     def getResult(self, sample:Sample, cachedResultFP, withMeta, withProteinMeta, withProteinCandidateMeta, keepProteinRes)->PlainResult:
         # note: result of basename is not available    
         votes:dict[str, int] = dict()
@@ -163,24 +164,28 @@ class Diamond(Module):
             else:
                 thresh = None
 
+        matchedProtein = 0
+
         for protein in sample.proteins:
             offset, alignmentCount = self.cachedSamples[protein.id]
             cachedResultFP.seek(offset)
             alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline(), self.maxScore) for _ in range(alignmentCount)]
+            if (len(alignments) > 0):
+                matchedProtein += 1
             alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
             if (keepProteinRes):
                 res = []
                 for a in alignments:
                     r = DiamondResult(a)
                     if (withProteinCandidateMeta):
-                        r.info["proteinBitscore"] = a.bitscore
-                        r.info["proteinBlastSimilarity"] = a.bitscore
-                        r.info["proteinBlastLogE"] = math.log10(a.evalue) if a.evalue > 1e-300 else -300
-                        r.info["proteinBitscoreByLength"] = a.bitscore / a.length
-                        r.info["proteinBitscoreByRefCov"] = a.bitscore / a.refCoverLength
-                        r.info["proteinBitscoreByQueryCov"] = a.bitscore / a.queryCoverLength
-                        r.info["proteinBlastRefCov"] = a.refCoverLength / protein.length
-                        r.info["proteinBlastQueryCov"] = a.queryCoverLength / protein.length
+                        r.info[f"proteinBitscore_{self.tool}"] = a.bitscore
+                        # r.info[f"proteinSimilarity_{self.tool}"] = a.bitscore # alignmnet.similarity == result.score
+                        r.info[f"proteinLogE_{self.tool}"] = math.log10(a.evalue) if a.evalue > 1e-300 else -300
+                        r.info[f"proteinBitscoreByLength_{self.tool}"] = a.bitscore / a.length
+                        r.info[f"proteinBitscoreByRefCov_{self.tool}"] = a.bitscore / a.refCoverLength
+                        r.info[f"proteinBitscoreByQueryCov_{self.tool}"] = a.bitscore / a.queryCoverLength
+                        r.info[f"proteinRefCov_{self.tool}"] = a.refCoverLength / protein.length
+                        r.info[f"proteinQueryCov_{self.tool}"] = a.queryCoverLength / protein.length
                     res.append(r)
                 if (len(res) == 0):
                     res = None
@@ -232,17 +237,11 @@ class Diamond(Module):
         else:
             maxVotes = 0
             results = None
-
-
-        proteinCount = len(sample.proteins)
-        if (proteinCount == 1 and results is None):
-            proteinCount = 0.5
             
         if withMeta:
-            sample.info[f"protein_count"] = len(sample.proteins)
-            sample.info[f"protein_count_match_{self.tool}"] = proteinCount
-            sample.info[f"protein_match_ratio_{self.tool}"] = maxVotes / len(sample.proteins) if len(sample.proteins) > 0 else 0
-
+            sample.info[f"matchedProtein_{self.tool}"] = matchedProtein
+            sample.info[f"proteinMatchRatio_{self.tool}"] = matchedProtein / len(sample.proteins) if len(sample.proteins) > 0 else 0
+            sample.info[f"maxScore_{self.tool}"] = maxVotes / len(sample.proteins) if len(sample.proteins) > 0 else 0
         
         return results
     

@@ -121,8 +121,8 @@ class Minimap(Module):
                 r = MinimapResult(alignment)
                 if (withCandidateMeta):
                     r.info["mapQ"] = alignment.quality
-                    r.info["minimapRefCov"] = alignment.refCoverLength / sample.length
-                    r.info["minimapQueryCov"] = alignment.queryCoverLength / sample.length
+                    r.info["refCov_minimap"] = alignment.refCoverLength / sample.length
+                    r.info["queryCov_minimap"] = alignment.queryCoverLength / sample.length
                 
                 results.append(r)
                 # result.addAlignment(alignment)
@@ -133,18 +133,18 @@ class Minimap(Module):
         if withMeta:
             if results:
                 sample.info["bestmapQ"] = results[0].alignment.quality
-                sample.info["alignments"] = len(results)
-                sample.info["bestQueryCoverage"] = results[0].alignment.queryCoverLength/sample.length
-                sample.info["bestRefCoverage"] = results[0].alignment.refCoverLength/sample.length
+                sample.info["alignments_minimap"] = len(results)
+                sample.info["bestQueryCoverage_minimap"] = results[0].alignment.queryCoverLength/sample.length
+                sample.info["bestRefCoverage_minimap"] = results[0].alignment.refCoverLength/sample.length
                 nodes = [taxoTree.getTaxoNodeFromAccession(r.alignment.ref).ICTVNode for r in results]
                 lca = taxoTree.ICTVTree.findLCA(nodes)
-                sample.info["alignmentsLCA"] = config.rankLevels[lca.rank]
+                sample.info["alignmentsLCA_minimap"] = config.rankLevels[lca.rank]
             else:
                 sample.info["bestmapQ"] = -1
-                sample.info["alignments"] = 0
-                sample.info["bestQueryCoverage"] = 0
-                sample.info["bestRefCoverage"] = 0
-                sample.info["alignmentsLCA"] = 0
+                sample.info["alignments_minimap"] = 0
+                sample.info["bestQueryCoverage_minimap"] = 0
+                sample.info["bestRefCoverage_minimap"] = 0
+                sample.info["alignmentsLCA_minimap"] = 0
 
         sample.results[self.baseName] = results
         return results

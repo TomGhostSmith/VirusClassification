@@ -9,6 +9,15 @@ from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 from tqdm import tqdm
 
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning
+)
+
+import upsetplot
+from upsetplot import UpSet
+
 from moduleResult.virusPredictionResult import VirusPredictionResult
 
 from sklearn.metrics import roc_auc_score, average_precision_score
@@ -424,6 +433,9 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     stdResultRank = list()
     modelResults:dict[str, list[tuple[str, str, str, str, str, str]]] = {model.moduleName: [] for model in models.values()} # for each model, provide a list of (model_result, model_result_rank, LCA_rank)
 
+
+    upset = {m: set() for m in models.keys()}
+
     summaryDict = {
         "id": [],
         "length": [],
@@ -487,6 +499,9 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
                     else:
                         tops = "N/A"
                     modelResults[model.moduleName].append((predNode.name, predNode.rank, LCANode.name, LCANode.rank, tops))
+
+                    if config.rankLevels[LCANode.rank] >= genusRank:
+                        upset[modelDesc].add(sample.id)
                 else:
                     modelResults[model.moduleName].append((predNode.name, predNode.rank, "N/A", "N/A", "N/A"))
             else:
@@ -556,6 +571,18 @@ def sampleWiseAnalysis(models:dict[str, Module], dataset, evaluationMethod, subs
     
     with pandas.ExcelWriter(fileName) as writer:
         summaryDF.to_excel(writer, sheet_name="raw results", index=False)
+
+
+    if (len(upset) > 1):
+        analysisIndex = 0
+        fileName = f"{config.analysisFolder}/figure/upset_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.png"
+        while (os.path.exists(fileName)):
+            analysisIndex += 1
+            fileName = f"{config.analysisFolder}/figure/upset_{dataset}_{subset}_{evaluationMethod}_{missingLabel}_{analysisIndex}.png"
+    
+        up = UpSet(upsetplot.from_contents(upset), subset_size="count", show_counts=True, sort_categories_by=None)
+        up.plot()
+        plt.savefig(fileName)
 
     analysis(models, analyseList, summaryDF, dataset, subset, f"sampleAnalysis_{dataset}_{subset}_{evaluationMethod}_{missingLabel}", evaluationMethod)
 

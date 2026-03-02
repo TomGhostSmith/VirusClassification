@@ -18,3 +18,11 @@ class ProteinSample():
         self.seq:SeqRecord = seq
         self.results:dict[str, list[Result]] = {}
         self.info = {}
+
+    def addResult(self, name:str, results:list[Result]):
+        if results is not None:
+            results = results[:20]  # at most store 20 results
+            for result in results:
+                result.calcTaxoNode()
+        
+        self.results[name] = results

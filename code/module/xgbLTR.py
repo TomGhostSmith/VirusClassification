@@ -1,5 +1,7 @@
 from prototype.module import Module
 from utils import trainUtils
+from utils import IOUtils
+from utils.NucleotideUtils import NucleotideUtils
 from entity.taxoNode import TaxoNode
 from entity.taxoTree import taxoTree
 from moduleResult.plainResult import PlainResult
@@ -52,6 +54,7 @@ class XGBoostLTR(Module):
         # basic feature independent on all the model
         for sample in samples:
             sample.info["length"] = sample.length
+            sample.info["proteinCount"] = len(sample.proteins)
         features = {}
         candidateFeatures = []
         candidateRanges:list[tuple[int, int]] = []
@@ -146,12 +149,13 @@ class XGBoostLTR(Module):
 
     def train(self):
         samples = trainUtils.loadTrainsetSamples(self.trainset, self.evalMethod)
+        NucleotideUtils.extractProtein(samples)
 
         for module in self.featureModules:
             module.getResults(samples, keepVotes=True, withMeta=True)
         
         for module in self.modules:
-            module.getResults(samples, keepVotes=True, withMeta=True)
+            module.getResults(samples, keepVotes=True, withCandidateMeta=True)
 
         samplesWithGT = []
         for sample in samples:
@@ -198,19 +202,21 @@ class XGBoostLTR(Module):
         if (os.path.exists(self.modelListFile)):
             with open(self.modelListFile) as fp:
                 self.moduleListMap = json.load(fp)
+
+        NucleotideUtils.extractProtein(samples)
         for module in self.featureModules:
             module.getResults(samples, keepVotes=True, withMeta=True)
         for module in self.modules:
-            module.getResults(samples, keepVotes=True, withMeta=True)
+            module.getResults(samples, keepVotes=True, withCandidateMeta=True)
         mainModel = self.loadModel()
         features, candidateList, candidateRanges = self.getFeatures(samples)
         scores:list[float] = mainModel.predict(features, )
 
         # for debug
-        # f = features.copy()
-        # f["result"] = scores
-        # f["candidate"] = [n.ICTVName for n in candidateList]
-        # f.to_csv("working/XGBLTR.csv")
+        f = features.copy()
+        f["result"] = scores
+        f["candidate"] = [n.ICTVName for n in candidateList]
+        f.to_csv("working/XGBLTR2.csv")
 
         results = [self.getResult(sample, candidateList[start:end], scores[start:end]) for sample, (start, end) in zip(samples, candidateRanges)]
 
@@ -242,20 +248,21 @@ class XGBoostLTR(Module):
 
 
         kfold = GroupKFold(n_splits=5)
-        splits = kfold.split(features, targets, groupIDs)
+        splits = list(kfold.split(features, targets, groupIDs))
 
         bestScore = -numpy.inf
         bestModel = None
+        bestParam = None
 
         param_grid = {
-            "max_depth": [3, 4, 6, 8, 10],
-            "subsample": [0.7, 0.8, 1.0],
-            "colsample_bytree": [0.7, 0.8, 1.0],
-            "n_estimators": [50, 100, 200, 500]
+            "max_depth": [3, 4, 5],
+            "subsample": [0.6, 0.8, 1.0],
+            "colsample_bytree": [0.6, 0.8, 1.0],
+            "n_estimators": [50, 100, 200]
         }
 
         for param in list(ParameterGrid(param_grid)):
-            for train_idx, val_idx in splits:
+            for fold_index, (train_idx, val_idx) in enumerate(splits):
                 x_train, x_val = features.iloc[train_idx], features.iloc[val_idx]
                 y_train, y_val = targets[train_idx], targets[val_idx]
                 gid_train, gid_val = groupIDs[train_idx], groupIDs[val_idx]
@@ -289,10 +296,13 @@ class XGBoostLTR(Module):
                 y_pred = model.predict(x_val)
                 score = self.scoreFunc(y_val, y_pred, gid_val)
 
+                # IOUtils.showInfo(f"XGB {param} fold {fold_index}: score={score}")
                 if score > bestScore:
                     bestModel = model
+                    bestParam = param
 
         # Save to file
+        IOUtils.showInfo(f"best model in training: {bestParam}")
         os.makedirs(f"{config.modelRoot}/XGBoostLTR", exist_ok=True)
         bestModel.save_model(f"{config.modelRoot}/XGBoostLTR/{saveFile}")   # JSON is human-readable
         return bestModel
