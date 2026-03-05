@@ -22,9 +22,10 @@ class DiamondGenus(Diamond):
         if (method not in ["sum", "vote"] and not method.startswith("top")):
             raise ValueError("Unsupported pooling method")
         super().__init__(reference, method, threads, "genus", tool)
+        self.moduleName = f'diamondGenus-ref={self.reference};tool={self.tool};method={self.method}'
 
     
-    def getResult(self, sample:Sample, cachedResultFP, withMeta, withProteinMeta, withProteinCandidateMeta, keepProteinRes)->PlainResult:
+    def getResult(self, sample:Sample, cachedResultFP, withMeta, withProteinMeta, withProteinCandidateMeta, keepProteinRes, withPoolingMeta)->PlainResult:
         # note: result of basename is not available    
         votes:dict[str, int] = dict()
 
@@ -34,10 +35,14 @@ class DiamondGenus(Diamond):
             else:
                 thresh = None
 
+        matchedProtein = 0
+
         for protein in sample.proteins:
             offset, alignmentCount = self.cachedSamples[protein.id]
             cachedResultFP.seek(offset)
             alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline(), self.maxScore) for _ in range(alignmentCount)]
+            if (len(alignments) > 0):
+                matchedProtein += 1
             alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
             candidates:dict[str, BlastGenusResult] = {}
             for alignment in alignments:
@@ -45,7 +50,7 @@ class DiamondGenus(Diamond):
                 genus = None
                 for n in reversed(node.path):
                     if n.rank == "genus":
-                        genus = n
+                        genus = n.name
                 
                 if (genus is None):
                     continue
@@ -77,6 +82,12 @@ class DiamondGenus(Diamond):
                     r.info[f"proteinCandidateScoreStd_{self.tool}"] = numpy.std(scores)
                     r.info[f"proteinCandidateHits_{self.tool}"] = len(scores)
 
+            if withPoolingMeta and res:
+                for r in res:
+                    scores = numpy.array([a.similarity for a in r.alignments])
+                    r.info["maxScore"] = max(scores)
+                    r.info["sumScore"] = sum(scores)
+                    r.info["minScore"] = min(scores)
 
             if (res):
                 if (self.method == "vote"):
@@ -112,15 +123,10 @@ class DiamondGenus(Diamond):
         else:
             maxVotes = 0
             results = None
-
-
-        proteinCount = len(sample.proteins)
-        if (proteinCount == 1 and results is None):
-            proteinCount = 0.5
             
         if withMeta:
-            sample.info[f"protein_count"] = len(sample.proteins)
-            sample.info[f"protein_count_match_{self.tool}"] = proteinCount
-            sample.info[f"protein_match_ratio_{self.tool}"] = maxVotes / len(sample.proteins) if len(sample.proteins) > 0 else 0
-
+            sample.info[f"matchedProtein_{self.tool}"] = matchedProtein
+            sample.info[f"proteinMatchRatio_{self.tool}"] = matchedProtein / len(sample.proteins) if len(sample.proteins) > 0 else 0
+            sample.info[f"maxScore_{self.tool}"] = maxVotes / len(sample.proteins) if len(sample.proteins) > 0 else 0
+        
         return results

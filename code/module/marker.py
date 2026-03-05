@@ -191,6 +191,8 @@ class Marker(Module):
     def getResult(self, sample:Sample, cachedResultFP, keepVotes, keepProteinRes, withProteinMeta, withProteinCandidateMeta)->PlainResult:
         # note: result of basename is not available
         result = None
+
+        keepProteinRes = True
         
         votes:dict[str, int] = {}
         if (self.method == "vote"):
@@ -200,9 +202,21 @@ class Marker(Module):
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
                 if (withProteinMeta):
-                    markerName = self.LCAs[alignments[0].ref]
-                    markerRank = taxoTree.ICTVTree.nodes[markerName].rank
-                    protein.info["bestMarker"] = config.rankLevels[markerRank]
+                    if (len(alignments) > 0):
+                        markerName = self.LCAs[alignments[0].ref]
+                        markerRank = taxoTree.ICTVTree.nodes[markerName].rank
+                        protein.info["bestMarker"] = config.rankLevels[markerRank]
+                        markerNodes = [taxoTree.ICTVTree.nodes[self.LCAs[a.ref]] for a in alignments]
+                        rankLCA = taxoTree.ICTVTree.findLCA(markerNodes).rank
+                        if (rankLCA.startswith("sub")):
+                            normalizedRankLCA = rankLCA[3:]
+                        else:
+                            normalizedRankLCA = rankLCA
+                            
+                        protein.info["markerRank"] = config.rankLevels[rankLCA]
+                        protein.info["normalizedMarkerRank"] = config.rankLevels[normalizedRankLCA]
+                        protein.info["markerRankBin"] = getRankBin(normalizedRankLCA)
+                        protein.info["bin"] = ""
                 if (keepProteinRes):
                     res = []
                     for a in alignments:
@@ -210,7 +224,7 @@ class Marker(Module):
                         r = MarkerResult(a, markerName)
                         if (withProteinCandidateMeta):
                             markerRank = taxoTree.ICTVTree.nodes[markerName].rank
-                            r.info["markerRank"] = config.rankLevels[markerRank]
+                            r.info["rank"] = config.rankLevels[markerRank]
                         res.append(r)
                     if (len(res) == 0):
                         res = None
@@ -234,9 +248,19 @@ class Marker(Module):
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
                 if (withProteinMeta):
-                    markerName = self.LCAs[alignments[0].ref]
-                    markerRank = taxoTree.ICTVTree.nodes[markerName].rank
-                    protein.info["bestMarker"] = config.rankLevels[markerRank]
+                    if (len(alignments) > 0):
+                        markerName = self.LCAs[alignments[0].ref]
+                        markerRank = taxoTree.ICTVTree.nodes[markerName].rank
+                        protein.info["bestMarker"] = config.rankLevels[markerRank]
+                        markerNodes = [taxoTree.ICTVTree.nodes[self.LCAs[a.ref]] for a in alignments]
+                        rankLCA = taxoTree.ICTVTree.findLCA(markerNodes).rank
+                        if (rankLCA.startswith("sub")):
+                            normalizedRankLCA = rankLCA[3:]
+                        else:
+                            normalizedRankLCA = rankLCA
+                    protein.info["markerRank"] = config.rankLevels[rankLCA]
+                    protein.info["normalizedMarkerRank"] = config.rankLevels[normalizedRankLCA]
+                    protein.info["markerRankBin"] = getRankBin(normalizedRankLCA)
                 if (keepProteinRes):
                     res = []
                     for a in alignments:
@@ -244,7 +268,7 @@ class Marker(Module):
                         r = MarkerResult(a, markerName)
                         if (withProteinCandidateMeta):
                             markerRank = taxoTree.ICTVTree.nodes[markerName].rank
-                            r.info["markerRank"] = config.rankLevels[markerRank]
+                            r.info["rank"] = config.rankLevels[markerRank]
                         res.append(r)
                     if (len(res) == 0):
                         res = None
@@ -357,3 +381,10 @@ class Marker(Module):
             with open(self.markerDB) as fp:
                 self.LCAs = json.load(fp)
         return self.LCAs
+
+def getRankBin(rank):
+    if rank in ["species", "genus"]:
+        return "specific"
+    if rank in ["family", "order"]:
+        return "medium"
+    return "coarse"

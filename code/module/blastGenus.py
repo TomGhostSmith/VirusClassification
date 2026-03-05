@@ -11,14 +11,11 @@ from moduleResult.blastAlignment import BlastAlignment
 
 class BlastGenus(Blast):
     def __init__(self, reference, threads=multiprocessing.cpu_count(), mode="blastn", evalue=1e-3):
-        super().__init__(reference, threads. mode, evalue)
+        super().__init__(reference, threads, mode, evalue)
         self.moduleName = f"blastGenus-ref={self.reference};mode={mode};evalue={evalue}"
 
     def getResult(self, sample, cachedResultFP, withMeta, withCandidateMeta):
         # use baseName to cache the result in the results dict
-        if (self.baseName in sample.results):
-            return sample.results[self.baseName]
-        
         offset, alignmentCount = self.cachedSamples[sample.id]
         cachedResultFP.seek(offset)
         alignments:list[BlastAlignment] = [BlastAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
@@ -35,7 +32,7 @@ class BlastGenus(Blast):
                 genus = None
                 for n in reversed(node.path):
                     if n.rank == "genus":
-                        genus = n
+                        genus = n.name
                 
                 if (genus is None):
                     continue

@@ -115,7 +115,7 @@ class Diamond(Module):
         os.remove(queryFile)
 
 
-    def run(self, samples:list[Sample], keepProteinRes=False, withMeta=False, withProteinMeta=False, withProteinCandidateMeta=False, **kwargs):
+    def run(self, samples:list[Sample], keepProteinRes=False, withMeta=False, withProteinMeta=False, withProteinCandidateMeta=False, withPoolingMeta=False, **kwargs):
         samplesToRun:list[Sample] = list()
         NucleotideUtils.extractProtein(samples)
 
@@ -148,13 +148,13 @@ class Diamond(Module):
                 self.c2p = json.load(fp)
 
         cachedResultFP = open(self.cacheFile)
-        results = [self.getResult(sample, cachedResultFP, withMeta, withProteinMeta, withProteinCandidateMeta, keepProteinRes) for sample in samples]
+        results = [self.getResult(sample, cachedResultFP, withMeta, withProteinMeta, withProteinCandidateMeta, keepProteinRes, withPoolingMeta) for sample in samples]
         cachedResultFP.close()
 
         return results
     
 
-    def getResult(self, sample:Sample, cachedResultFP, withMeta, withProteinMeta, withProteinCandidateMeta, keepProteinRes)->PlainResult:
+    def getResult(self, sample:Sample, cachedResultFP, withMeta, withProteinMeta, withProteinCandidateMeta, keepProteinRes, withPoolingMeta)->PlainResult:
         # note: result of basename is not available    
         votes:dict[str, int] = dict()
 
