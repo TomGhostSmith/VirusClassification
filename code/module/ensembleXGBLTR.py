@@ -23,11 +23,13 @@ import os
 
 class EnsembleXGBoostLTR(Module):
     def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], proteinModules:list[Module], poolingModule:Module,
-                contigFeatures:list[str], candidateFeatures:list[str], poolingFeature:str, poolingFeatureRange:list, tops:int, limitOutput=True, complete="no", loss="mse"):
+                contigFeatures:list[str], candidateFeatures:list[str], poolingFeature:str, poolingFeatureRange:list, tops:int, limitOutput=True, complete="no", excludeNoHit=False, loss="mse"):
         moduleNames = "+".join([module.moduleName for module in modules])
         proteinModuleNames = "+".join([module.moduleName for module in proteinModules])
         contigFeatureNames = "+".join(contigFeatures)
-        self.baseName = f"EnsembleXGBoostLTR-train={trainset};eval={evalMethod};modules={moduleNames};proteinModules={proteinModuleNames};poolingModule={poolingModule.moduleName};contigFeatures={contigFeatureNames};candidateFeatures={candidateFeatures};poolingFeature={poolingFeature};tops={tops};complete={complete};loss={loss}"
+        candidateFeatureNames = "+".join(candidateFeatures)
+        self.baseName = f"EnsembleXGBoostLTR-train={trainset};eval={evalMethod};modules={moduleNames};proteinModules={proteinModuleNames};poolingModule={poolingModule.moduleName};contigFeatures={contigFeatureNames};candidateFeatures={candidateFeatureNames};poolingFeature={poolingFeature};tops={tops};complete={complete};excludeNoHit={excludeNoHit},loss={loss}"
+        self.excludeNoHit = excludeNoHit
         super().__init__(f"{self.baseName};limitOutput={limitOutput}")
         self.trainset = trainset
         self.evalMethod = evalMethod
@@ -68,8 +70,6 @@ class EnsembleXGBoostLTR(Module):
         for sample in samples:
             sample.info["length"] = sample.length
             sample.info["proteinCount"] = len(sample.proteins)
-
-        name2ID:dict[str, int] = {n: i for i, n in enumerate(taxoTree.taxaNames["genus"])}
 
         features = {}
         candidateFeatures = []
@@ -122,6 +122,8 @@ class EnsembleXGBoostLTR(Module):
         pooling:dict[str, list[ProteinSample]] = {g: [] for g in self.poolingFeatureRange}
         for protein in sample.proteins:
             group = protein.info.get(self.poolingFeature, "N/A")
+            if self.excludeNoHit and protein.info["proteinAlignments"] == 0:
+                continue
             if group != "N/A":
                 pooling[group].append(protein)
         
@@ -249,7 +251,7 @@ class EnsembleXGBoostLTR(Module):
         NucleotideUtils.extractProtein(samples)
 
         for module in self.featureModules:
-            module.getResults(samples, withMeta=True)
+            module.getResults(samples, withMeta=True, withProteinMeta=True)
         
         for module in self.modules:
             module.getResults(samples, keepVotes=True, withCandidateMeta=True)
@@ -304,11 +306,11 @@ class EnsembleXGBoostLTR(Module):
             mainModel = self.train()
         else:
             mainModelName = self.moduleListMap[self.baseName]
-            if (not os.path.exists(f"{config.modelRoot}/ProteinXGBoostLTR/{mainModelName}")):
+            if (not os.path.exists(f"{config.modelRoot}/EnsembleXGBoostLTR/{mainModelName}")):
                 mainModel = self.train()
             else:
-                mainModel = xgboost.XGBRegressor()
-                mainModel.load_model(f"{config.modelRoot}/ProteinXGBoostLTR/{mainModelName}")
+                mainModel = self.clz()
+                mainModel.load_model(f"{config.modelRoot}/EnsembleXGBoostLTR/{mainModelName}")
         return mainModel            
 
     def run(self, samples:list[Sample], keepProteinRes=False, **kwargs):
@@ -318,7 +320,7 @@ class EnsembleXGBoostLTR(Module):
 
         NucleotideUtils.extractProtein(samples)
         for module in self.featureModules:
-            module.getResults(samples, withMeta=True)
+            module.getResults(samples, withMeta=True, withProteinMeta=True)
         
         for module in self.modules:
             module.getResults(samples, keepVotes=True, withCandidateMeta=True)
@@ -377,8 +379,8 @@ class EnsembleXGBoostLTR(Module):
 
         param_grid = {
             "max_depth": [3, 4, 5],
-            "subsample": [0.6, 0.8, 0.9],
-            "colsample_bytree": [0.6, 0.8, 0.9],
+            "subsample": [0.6, 0.8, 1.0],
+            "colsample_bytree": [0.6, 0.8, 1.0],
             "n_estimators": [50, 100, 200]
         }
 

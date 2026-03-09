@@ -43,7 +43,7 @@ from openpyxl.drawing.image import Image as XLImage
 
 
 def testModel(models:dict[str, Module], dataset, evaluationMethod, subset='all', missingLabel="Unknown"):
-    IOUtils.showInfo(f"Test {len(models)} models on {dataset}")
+    IOUtils.showInfo(f"Test {len(models)} models on {dataset}-{subset}")
     queryFilePath = f"{datasetRoot}/{dataset}/{dataset}.fasta"
     if (subset != 'all'):
         querySubsetFilePath = f"{datasetRoot}/{dataset}/{subset}.txt"
