@@ -192,7 +192,11 @@ class Marker(Module):
         # note: result of basename is not available
         result = None
 
-        keepProteinRes = True
+        partials = {}
+        partials["00"] = 0
+        partials["01"] = 0
+        partials["10"] = 0
+        partials["11"] = 0
         
         votes:dict[str, int] = {}
         if (self.method == "vote"):
@@ -201,6 +205,9 @@ class Marker(Module):
                 cachedResultFP.seek(offset)
                 alignments:list[DiamondAlignment] = [DiamondAlignment(cachedResultFP.readline()) for _ in range(alignmentCount)]
                 alignments = sorted(alignments, key=cmp_to_key(lambda a, b: -1 if a.betterThan(b) else (1 if b.betterThan(a) else 0)))
+                start = protein.head.find("partial=") + 8
+                parti = protein.head[start:start+2]
+                partials[parti] += 1
                 if (withProteinMeta):
                     if (len(alignments) > 0):
                         markerName = self.LCAs[alignments[0].ref]
@@ -216,6 +223,8 @@ class Marker(Module):
                         protein.info["markerRank"] = config.rankLevels[rankLCA]
                         protein.info["normalizedMarkerRank"] = config.rankLevels[normalizedRankLCA]
                         protein.info["markerRankBin"] = getRankBin(normalizedRankLCA)
+                        
+                        protein.info["partial"] = parti
                         protein.info["bin"] = ""
                 if (keepProteinRes):
                     res = []
@@ -279,6 +288,10 @@ class Marker(Module):
                         votes[ICTVName] += alignment.similarity
                     else:
                         votes[ICTVName] = alignment.similarity
+
+        for k, v in partials.items():
+            sample.info[f"protein_partial_{k}"] = v
+
         if len(votes) > 0:
             if (self.threshRank == 'vitax'):
                 threshold = self.thresh

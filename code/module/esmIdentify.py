@@ -11,7 +11,7 @@ from entity.sample import Sample
 from entity.proteinSample import ProteinSample
 from utils.NucleotideUtils import NucleotideUtils
 
-class esmIdentify(Module):
+class ESMIdentify(Module):
     def __init__(self):
         self.viruses = set()
         # names = {

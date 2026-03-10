@@ -4,7 +4,7 @@ from module.virusPredModule import VirusPred
 from module.minimap import Minimap
 from module.minimapThresholdModule import MinimapThresholdModule
 from module.minimapThreshRankModule import MinimapThreshRankModule
-from module.esmIdentify import esmIdentify
+from module.esmIdentify import ESMIdentify
 from module.mlModule import MLModule
 from entity.sample import Sample
 from utils import IOUtils
@@ -52,7 +52,7 @@ class Pipeline(Module):
                 param["pred minimap"] = [model.reference, model.baseName, model.factors]
             elif (isinstance(model, Minimap)):
                 param["pred minimap"] = [model.reference, model.mode, "-"]
-            elif (isinstance(model, esmIdentify)):
+            elif (isinstance(model, ESMIdentify)):
                 param["ESM"] = model.moduleName
         
         if isinstance(self.virusTaxo, MinimapMLMergeModule):

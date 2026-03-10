@@ -23,7 +23,7 @@ import os
 
 class EnsembleXGBoostLTR(Module):
     def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], proteinModules:list[Module], poolingModule:Module,
-                contigFeatures:list[str], candidateFeatures:list[str], poolingFeature:str, poolingFeatureRange:list, tops:int, limitOutput=True, complete="no", excludeNoHit=False, loss="mse"):
+                contigFeatures:list[str], candidateFeatures:list[str], poolingFeature:str, poolingFeatureRange:list, tops:int, limitOutput=True, complete="no", loss="mse", excludeNoHit=False):
         moduleNames = "+".join([module.moduleName for module in modules])
         proteinModuleNames = "+".join([module.moduleName for module in proteinModules])
         contigFeatureNames = "+".join(contigFeatures)
