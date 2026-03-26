@@ -11,6 +11,7 @@ class Sample():
         self.seq:SeqRecord = seq
         self.results:dict[str, list[Result]] = {}
         self.info = {}
+        self.flags:dict[str, set[str]] = {}
         self.proteins:list[ProteinSample] = None
         self.cDNAs:list[ProteinSample] = None
 
@@ -21,3 +22,16 @@ class Sample():
                 result.calcTaxoNode()
         
         self.results[name] = results
+
+    def simplify(self, infos=[], proteinInfos=[]):
+        s = Sample(self.seq)
+        for k in infos:
+            s.info[k] = self.info.get(k)
+        s.proteins = []
+        for protein in self.proteins:
+            p = ProteinSample(protein.seq, protein.head)
+            for k in proteinInfos:
+                p.info[k] = protein.info.get(k)
+            s.proteins.append(p)
+        
+        return s

@@ -8,6 +8,11 @@ class ProteinSample():
         if (head is None):
             head = seq.description
         self.head = head
+        if ("partial=" in head):
+            start = head.find("partial=") + 8
+            self.partial = head[start:start+2]
+        else:
+            self.partial = None
         splitID = self.id.rsplit('_', 1)
         self.contigID = splitID[0]
         if (len(splitID) == 2):
