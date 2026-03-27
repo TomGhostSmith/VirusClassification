@@ -6,13 +6,16 @@ import torch
 import numpy
 import shutil
 import subprocess
+import multiprocessing
 
-from prototype.module import Module
-from entity.sample import Sample
-from moduleResult.plainResult import PlainResult
 from config import config
 from utils import IOUtils
-from entity.taxoTree import taxoTree
+from entity.sample import Sample
+from prototype.module import Module
+from moduleResult.plainResult import PlainResult
+
+if multiprocessing.current_process().name == "MainProcess":
+    from entity.taxoTree import taxoTree
 
 class DNATaxo(Module):
     def __init__(self, modelName, rank):

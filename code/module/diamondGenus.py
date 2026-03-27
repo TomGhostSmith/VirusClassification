@@ -1,21 +1,16 @@
-# reconstructing
 import numpy
-from functools import cmp_to_key
 import multiprocessing
+from functools import cmp_to_key
 
 from config import config
-from prototype.module import Module
+from entity.sample import Sample
 from module.diamond import Diamond
 from moduleResult.plainResult import PlainResult
 from moduleResult.diamondAlignment import DiamondAlignment
-from moduleResult.diamondResult import DiamondResult
 from moduleResult.blastGenusResult import BlastGenusResult
-from entity.sample import Sample
-from entity.proteinSample import ProteinSample
-from entity.taxoTree import taxoTree
 
-from utils import IOUtils
-from utils.NucleotideUtils import NucleotideUtils
+if multiprocessing.current_process().name == "MainProcess":
+    from entity.taxoTree import taxoTree
 
 class DiamondGenus(Diamond):
     def __init__(self, reference, method, threads=multiprocessing.cpu_count(), tool="diamond"):

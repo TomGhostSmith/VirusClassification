@@ -1,29 +1,30 @@
-# reconstructing
 import os
 import json
-import math
 import subprocess
-from functools import cmp_to_key
 import multiprocessing
+from functools import cmp_to_key
 
 from config import config
+from utils import IOUtils
+from entity.sample import Sample
 from prototype.module import Module
 from moduleResult.plainResult import PlainResult
-from moduleResult.diamondAlignment import DiamondAlignment
 from moduleResult.markerResult import MarkerResult
-from entity.sample import Sample
-from entity.proteinSample import ProteinSample
-from entity.taxoTree import taxoTree
+from moduleResult.diamondAlignment import DiamondAlignment
 
-from utils import IOUtils
-from utils.NucleotideUtils import NucleotideUtils
+if multiprocessing.current_process().name == "MainProcess":
+    from entity.taxoTree import taxoTree
+    from utils.NucleotideUtils import NucleotideUtils
 
 class Marker(Module):
-    def __init__(self, reference, method, threads=multiprocessing.cpu_count(), threshRank='species', coverage=None, identity=50, thresh=0.5, queryMethod="sensitive"):
+    def __init__(self, reference, method, threads=multiprocessing.cpu_count(), threshRank='species', coverage=None, identity=50, thresh=0.5, queryMethod="sensitive", tool="diamond"):
         if (method not in ["sum", "vote"] and not method.startswith("top")):
             raise ValueError("Unsupported pooling method")
         if (queryMethod not in ["sensitive", "coverage_identity"]):
             raise ValueError("Unsupported query method")
+        if (tool not in ["diamond", "mmseqs"]):
+            raise ValueError("Unsupported tool")
+        self.tool = tool
         self.method = method
         self.reference=reference
         self.threshRank = threshRank
@@ -34,6 +35,8 @@ class Marker(Module):
         self.queryMethod = queryMethod
         super().__init__(f'marker-ref={self.reference};coverage={coverage};identity={identity};queryMethod={queryMethod};method={self.method};thresh={self.threshRank}_{self.thresh}')
         self.baseName = f'marker-ref={self.reference};coverage={coverage};identity={identity};queryMethod={queryMethod}'  # do not use 'self.moduleName' in code directly, in case of subClass!
+        # super().__init__(f'marker-ref={self.reference};tool={self.tool};coverage={coverage};identity={identity};queryMethod={queryMethod};method={self.method};thresh={self.threshRank}_{self.thresh}')
+        # self.baseName = f'marker-ref={self.reference};tool={self.tool};coverage={coverage};identity={identity};queryMethod={queryMethod}'  # do not use 'self.moduleName' in code directly, in case of subClass!
 
         self.cacheFile = f"{config.cacheResultFolder}/{self.baseName}.tmp"
         self.cacheIndex = f"{config.cacheResultFolder}/{self.baseName}.json"
@@ -42,20 +45,30 @@ class Marker(Module):
         self.cachedSampleNameFile = f"{config.cacheResultFolder}/{self.baseName}.names"
         self.cachedSampleNames = set()
 
-        self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_c{coverage}_i{identity}_marker.dmnd"
-        self.markerDB = f"{config.cacheResultFolder}/{self.reference}_c{coverage}_i{identity}_marker.json"
+        
+        if (self.tool == "diamond"):
+            self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_diamonddb.dmnd"
+        elif (self.tool == "mmseqs"):
+            self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_prot_mmseqdb"
+        self.markerDB = f"{config.cacheResultFolder}/{self.reference}_c{coverage}_i{identity}_{tool}_marker.json"
+    
+
 
         self.LCAs:dict[str, str] = {}
     
     def buildDB(self):
         # build diamond DB
-        IOUtils.showInfo(f"Making diamond database for {self.reference}")
+        IOUtils.showInfo(f"Making {self.tool} database for {self.reference}")
         referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
         referenceProteinFasta = f"{config.cacheResultFolder}/{self.reference}.faa"
         refSamples = IOUtils.loadSamples(referenceFasta)
         NucleotideUtils.extractProtein(refSamples)
         IOUtils.writeSampleProteinFasta(refSamples, referenceProteinFasta)
-        subprocess.run(f"diamond makedb --in {referenceProteinFasta} -d {self.referenceDB}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)        
+        if (self.tool == "diamond"):
+            cmd = f"diamond makedb --in {referenceProteinFasta} -d {self.referenceDB}"
+        else:
+            cmd = f"mmseqs createdb {referenceProteinFasta} {self.referenceDB}"
+        subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         # build marker DB
         # key: protein id
@@ -223,6 +236,9 @@ class Marker(Module):
                         protein.info["markerRank"] = config.rankLevels[rankLCA]
                         protein.info["normalizedMarkerRank"] = config.rankLevels[normalizedRankLCA]
                         protein.info["markerRankBin"] = getRankBin(normalizedRankLCA)
+                        protein.info["markerRankBin2"] = getRankBin2(normalizedRankLCA)
+                        protein.info["markerRankBin3"] = getRankBin3(normalizedRankLCA)
+                        protein.info["markerRankBin4"] = getRankBin4(normalizedRankLCA)
                         
                         protein.info["partial"] = parti
                         protein.info["bin"] = ""
@@ -270,6 +286,9 @@ class Marker(Module):
                     protein.info["markerRank"] = config.rankLevels[rankLCA]
                     protein.info["normalizedMarkerRank"] = config.rankLevels[normalizedRankLCA]
                     protein.info["markerRankBin"] = getRankBin(normalizedRankLCA)
+                    protein.info["markerRankBin2"] = getRankBin2(normalizedRankLCA)
+                    protein.info["markerRankBin3"] = getRankBin3(normalizedRankLCA)
+                    protein.info["markerRankBin4"] = getRankBin4(normalizedRankLCA)
                 if (keepProteinRes):
                     res = []
                     for a in alignments:
@@ -375,18 +394,24 @@ class Marker(Module):
         return result
     
     def getBlastCommandForMarker(self, queryFile, resultFile):
-        identityTh = f" --id {self.identity}"
-        coverageTh = f" --query-cover {self.coverage} --subject-cover {self.coverage}" if self.coverage else ""
-        command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20{identityTh}{coverageTh}"
+        if (self.tool == "diamond"):
+            identityTh = f" --id {self.identity}"
+            coverageTh = f" --query-cover {self.coverage} --subject-cover {self.coverage}" if self.coverage else ""
+            command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20{identityTh}{coverageTh}"
+        elif (self.tool == "mmseqs"):
+            command = f"mmseqs easy-search {queryFile} {self.referenceDB} {resultFile} /tmp --threads {self.threads} -s 10 --search-type 0"
         return command
     
     def getBlastCommandForQuery(self, queryFile, resultFile):
-        if (self.queryMethod == "sensitive"):
-            command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20 --more-sensitive --evalue 1e-3"
-        else:
-            identityTh = f" --id {self.identity}"
-            coverageTh = f" --query-cover {self.coverage} --subject-cover {self.coverage}" if self.coverage else ""
-            command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20 {identityTh}{coverageTh}"
+        if (self.tool == "diamond"):
+            if (self.queryMethod == "sensitive"):
+                command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20 --more-sensitive --evalue 1e-3"
+            else:
+                identityTh = f" --id {self.identity}"
+                coverageTh = f" --query-cover {self.coverage} --subject-cover {self.coverage}" if self.coverage else ""
+                command = f"diamond blastp -q {queryFile} -d {self.referenceDB} -o {resultFile} -f 6 -k 0 -p {self.threads} --block-size 20 {identityTh}{coverageTh}"
+        elif (self.tool == "mmseqs"):
+            command = f"mmseqs easy-search {queryFile} {self.referenceDB} {resultFile} /tmp --threads {self.threads} -s 10 --search-type 0"
         return command
     
     def getLCAs(self):
@@ -401,3 +426,16 @@ def getRankBin(rank):
     if rank in ["family", "order"]:
         return "medium"
     return "coarse"
+
+def getRankBin2(rank):
+    if rank in ["species", "genus", "family"]:
+        return rank
+    return "other"
+def getRankBin3(rank):
+    if rank in ["species", "genus"]:
+        return rank
+    return "other"
+def getRankBin4(rank):
+    if rank in ["species"]:
+        return rank
+    return "other"

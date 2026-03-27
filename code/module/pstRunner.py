@@ -5,14 +5,15 @@ import time
 import torch
 import shutil
 import subprocess
+import multiprocessing
 
-
-from entity.sample import Sample
 from config import config
 from utils import IOUtils
-from utils.NucleotideUtils import NucleotideUtils
+from entity.sample import Sample
 
-from module.dnaLMRunner import DNALMRunner
+if multiprocessing.current_process().name == "MainProcess":
+    from utils.NucleotideUtils import NucleotideUtils
+    from module.dnaLMRunner import DNALMRunner
 
 
 class PSTRunner(DNALMRunner):

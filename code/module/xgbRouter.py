@@ -1,15 +1,18 @@
-from prototype.module import Module
-from utils import trainUtils
-from entity.taxoNode import TaxoNode
-from entity.taxoTree import taxoTree
-from prototype.result import Result
-from config import config
-
-from sklearn.model_selection import GridSearchCV
-import xgboost
-import pandas
-import json
 import os
+import json
+import pandas
+import xgboost
+import multiprocessing
+from sklearn.model_selection import GridSearchCV
+
+from config import config
+from prototype.module import Module
+from entity.taxoNode import TaxoNode
+
+if multiprocessing.current_process().name == "MainProcess":
+    from entity.taxoTree import taxoTree
+    from utils import trainUtils
+
 
 class XGBoostRouter(Module):
     def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], features:list[str]):

@@ -1,7 +1,7 @@
+from utils import IOUtils
+from entity.sample import Sample
 from prototype.module import Module
 from moduleResult.virusPredictionResult import VirusPredictionResult
-from entity.sample import Sample
-from utils import IOUtils
 
 class VirusPred(Module):
     def __init__(self, models:list[Module]):

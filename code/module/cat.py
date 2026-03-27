@@ -1,23 +1,17 @@
-# reconstructed
 import os
-import re
 import sys
 import json
-import math
 import time
 import psutil
 import shutil
-import multiprocessing
 import subprocess
-from tqdm import tqdm
-from Bio import SeqIO
+import multiprocessing
 
-from prototype.module import Module
 from config import config
 from utils import IOUtils
 from entity.sample import Sample
+from prototype.module import Module
 from moduleResult.catResult import CatResult
-
 
 class CAT(Module):
     def __init__(self):

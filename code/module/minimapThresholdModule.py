@@ -1,14 +1,6 @@
-import os
-import subprocess
 import multiprocessing
 
-from config import config
-from prototype.module import Module
-from moduleResult.minimapResult import MinimapResult
 from module.minimap import Minimap
-from moduleResult.alignment import Alignment
-
-from utils import IOUtils
 
 class MinimapThresholdModule(Minimap):
     def __init__(self, reference, mode='ont', threads=multiprocessing.cpu_count(), skipComments=True, factors=['most']):

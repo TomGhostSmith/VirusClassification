@@ -5,10 +5,10 @@ import json
 import shutil
 import subprocess
 
-from prototype.module import Module
 from config import config
 from utils import IOUtils
 from entity.sample import Sample
+from prototype.module import Module
 from moduleResult.plainResult import PlainResult
 
 

@@ -1,13 +1,13 @@
-import math
 import numpy
 import multiprocessing
 
 from config import config
-from entity.taxoTree import taxoTree
 from module.blast import Blast
-from moduleResult.blastResult import BlastResult
 from moduleResult.blastGenusResult import BlastGenusResult
 from moduleResult.blastAlignment import BlastAlignment
+
+if multiprocessing.current_process().name == "MainProcess":
+    from entity.taxoTree import taxoTree
 
 class BlastGenus(Blast):
     def __init__(self, reference, threads=multiprocessing.cpu_count(), mode="blastn", evalue=1e-3):

@@ -1,32 +1,22 @@
 #This file is modified from https://github.com/ChengPENG-wolf/ViraLM/blob/main/viralm.py
-from lucagplm import LucaGPLMModel, LucaGPLMTokenizer
-from transformers import AutoTokenizer, AutoModel
-from torch.utils.data import DataLoader
-from datasets import load_dataset
-from typing import Dict, Sequence
-from dataclasses import dataclass
-from torch.nn import Softmax
-from Bio import SeqIO
-from torch import nn
-import transformers
-import subprocess
-import multiprocessing
-from datasets import Dataset
-from tqdm import tqdm
-import torch
-import math
-import time
-import csv
 import os
 import gc
-import base64
+import math
+import time
+import torch
+import multiprocessing
+from tqdm import tqdm
+from datasets import Dataset
 
 from entity.sample import Sample
 from entity.proteinSample import ProteinSample
-from config import config
-from Bio import SeqIO
-from utils import IOUtils
-from utils.NucleotideUtils import NucleotideUtils
+
+if multiprocessing.current_process().name == "MainProcess":
+    from torch import nn
+    from torch.utils.data import DataLoader
+    from transformers import AutoTokenizer, AutoModel
+    from lucagplm import LucaGPLMModel, LucaGPLMTokenizer
+
 
 
 class DNALMRunner():

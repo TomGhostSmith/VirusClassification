@@ -1,6 +1,6 @@
-from prototype.module import Module
-from entity.sample import Sample
 from utils import IOUtils
+from entity.sample import Sample
+from prototype.module import Module
 
 class MergeModule(Module):
     def __init__(self, modelList:list[Module], chooseMethod, name:str):

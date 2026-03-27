@@ -1,19 +1,19 @@
-# reconstructing
 import os
 import json
 import math
 import subprocess
-from Bio.Blast import NCBIXML
 import multiprocessing
 
 from config import config
-from entity.taxoTree import taxoTree
+from utils import IOUtils
+from entity.sample import Sample
 from prototype.module import Module
 from moduleResult.blastResult import BlastResult
 from moduleResult.blastAlignment import BlastAlignment
-from entity.sample import Sample
 
-from utils import IOUtils
+if multiprocessing.current_process().name == "MainProcess":
+    from entity.taxoTree import taxoTree
+
 
 class Blast(Module):
     def __init__(self, reference, threads=multiprocessing.cpu_count(), mode="blastn", evalue=1e-3):

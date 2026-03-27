@@ -1,21 +1,19 @@
-# reconstructed
 import os
-import re
 import sys
 import json
 import math
 import shutil
-import multiprocessing
 import subprocess
-from tqdm import tqdm
-from Bio import SeqIO
+import multiprocessing
 
-from prototype.module import Module
 from config import config
 from utils import IOUtils
 from entity.sample import Sample
+from prototype.module import Module
 from moduleResult.plainResult import PlainResult
-from utils.NucleotideUtils import NucleotideUtils
+
+if multiprocessing.current_process().name == "MainProcess":
+    from utils.NucleotideUtils import NucleotideUtils
 
 
 class Vcontact(Module):

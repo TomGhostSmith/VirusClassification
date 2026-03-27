@@ -1,16 +1,14 @@
-# reconstructed
 import os
 import json
 import pyfastani
 import multiprocessing
 
 from config import config
+from utils import IOUtils
+from entity.sample import Sample
 from prototype.module import Module
 from moduleResult.ANIResult import ANIResult
 from moduleResult.ANIAlignment import ANIAlignment
-from entity.sample import Sample
-
-from utils import IOUtils
 
 class ANI(Module):
     def __init__(self, reference, threads=multiprocessing.cpu_count()):
@@ -111,7 +109,6 @@ class ANI(Module):
         if (self.baseName in sample.results):
             return sample.results[self.baseName]
         
-        # result = ANIResult()
         results:list[ANIResult] = []
         resultIndex = self.cachedSamples[sample.id]
         if (resultIndex != "N/A"):
@@ -122,10 +119,8 @@ class ANI(Module):
             
             for alignment in alignments:
                 if (alignment.ref is not None):
-                    r = ANIResult()
-                    r.addAlignment(alignment)
+                    r = ANIResult(alignment)
                     results.append(r)
-                    # result.addAlignment(alignment)
 
         if (len(results) == 0):
             results = None

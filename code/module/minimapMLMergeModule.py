@@ -1,11 +1,11 @@
-from prototype.module import Module
-from moduleResult.minimapResult import MinimapResult
-from moduleResult.alignment import Alignment
-from module.minimap import Minimap
-from module.minimapThreshRankModule import MinimapThreshRankModule
-from module.mlModule import MLModule
-from entity.sample import Sample
 from utils import IOUtils
+from entity.sample import Sample
+from prototype.module import Module
+from module.minimap import Minimap
+from module.mlModule import MLModule
+from moduleResult.alignment import Alignment
+from moduleResult.minimapResult import MinimapResult
+from module.minimapThreshRankModule import MinimapThreshRankModule
 
 class MinimapMLMergeModule(Module):
     def __init__(self, minimap:MinimapThreshRankModule, mlModule:MLModule, factors=['most']):

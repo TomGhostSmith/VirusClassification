@@ -1,21 +1,24 @@
-from prototype.module import Module
-from utils import trainUtils
-from utils import IOUtils
-from utils.NucleotideUtils import NucleotideUtils
-from entity.taxoNode import TaxoNode
-from entity.taxoTree import taxoTree
-from moduleResult.plainResult import PlainResult
-from config import config
-from entity.sample import Sample
-
-from sklearn.model_selection import GridSearchCV, GroupKFold, ParameterGrid
-from xgboost.callback import EarlyStopping
-from sklearn.metrics import ndcg_score, mean_squared_error
-import xgboost
-import pandas
-import numpy
-import json
 import os
+import json
+import numpy
+import pandas
+import xgboost
+import multiprocessing
+from sklearn.model_selection import GroupKFold, ParameterGrid
+from sklearn.metrics import mean_squared_error
+
+from config import config
+from utils import IOUtils
+from entity.sample import Sample
+from prototype.module import Module
+from entity.taxoNode import TaxoNode
+from moduleResult.plainResult import PlainResult
+
+if multiprocessing.current_process().name == "MainProcess":
+    from utils import trainUtils
+    from entity.taxoTree import taxoTree
+    from utils.NucleotideUtils import NucleotideUtils
+
 
 class XGBoostLTR(Module):
     def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], features:list[str], tops:int, candidateFeatures:list[str]=[], limitOutput=True, complete="no", loss="mse"):
@@ -48,13 +51,28 @@ class XGBoostLTR(Module):
         self.complete = complete
 
         self.modelListFile = f"{config.modelRoot}/XGBoostLTR/names.json"
-        self.moduleListMap = {"nextOffset": 0}
+        self.moduleListMap = {}
 
     def getFeatures(self, samples:list[Sample]):
+        NucleotideUtils.extractProtein(samples)
+        for module in self.featureModules:
+            IOUtils.showInfo(f"get features from {module.moduleName}")
+            module.getResults(samples, keepVotes=True, withMeta=True)
+        for module in self.modules:
+            IOUtils.showInfo(f"get candidates from {module.moduleName}")
+            module.getResults(samples, keepVotes=True, withCandidateMeta=True)
+
+        IOUtils.showInfo("summarize features")
         # basic feature independent on all the model
         for sample in samples:
             sample.info["length"] = sample.length
             sample.info["proteinCount"] = len(sample.proteins)
+            partialCounts = {"00": 0, "01": 0, "10": 0, "11": 0}
+            for protein in sample.proteins:
+                partialCounts[protein.partial] += 1
+            for k, v in partialCounts.items():
+                sample.info[f"{k}_protein_ratio"] = v / len(sample.proteins) if len(sample.proteins) > 0 else 0
+
         features = {}
         candidateFeatures = []
         candidateRanges:list[tuple[int, int]] = []
@@ -149,14 +167,6 @@ class XGBoostLTR(Module):
 
     def train(self):
         samples = trainUtils.loadTrainsetSamples(self.trainset, self.evalMethod)
-        NucleotideUtils.extractProtein(samples)
-
-        for module in self.featureModules:
-            module.getResults(samples, keepVotes=True, withMeta=True)
-        
-        for module in self.modules:
-            module.getResults(samples, keepVotes=True, withCandidateMeta=True)
-
         samplesWithGT = []
         for sample in samples:
             stdNode:TaxoNode = sample.info["stdResult"]
@@ -173,20 +183,15 @@ class XGBoostLTR(Module):
                 lca = taxoTree.ICTVTree.findLCA([stdNode, candidate.ICTVNode])
                 labels.append(config.rankLevels[lca.rank])
 
-        mainXGBoostName = f"model{self.moduleListMap['nextOffset']}-main.json"
-        
         # train XGBoost1: learn which module to use
-        mainModel = self.trainMainXGBoost(features, numpy.array(labels), mainXGBoostName, candidateRanges)
-        
-        self.moduleListMap[self.baseName] = mainXGBoostName
-        self.moduleListMap["nextOffset"] += 1
-
-        with open(self.modelListFile, 'wt') as fp:
-            json.dump(self.moduleListMap, fp, indent=2)
+        mainModel = self.trainMainXGBoost(features, numpy.array(labels), candidateRanges)
 
         return mainModel
 
     def loadModel(self):
+        if (os.path.exists(self.modelListFile)):
+            with open(self.modelListFile) as fp:
+                self.moduleListMap = json.load(fp)
         if self.baseName not in self.moduleListMap:
             mainModel = self.train()
         else:
@@ -199,15 +204,6 @@ class XGBoostLTR(Module):
         return mainModel            
 
     def run(self, samples, **kwargs):
-        if (os.path.exists(self.modelListFile)):
-            with open(self.modelListFile) as fp:
-                self.moduleListMap = json.load(fp)
-
-        NucleotideUtils.extractProtein(samples)
-        for module in self.featureModules:
-            module.getResults(samples, keepVotes=True, withMeta=True)
-        for module in self.modules:
-            module.getResults(samples, keepVotes=True, withCandidateMeta=True)
         mainModel = self.loadModel()
         features, candidateList, candidateRanges = self.getFeatures(samples)
         scores:list[float] = mainModel.predict(features, )
@@ -241,7 +237,8 @@ class XGBoostLTR(Module):
         
         return results
 
-    def trainMainXGBoost(self, features, targets, saveFile, candidateRanges):
+    def trainMainXGBoost(self, features, targets, candidateRanges):
+        IOUtils.showInfo("train XGBoost")
         groupIDs = numpy.zeros(len(targets))
         for idx, (s, e) in enumerate(candidateRanges):
             groupIDs[s:e] = idx
@@ -304,7 +301,22 @@ class XGBoostLTR(Module):
         # Save to file
         IOUtils.showInfo(f"best model in training: {bestParam}")
         os.makedirs(f"{config.modelRoot}/XGBoostLTR", exist_ok=True)
-        bestModel.save_model(f"{config.modelRoot}/XGBoostLTR/{saveFile}")   # JSON is human-readable
+        
+        i = 0
+        while True:
+            mainXGBoostName = f"{config.modelRoot}/XGBoostLTR/model_{i}-main.json"
+            if not os.path.exists(mainXGBoostName):
+                break
+            i += 1
+        bestModel.save_model(mainXGBoostName)   # JSON is human-readable
+
+        if (os.path.exists(self.modelListFile)):
+            with open(self.modelListFile) as fp:
+                self.moduleListMap = json.load(fp)
+        self.moduleListMap[self.baseName] = os.path.basename(mainXGBoostName)
+        with open(self.modelListFile, 'wt') as fp:
+            json.dump(self.moduleListMap, fp, indent=2)
+
         return bestModel
 
 def groupID2candidateRanges(groupIDs):

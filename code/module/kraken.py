@@ -1,15 +1,11 @@
-# reconstructed
 import os
-import sys
 import json
-import multiprocessing
 import subprocess
-from tqdm import tqdm
 
-from prototype.module import Module
 from config import config
 from utils import IOUtils
 from entity.sample import Sample
+from prototype.module import Module
 from moduleResult.krakenResult import KrakenResult
 
 

@@ -2,7 +2,6 @@ import multiprocessing
 
 from module.minimap import Minimap
 from moduleResult.alignment import Alignment
-from entity.sample import Sample
 from moduleResult.minimapResult import MinimapResult
 
 class MinimapThreshRankModule(Minimap):

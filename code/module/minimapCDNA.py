@@ -1,21 +1,19 @@
-# reconstructing
 import os
 import json
-import math
 import subprocess
-from functools import cmp_to_key
 import multiprocessing
+from functools import cmp_to_key
 
 from config import config
+from utils import IOUtils
+from entity.sample import Sample
 from prototype.module import Module
 from moduleResult.plainResult import PlainResult
 from moduleResult.cDNAAlignment import CDNAAlignment
-from entity.sample import Sample
-from entity.proteinSample import ProteinSample
-from entity.taxoTree import taxoTree
 
-from utils import IOUtils
-from utils.NucleotideUtils import NucleotideUtils
+if multiprocessing.current_process().name == "MainProcess":
+    from entity.taxoTree import taxoTree
+    from utils.NucleotideUtils import NucleotideUtils
 
 class MinimapCDNA(Module):
     def __init__(self, reference, method,  mode='simple', threads=multiprocessing.cpu_count(), threshRank='species', skipComments=True):

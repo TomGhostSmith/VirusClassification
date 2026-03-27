@@ -1,13 +1,17 @@
-from prototype.module import Module
-from module.minimapMLMergeModule import MinimapMLMergeModule
-from module.virusPredModule import VirusPred
-from module.minimap import Minimap
-from module.minimapThresholdModule import MinimapThresholdModule
-from module.minimapThreshRankModule import MinimapThreshRankModule
-from module.esmIdentify import ESMIdentify
-from module.mlModule import MLModule
-from entity.sample import Sample
+import multiprocessing
 from utils import IOUtils
+from entity.sample import Sample
+from prototype.module import Module
+
+from module.virusPredModule import VirusPred
+
+if multiprocessing.current_process().name == "MainProcess":
+    from module.minimap import Minimap
+    from module.mlModule import MLModule
+    from module.esmIdentify import ESMIdentify
+    from module.minimapMLMergeModule import MinimapMLMergeModule
+    from module.minimapThresholdModule import MinimapThresholdModule
+    from module.minimapThreshRankModule import MinimapThreshRankModule
 
 
 class Pipeline(Module):

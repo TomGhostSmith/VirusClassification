@@ -1,20 +1,16 @@
-# reconstructed
 import os
-import json
 import pandas
-from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
 
 from config import config
+from entity.sample import Sample
 from prototype.module import Module
 from moduleResult.mlResult import MLResult
 from moduleResult.plainResult import PlainResult
-from entity.sample import Sample
-from entity.proteinSample import ProteinSample
-from module.esmTaxo import ESMTaxo
-from tqdm import tqdm
 
-from utils import IOUtils
-from utils.NucleotideUtils import NucleotideUtils
+if multiprocessing.current_process().name == "MainProcess":
+    from module.esmTaxo import ESMTaxo
+    from utils.NucleotideUtils import NucleotideUtils
 
 class MLModule(Module):
     def __init__(self, strategy="topdown", thresh=0.45, gen='1111000', pooling='sum'):

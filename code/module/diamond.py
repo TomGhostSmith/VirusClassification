@@ -1,22 +1,21 @@
-# reconstructing
 import os
 import json
 import math
 import subprocess
-from functools import cmp_to_key
 import multiprocessing
+from functools import cmp_to_key
 
 from config import config
+from utils import IOUtils
+from entity.sample import Sample
 from prototype.module import Module
 from moduleResult.plainResult import PlainResult
-from moduleResult.diamondAlignment import DiamondAlignment
 from moduleResult.diamondResult import DiamondResult
-from entity.sample import Sample
-from entity.proteinSample import ProteinSample
-from entity.taxoTree import taxoTree
+from moduleResult.diamondAlignment import DiamondAlignment
 
-from utils import IOUtils
-from utils.NucleotideUtils import NucleotideUtils
+if multiprocessing.current_process().name == "MainProcess":
+    from entity.taxoTree import taxoTree
+    from utils.NucleotideUtils import NucleotideUtils
 
 class Diamond(Module):
     def __init__(self, reference, method, threads=multiprocessing.cpu_count(), threshRank='species', tool="diamond"):
@@ -46,7 +45,7 @@ class Diamond(Module):
             self.referenceDB = f"{config.cacheResultFolder}/{self.reference}_prot_mmseqdb"
     
     def buildDB(self):
-        IOUtils.showInfo(f"Making diamond database for {self.reference}") 
+        IOUtils.showInfo(f"Making {self.tool} database for {self.reference}") 
         referenceFasta = f"{config.modelRoot}/{self.reference}/{self.reference}.fasta"
         referenceProteinFasta = f"{config.cacheResultFolder}/{self.reference}.faa"
         refSamples = IOUtils.loadSamples(referenceFasta)

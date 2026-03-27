@@ -1,15 +1,13 @@
-# reconstructed
-import os
-import json
-import pandas
-
+import multiprocessing
 from config import config
-from prototype.module import Module
-from moduleResult.virusPredictionResult import VirusPredictionResult
-from module.esmRunner import ESMRunner
 from entity.sample import Sample
+from prototype.module import Module
 from entity.proteinSample import ProteinSample
-from utils.NucleotideUtils import NucleotideUtils
+from moduleResult.virusPredictionResult import VirusPredictionResult
+
+if multiprocessing.current_process().name == "MainProcess":
+    from module.esmRunner import ESMRunner
+    from utils.NucleotideUtils import NucleotideUtils
 
 class ESMIdentify(Module):
     def __init__(self):

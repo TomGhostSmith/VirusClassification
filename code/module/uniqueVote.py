@@ -1,23 +1,16 @@
-# reconstructed
-import os
-import sys
-import json
-import time
-import shutil
-import subprocess
-
-from prototype.module import Module
-from entity.taxoTree import taxoTree
+import multiprocessing
 from config import config
-from utils import IOUtils
 from entity.sample import Sample
+from prototype.module import Module
 from moduleResult.plainResult import PlainResult
-from module.marker import Marker
-from module.mlModule import MLModule
-from module.esmTaxo import ESMTaxo
-from module.diamond import Diamond
 from moduleResult.diamondResult import DiamondResult
-from moduleResult.diamondAlignment import DiamondAlignment
+
+if multiprocessing.current_process().name == "MainProcess":
+    from module.marker import Marker
+    from module.esmTaxo import ESMTaxo
+    from module.diamond import Diamond
+    from entity.taxoTree import taxoTree
+
 
 
 class UniqueVote(Module):

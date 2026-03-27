@@ -1,16 +1,13 @@
-# reconstructed
 import os
-import sys
 import json
 import shutil
-import multiprocessing
 import subprocess
-from tqdm import tqdm
+import multiprocessing
 
-from prototype.module import Module
 from config import config
 from utils import IOUtils
 from entity.sample import Sample
+from prototype.module import Module
 from moduleResult.genomadResult import GenomadResult
 
 

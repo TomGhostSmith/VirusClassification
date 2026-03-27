@@ -1,17 +1,15 @@
-# reconstructed
 import os
 import json
 import subprocess
-from Bio import SeqIO
 import multiprocessing
 
 from config import config
+from utils import IOUtils
 from prototype.module import Module
 from moduleResult.blastResult import BlastResult
 from moduleResult.blastAlignment import BlastAlignment
 from entity.sample import Sample
 
-from utils import IOUtils
 
 class MMseqs(Module):
     def __init__(self, reference, sensitivity, coverage, identity, threads=multiprocessing.cpu_count()):

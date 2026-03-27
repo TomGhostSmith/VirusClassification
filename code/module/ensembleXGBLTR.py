@@ -1,25 +1,25 @@
+import os
+import json
+import numpy
+import pandas
+import xgboost
+import multiprocessing
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import GroupKFold, ParameterGrid
+
+from config import config
+from utils import IOUtils
+from entity.sample import Sample
+from prototype.result import Result
 from prototype.module import Module
-from utils import trainUtils
 from entity.taxoNode import TaxoNode
-from entity.taxoTree import taxoTree
 from entity.proteinSample import ProteinSample
 from moduleResult.plainResult import PlainResult
-from prototype.result import Result
-from config import config
-from entity.sample import Sample
-from utils.NucleotideUtils import NucleotideUtils
-from utils import IOUtils
 
-from sklearn.model_selection import GridSearchCV, GroupKFold, ParameterGrid
-from sklearn.metrics import ndcg_score, mean_squared_error
-import xgboost
-import pandas
-import numpy
-import json
-import os
-
-# this module:
-# the candidate is obtained from the protein prediction candidates and contig prediction candidate
+if multiprocessing.current_process().name == "MainProcess":
+    from utils import trainUtils
+    from entity.taxoTree import taxoTree
+    from utils.NucleotideUtils import NucleotideUtils
 
 class EnsembleXGBoostLTR(Module):
     def __init__(self, trainset, evalMethod, modules:list[Module], featureModules:list[Module], proteinModules:list[Module], poolingModule:Module,
@@ -63,13 +63,35 @@ class EnsembleXGBoostLTR(Module):
         self.complete = complete
 
         self.modelListFile = f"{config.modelRoot}/EnsembleXGBoostLTR/names.json"
-        self.moduleListMap = {"nextOffset": 0}
+        self.moduleListMap = {}
 
     def getFeatures(self, samples:list[Sample]):
+        NucleotideUtils.extractProtein(samples)
+        for module in self.featureModules:
+            IOUtils.showInfo(f"get features from {module.moduleName}")
+            module.getResults(samples, withMeta=True, withProteinMeta=True)
+        
+        for module in self.modules:
+            IOUtils.showInfo(f"get contig candidates from {module.moduleName}")
+            module.getResults(samples, keepVotes=True, withCandidateMeta=True)
+
+        for module in self.proteinModules:
+            IOUtils.showInfo(f"get protein candidates from {module.moduleName}")
+            module.getResults(samples, keepProteinRes=True, wthPoolingMeta=True)
+
+        IOUtils.showInfo(f"get pooling features from {self.poolingModule.moduleName}")
+        self.poolingModule.getResults(samples, withProteinMeta=True)
+
+        IOUtils.showInfo("summarize features")
         # basic feature independent on all the model
         for sample in samples:
             sample.info["length"] = sample.length
             sample.info["proteinCount"] = len(sample.proteins)
+            partialCounts = {"00": 0, "01": 0, "10": 0, "11": 0}
+            for protein in sample.proteins:
+                partialCounts[protein.partial] += 1
+            for k, v in partialCounts.items():
+                sample.info[f"{k}_protein_ratio"] = v / len(sample.proteins) if len(sample.proteins) > 0 else 0
 
         features = {}
         candidateFeatures = []
@@ -248,19 +270,6 @@ class EnsembleXGBoostLTR(Module):
 
     def train(self):
         samples = trainUtils.loadTrainsetSamples(self.trainset, self.evalMethod)
-        NucleotideUtils.extractProtein(samples)
-
-        for module in self.featureModules:
-            module.getResults(samples, withMeta=True, withProteinMeta=True)
-        
-        for module in self.modules:
-            module.getResults(samples, keepVotes=True, withCandidateMeta=True)
-
-        for module in self.proteinModules:
-            module.getResults(samples, keepProteinRes=True, wthPoolingMeta=True)
-
-        self.poolingModule.getResults(samples, withProteinMeta=True)
-
         samplesWithGT:list[Sample] = []
         for sample in samples:
             stdNode:TaxoNode = sample.info["stdResult"]
@@ -284,24 +293,19 @@ class EnsembleXGBoostLTR(Module):
                 lca = taxoTree.ICTVTree.findLCA([stdNode, candidate.ICTVNode])
                 labels.append(config.rankLevels[lca.rank])
 
-        f = features.copy()
-        f["GT"] = labels
-        f["candidate"] = [n.ICTVName for n in candidates]
-        f.to_csv("working/EnsembleXGBLTR_train.csv")
+        # f = features.copy()
+        # f["GT"] = labels
+        # f["candidate"] = [n.ICTVName for n in candidates]
+        # f.to_csv("working/EnsembleXGBLTR_train.csv")
 
-        mainXGBoostName = f"model{self.moduleListMap['nextOffset']}-main.json"
-        
-        mainModel = self.trainMainXGBoost(features, numpy.array(labels), mainXGBoostName, candidateRanges)
-        
-        self.moduleListMap[self.baseName] = mainXGBoostName
-        self.moduleListMap["nextOffset"] += 1
-
-        with open(self.modelListFile, 'wt') as fp:
-            json.dump(self.moduleListMap, fp, indent=2)
+        mainModel = self.trainMainXGBoost(features, numpy.array(labels), candidateRanges)
 
         return mainModel
 
     def loadModel(self):
+        if (os.path.exists(self.modelListFile)):
+            with open(self.modelListFile) as fp:
+                self.moduleListMap = json.load(fp)
         if self.baseName not in self.moduleListMap:
             mainModel = self.train()
         else:
@@ -314,31 +318,15 @@ class EnsembleXGBoostLTR(Module):
         return mainModel            
 
     def run(self, samples:list[Sample], keepProteinRes=False, **kwargs):
-        if (os.path.exists(self.modelListFile)):
-            with open(self.modelListFile) as fp:
-                self.moduleListMap = json.load(fp)
-
-        NucleotideUtils.extractProtein(samples)
-        for module in self.featureModules:
-            module.getResults(samples, withMeta=True, withProteinMeta=True)
-        
-        for module in self.modules:
-            module.getResults(samples, keepVotes=True, withCandidateMeta=True)
-
-        for module in self.proteinModules:
-            module.getResults(samples, keepProteinRes=True, wthPoolingMeta=True)
-
-        self.poolingModule.getResults(samples, withProteinMeta=True)
-
         mainModel = self.loadModel()
         features, candidateList, candidateRanges = self.getFeatures(samples)
         scores:list[float] = mainModel.predict(features)
 
         # for debug
-        f = features.copy()
-        f["result"] = scores
-        f["candidate"] = [n.ICTVName for n in candidateList]
-        f.to_csv("working/EnsembleXGBLTR.csv")
+        # f = features.copy()
+        # f["result"] = scores
+        # f["candidate"] = [n.ICTVName for n in candidateList]
+        # f.to_csv("working/EnsembleXGBLTR.csv")
 
 
         results = [self.getResult(sample, candidateList[start:end], scores[start:end]) for sample, (start, end) in zip(samples, candidateRanges)]
@@ -364,7 +352,8 @@ class EnsembleXGBoostLTR(Module):
         
         return results
 
-    def trainMainXGBoost(self, features, targets, saveFile, candidateRanges):
+    def trainMainXGBoost(self, features, targets, candidateRanges):
+        IOUtils.showInfo("train XGBoost")
         groupIDs = numpy.zeros(len(targets))
         for idx, (s, e) in enumerate(candidateRanges):
             groupIDs[s:e] = idx
@@ -427,7 +416,22 @@ class EnsembleXGBoostLTR(Module):
         # Save to file
         IOUtils.showInfo(f"best model in training: {bestParam}")
         os.makedirs(f"{config.modelRoot}/EnsembleXGBoostLTR", exist_ok=True)
-        bestModel.save_model(f"{config.modelRoot}/EnsembleXGBoostLTR/{saveFile}")   # JSON is human-readable
+
+        i = 0
+        while True:
+            mainXGBoostName = f"{config.modelRoot}/EnsembleXGBoostLTR/model_{i}-main.json"
+            if not os.path.exists(mainXGBoostName):
+                break
+            i += 1
+        bestModel.save_model(mainXGBoostName)   # JSON is human-readable
+
+        if (os.path.exists(self.modelListFile)):
+            with open(self.modelListFile) as fp:
+                self.moduleListMap = json.load(fp)
+        self.moduleListMap[self.baseName] = os.path.basename(mainXGBoostName)
+        with open(self.modelListFile, 'wt') as fp:
+            json.dump(self.moduleListMap, fp, indent=2)
+
         return bestModel
 
 

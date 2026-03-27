@@ -1,24 +1,22 @@
-# reconstructed
 import os
 import json
-import pandas
-from config import config
-from prototype.module import Module
-from moduleResult.plainResult import PlainResult
-from entity.sample import Sample
-from entity.proteinSample import ProteinSample
-from module.esmRunner import ESMRunner
-from module.marker import Marker
-from entity.taxoTree import taxoTree
-from tqdm import tqdm
-import base64
-import numpy
 import math
 import time
+import numpy
 import multiprocessing
+from tqdm import tqdm
 
+from config import config
 from utils import IOUtils
-from utils.NucleotideUtils import NucleotideUtils
+from entity.sample import Sample
+from prototype.module import Module
+from moduleResult.plainResult import PlainResult
+
+if multiprocessing.current_process().name == "MainProcess":
+    from module.esmRunner import ESMRunner
+    from module.marker import Marker
+    from entity.taxoTree import taxoTree
+    from utils.NucleotideUtils import NucleotideUtils
 
 class MLKNN(Module):
     # we recommend at most 40 threads. Otherwise, the thread allocation could be expensive

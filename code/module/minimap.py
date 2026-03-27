@@ -1,18 +1,17 @@
-# reconstructed
 import os
 import json
 import subprocess
-from Bio import SeqIO
 import multiprocessing
 
 from config import config
-from prototype.module import Module
-from moduleResult.minimapResult import MinimapResult
-from moduleResult.alignment import Alignment
-from entity.sample import Sample
-from entity.taxoTree import taxoTree
-
 from utils import IOUtils
+from entity.sample import Sample
+from prototype.module import Module
+from moduleResult.alignment import Alignment
+from moduleResult.minimapResult import MinimapResult
+
+if multiprocessing.current_process().name == "MainProcess":
+    from entity.taxoTree import taxoTree
 
 class Minimap(Module):
     def __init__(self, reference, mode='ont', threads=multiprocessing.cpu_count(), skipComments=True):
