@@ -1,7 +1,3 @@
-# reconstructing
-import re
-
-
 class ANIAlignment():
     # def __init__(self, ref, quality, cigar):
     def __init__(self, alignment:str):

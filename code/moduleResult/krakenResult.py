@@ -1,5 +1,4 @@
 from prototype.result import Result
-from entity.taxoTree import taxoTree
 
 class KrakenResult(Result):
     def __init__(self, line:str):
@@ -18,6 +17,7 @@ class KrakenResult(Result):
                     self.kmerCounts[id] = count
 
     def calcTaxoNode(self):
+        from entity.taxoTree import taxoTree
         if (self.finalSpecies in taxoTree.viralNCBITree.nodes):
             self.node = taxoTree.getTaxoNodeFromNCBI(NCBIID=self.finalSpecies)
         else:

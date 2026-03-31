@@ -1,7 +1,5 @@
 from prototype.result import Result
 from moduleResult.blastAlignment import BlastAlignment
-from entity.taxoTree import taxoTree
-from config import config
 
 class BlastGenusResult(Result):
     def __init__(self, genus):
@@ -17,4 +15,5 @@ class BlastGenusResult(Result):
         
     def calcTaxoNode(self):
         if (self.node is None):
+            from entity.taxoTree import taxoTree
             self.node = taxoTree.getTaxoNodeFromICTV(ICTVName=self.genus)

@@ -1,4 +1,3 @@
-# reconstructed
 import re
 
 class CDNAAlignment():

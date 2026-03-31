@@ -1,21 +1,22 @@
 from prototype.result import Result
-from entity.taxoTree import taxoTree
 
 class CatResult(Result):
     def __init__(self, scores:list[tuple[str, float]]):
         super().__init__()
-        self.scores = dict()
-        self.finalResult = None
-        for NCBIID, score in scores:
-            if (NCBIID in taxoTree.viralNCBITree.nodes):
-                node = taxoTree.viralNCBITree.nodes[NCBIID]
-                self.scores[node.rank] = score
-                self.finalResult = node
+        self.scores = {}
+        self.rawResult = scores
 
     def calcTaxoNode(self):
         if (self.node is None):
-            if self.finalResult is not None:
-                self.node = taxoTree.getTaxoNodeFromNode(NCBINode=self.finalResult)
+            from entity.taxoTree import taxoTree
+            finalResult = None
+            for NCBIID, score in self.rawResult:
+                if (NCBIID in taxoTree.viralNCBITree.nodes):
+                    node = taxoTree.viralNCBITree.nodes[NCBIID]
+                    self.scores[node.rank] = score
+                    finalResult = node
+            if finalResult is not None:
+                self.node = taxoTree.getTaxoNodeFromNode(NCBINode=finalResult)
                 self.score = min(self.scores.values())
             else:
                 self.node = None

@@ -1,7 +1,5 @@
 from prototype.result import Result
 from moduleResult.alignment import Alignment
-from entity.taxoTree import taxoTree
-from config import config
 
 class MinimapResult(Result):
     def __init__(self, alignment:Alignment):
@@ -12,10 +10,13 @@ class MinimapResult(Result):
 
     def setTargetRank(self, rank):
         self.rank = rank
+        self.node = None
     
     # only return the taxoNode for the best alignment
     def calcTaxoNode(self):
         if (self.node is None):
+            from entity.taxoTree import taxoTree
+            from config import config
             targetRankLevel = config.rankLevels[self.rank]
             node = taxoTree.getTaxoNodeFromAccession(self.alignment.ref)
                 
@@ -28,13 +29,6 @@ class MinimapResult(Result):
             for n in self.node.ICTVNode.path:
                 self.scores[n.rank] = score
             self.score = score
-
-        elif (config.rankLevels[self.node.ICTVNode.rank] > config.rankLevels[self.rank]):
-            targetRankLevel = config.rankLevels[self.rank]
-            for n in reversed(self.node.ICTVNode.path):
-                if config.rankLevels[n.rank] <= targetRankLevel:
-                    self.node = taxoTree.getTaxoNodeFromNode(ICTVNode=n)
-                    break
     
     def __copy__(self):
         obj = MinimapResult()

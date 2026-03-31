@@ -1,6 +1,4 @@
 from prototype.result import Result
-from entity.taxoTree import taxoTree
-from config import config
 
 class GenomadResult(Result):
     def __init__(self, line:str):
@@ -20,6 +18,7 @@ class GenomadResult(Result):
         self.score = self.virusScore
 
     def calcTaxoNode(self):
+        from entity.taxoTree import taxoTree
         if (self.finalSpecies in taxoTree.viralNCBITree.name2ID):
             self.node = taxoTree.getTaxoNodeFromNCBI(NCBIName=self.finalSpecies)
         elif (self.finalSpecies in taxoTree.ICTVTree.name2ID):

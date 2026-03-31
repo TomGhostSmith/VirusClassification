@@ -1,6 +1,4 @@
 from prototype.result import Result
-from entity.taxoTree import taxoTree
-from config import config
 
 class MLResult(Result):
     def __init__(self, strategy, thresh):
@@ -17,6 +15,7 @@ class MLResult(Result):
 
 
     def addResult(self, name, score):
+        from entity.taxoTree import taxoTree
         if (name not in taxoTree.ICTVTree.nodes):
             raise ValueError(f"{name} is not a valid ICTV name")
         thisNode = taxoTree.ICTVTree.nodes[name]
@@ -56,6 +55,7 @@ class MLResult(Result):
 
     def calcTaxoNode(self):
         if (self.node is None):
+            from entity.taxoTree import taxoTree
             if self.res is None:
                 self.res = taxoTree.ICTVTree.nodes["Viruses"]
             

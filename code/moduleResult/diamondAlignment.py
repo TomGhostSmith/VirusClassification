@@ -1,8 +1,3 @@
-# reconstructing
-import re
-from entity.taxoTree import taxoTree
-
-
 class DiamondAlignment():
     # def __init__(self, ref, quality, cigar):
     def __init__(self, alignment:str, maxScore=100):

@@ -1,10 +1,4 @@
-# reconstructing
-import re
-from entity.taxoTree import taxoTree
-
-
 class BlastAlignment():
-    # def __init__(self, ref, quality, cigar):
     def __init__(self, alignment:str, maxScore=100):
         terms = alignment.strip().split('\t')
 
@@ -22,7 +16,6 @@ class BlastAlignment():
 
         self.queryCoverLength = self.qend - self.qstart
         self.refCoverLength = self.refend - self.refstart
-        
 
     def betterThan(self, alignment):
         if (self.similarity > alignment.similarity):

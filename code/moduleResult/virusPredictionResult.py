@@ -1,5 +1,4 @@
 from prototype.result import Result
-from entity.taxoTree import taxoTree
 
 class VirusPredictionResult(Result):
     def __init__(self, score=1, isVirus=True):
@@ -9,4 +8,5 @@ class VirusPredictionResult(Result):
     
     def calcTaxoNode(self):
         if (self.node is None):
+            from entity.taxoTree import taxoTree
             self.node = taxoTree.getTaxoNodeFromICTV(ICTVName='Viruses')

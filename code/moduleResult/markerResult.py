@@ -1,7 +1,5 @@
 from prototype.result import Result
 from moduleResult.diamondAlignment import DiamondAlignment
-from entity.taxoTree import taxoTree
-from config import config
 
 class MarkerResult(Result):
     def __init__(self, alignment:DiamondAlignment, markerName:str):
@@ -12,6 +10,7 @@ class MarkerResult(Result):
         
     def calcTaxoNode(self):
         if (self.node is None):
+            from entity.taxoTree import taxoTree
             self.node = taxoTree.getTaxoNodeFromICTV(ICTVName=self.markerName)
             
             score = self.alignment.similarity
